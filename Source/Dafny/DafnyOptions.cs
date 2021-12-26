@@ -140,6 +140,8 @@ namespace Microsoft.Dafny {
     public virtual TestGenerationOptions TestGenOptions =>
       testGenOptions ??= new TestGenerationOptions();
 
+    public string HoleEvaluatorFunctionName = null;
+
     protected override bool ParseOption(string name, Bpl.CommandLineOptionEngine.CommandLineParseState ps) {
       var args = ps.args; // convenient synonym
 
@@ -478,6 +480,12 @@ namespace Microsoft.Dafny {
 
         case "extractCounterexample":
           ExtractCounterexample = true;
+          return true;
+
+        case "holeEval":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorFunctionName = args[ps.i];
+          }
           return true;
 
         case "verificationLogger":

@@ -284,6 +284,9 @@ namespace Microsoft.Dafny {
       Dafny.Program dafnyProgram;
       string programName = dafnyFileNames.Count == 1 ? dafnyFileNames[0] : "the_program";
       string err = Dafny.Main.ParseCheck(dafnyFiles, programName, reporter, out dafnyProgram);
+      if (DafnyOptions.O.HoleEvaluatorFunctionName != null) {
+        HoleEvaluator.Evaluate(dafnyProgram, DafnyOptions.O.HoleEvaluatorFunctionName);
+      }
       if (err != null) {
         exitValue = ExitValue.DAFNY_ERROR;
         ExecutionEngine.printer.ErrorWriteLine(Console.Out, err);
