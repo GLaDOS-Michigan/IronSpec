@@ -93,19 +93,22 @@ namespace Microsoft.Dafny {
         var dt = (DatatypeDecl)cl;
         var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
         // Console.WriteLine($"{variable.Name} is DatatypeDecl");
-        foreach (var formal in dt.GetGroundingCtor().Formals) {
-          // Console.WriteLine($"type={formal.Type} => {Resolver.SubstType(formal.Type, subst)}");
-          var convertedFormal = new Formal(formal.tok, formal.Name, 
-              Resolver.SubstType(formal.Type, subst), formal.InParam, formal.IsGhost,
-              formal.DefaultValue, formal.IsOld, formal.IsNameOnly, formal.NameForCompilation);
-          foreach (var v in TraverseFormal(program, convertedFormal))
-          {
-            var ngv = (Formal)variable;
-            var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
-            // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
-            yield return dotVar;
+        // Console.WriteLine($"Ctor.Count:{dt.Ctors.Count}");
+        foreach (var ctor in dt.Ctors) {
+          foreach (var formal in ctor.Formals) {
+            // Console.WriteLine($"type={formal.Type} => {Resolver.SubstType(formal.Type, subst)}");
+            var convertedFormal = new Formal(formal.tok, formal.Name, 
+                Resolver.SubstType(formal.Type, subst), formal.InParam, formal.IsGhost,
+                formal.DefaultValue, formal.IsOld, formal.IsNameOnly, formal.NameForCompilation);
+            foreach (var v in TraverseFormal(program, convertedFormal))
+            {
+              var ngv = (Formal)variable;
+              var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
+              // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
+              yield return dotVar;
+            }
+            // Console.WriteLine($"aaaa {formal.Name}");
           }
-          // Console.WriteLine($"aaaa {formal.Name}");
         }
       }
       // var members = expr.Type.NormalizeExpand().AsTopLevelTypeWithMembers;
