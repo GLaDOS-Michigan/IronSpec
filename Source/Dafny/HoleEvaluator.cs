@@ -25,18 +25,17 @@ namespace Microsoft.Dafny {
           // Console.WriteLine($"{c} {topLevelDecl.FullDafnyName}");
           if (topLevelDecl.FullDafnyName == funcName) {
             Console.WriteLine("Found desired function.");
-            var arguments = ListArguments(program, topLevelDecl);
+            var expressions = ListArguments(program, topLevelDecl);
             var c = 0;
-            foreach (var arg in arguments) {
+            foreach (var expr in expressions) {
               c++;
-              Console.WriteLine($"{c,2} {arg} {arg.tok.val} !!{arg.Type}");
-              if (arg is ExprDotName) {
-                var edt = arg as ExprDotName;
+              Console.WriteLine($"{c,2} {expr} {expr.tok.val} !!{expr.Type}");
+              if (expr is ExprDotName) {
+                var edt = expr as ExprDotName;
                 Console.WriteLine($"   {edt.Lhs} {edt.Lhs.tok.val}");
               }
-              // Console.WriteLine($"{c} {arg.Name,-20}:\t{arg.Type}");
+              // AddExpression(program, topLevelDecl, expr);
             }
-            // AddExpression(program, topLevelDecl, expr);
           }
         }
       }
