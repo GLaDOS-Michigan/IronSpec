@@ -10,6 +10,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Reflection;
+using System.Linq;
 using Microsoft.Boogie;
 
 namespace Microsoft.Dafny {
@@ -30,7 +31,11 @@ namespace Microsoft.Dafny {
               c++;
               Console.WriteLine($"{c,2} {Printer.ExprToString(expr),-20} {expr.Type}");
               if (typeToExpressionDict.ContainsKey(expr.Type.ToString())) {
-                typeToExpressionDict[expr.Type.ToString()].Add(expr);
+                bool containsItem = typeToExpressionDict[expr.Type.ToString()].Any(
+                     item => Printer.ExprToString(item) == Printer.ExprToString(expr));
+                if (!containsItem) {
+                  typeToExpressionDict[expr.Type.ToString()].Add(expr);
+                }
               } else {
                 var lst = new List<Expression>();
                 lst.Add(expr);
@@ -63,14 +68,66 @@ namespace Microsoft.Dafny {
               var values = typeToExpressionDict[k];
               for (int i = 0; i < values.Count; i++) {
                 for (int j = i + 1; j < values.Count; j++) {
-                  cnt = cnt + 1;
-                  var equalityExpr = Expression.CreateEq(values[i], values[j], values[i].Type);
-                  var expr = equalityExpr;
-                  PrintExpr(program, topLevelDecl, expr, cnt);
-                  topLevelDecl.Body = topLevelDeclCopy.Body;
-                  // var neqExpr = Expression.CreateNot(equalityExpr.tok, equalityExpr);
-                  // var cond = Expression.CreateAnd(topLevelDeclCopy.Body, neqExpr);
-                  // var expr = Expression.CreateITE(cond, Expression.CreateBoolLiteral(equalityExpr.tok, true), equalityExpr);
+                  if (values[i] is LiteralExpr && values[j] is LiteralExpr) {
+                    continue;
+                  }
+                  // Equality
+                  {
+                    cnt = cnt + 1;
+                    var equalityExpr = Expression.CreateEq(values[i], values[j], values[i].Type);
+                    var expr = equalityExpr;
+                    PrintExpr(program, topLevelDecl, expr, cnt);
+                    topLevelDecl.Body = topLevelDeclCopy.Body;
+                  }
+
+                  // Non-Equality
+                  {
+                    cnt = cnt + 1;
+                    var neqExpr = Expression.CreateNot(values[i].tok, Expression.CreateEq(values[i], values[j], values[i].Type));
+                    var expr = neqExpr;
+                    PrintExpr(program, topLevelDecl, expr, cnt);
+                    topLevelDecl.Body = topLevelDeclCopy.Body;
+                  }
+
+                  if (k == "bool") {
+                    continue;
+                  }
+
+                  // Lower than
+                  {
+                    cnt = cnt + 1;
+                    var lowerThanExpr = Expression.CreateLess(values[i], values[j]);
+                    var expr = lowerThanExpr;
+                    PrintExpr(program, topLevelDecl, expr, cnt);
+                    topLevelDecl.Body = topLevelDeclCopy.Body;
+                  }
+
+                  // Greater Equal = !(Lower than)
+                  {
+                    cnt = cnt + 1;
+                    var geExpr = Expression.CreateNot(values[i].tok,Expression.CreateLess(values[i], values[j]));
+                    var expr = geExpr;
+                    PrintExpr(program, topLevelDecl, expr, cnt);
+                    topLevelDecl.Body = topLevelDeclCopy.Body;
+                  }
+
+                  // Lower Equal
+                  {
+                    cnt = cnt + 1;
+                    var leExpr = Expression.CreateAtMost(values[i], values[j]);
+                    var expr = leExpr;
+                    PrintExpr(program, topLevelDecl, expr, cnt);
+                    topLevelDecl.Body = topLevelDeclCopy.Body;
+                  }
+
+                  // Greater Than = !(Lower equal)
+                  {
+                    cnt = cnt + 1;
+                    var gtExpr = Expression.CreateNot(values[i].tok,Expression.CreateAtMost(values[i], values[j]));
+                    var expr = gtExpr;
+                    PrintExpr(program, topLevelDecl, expr, cnt);
+                    topLevelDecl.Body = topLevelDeclCopy.Body;
+                  }
                 }
               }
             }
@@ -80,7 +137,7 @@ namespace Microsoft.Dafny {
     }
 
     public static void PrintExpr(Program program, Function func, Expression expr, int cnt) {
-      Console.WriteLine($"{Printer.ExprToString(expr)}");
+      Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
 
       var funcName = func.FullDafnyName;
       string parameterNameTypes = "";
@@ -89,13 +146,13 @@ namespace Microsoft.Dafny {
         parameterNameTypes += param.Name + ":" + param.Type.ToString() + ", ";
         paramNames += param.Name + ", ";
       }
-      parameterNameTypes = parameterNameTypes.Remove(parameterNameTypes.Length - 1, 1);
+      parameterNameTypes = parameterNameTypes.Remove(parameterNameTypes.Length - 2, 2);
       paramNames = paramNames.Remove(paramNames.Length - 2, 2);
       string lemmaForExprValidityString = "lemma checkReachableStatesNotBeFalse(";
       lemmaForExprValidityString += parameterNameTypes + ")\n";
       lemmaForExprValidityString += "  requires ";
       lemmaForExprValidityString += funcName + "(" + paramNames + ")\n";
-      lemmaForExprValidityString += " ensures false\n{}";
+      lemmaForExprValidityString += "  ensures false\n{}";
 
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr);
@@ -141,6 +198,14 @@ namespace Microsoft.Dafny {
       var t = expr.Type;
       if (t is BoolType || t is CharType || t is IntType || t is BigOrdinalType ||
           t is RealType || t is BitvectorType || t is CollectionType) {
+        if (t is BoolType) {
+          var trueLiteralExpr = Expression.CreateBoolLiteral(expr.tok, true);
+          yield return trueLiteralExpr;
+          // NOTE: No need to add false literal since we also check non-equality.
+        } else if (t is IntType) {
+          var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
+          yield return zeroLiteralExpr;
+        }
         // Console.WriteLine("pre-defined variable type");
         yield break;
       }
@@ -160,17 +225,32 @@ namespace Microsoft.Dafny {
         // TODO traverse underlying definition as well.
       } else if (cl is NewtypeDecl) {
         var td = (NewtypeDecl)cl;
-        // Console.WriteLine($"{variable.Name} is NewtypeDecl");
-        foreach (var v in TraverseType(program, td.BaseType)) {
-          // var ngv = (Formal)variable;
-          // var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
-          var e = new ExprDotName(v, expr, v.val, null);
-          e.Type = expr.Type;
-          // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
-          yield return e;
+        Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name}");
+        // TODO possibly figure out other expressions from td.Constraint
+        if (td.BaseType is IntType) {
+          var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
+          zeroLiteralExpr.Type = t;
+          // Add the literal for maximum value of this newtype decl.
+          yield return zeroLiteralExpr;
         }
+        // foreach (var v in TraverseType(program, td.BaseType)) {
+        //   // var ngv = (Formal)variable;
+        //   // var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
+        //   Console.WriteLine($"!!!! {v.val}");
+        //   var e = new ExprDotName(v, expr, v.val, null);
+        //   e.Type = expr.Type;
+        //   // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
+        //   yield return e;
+        // }
       } else if (cl is SubsetTypeDecl) {
+        Console.WriteLine($"{Printer.ExprToString(expr)}");
         var td = (SubsetTypeDecl)cl;
+        Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.Rhs}");
+        if (td.Rhs is IntType) {
+          var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
+          zeroLiteralExpr.Type = t;
+          yield return zeroLiteralExpr;
+        }
         // Console.WriteLine($"{variable.Name} is SubsetTypeDecl");
         // TODO traverse underlying definition as well.
       } else if (cl is ClassDecl) {
@@ -219,10 +299,10 @@ namespace Microsoft.Dafny {
     }
 
     public static IEnumerable<IToken> TraverseType(Program program, Type t) {
-      // Console.WriteLine(t.ToString());
+      Console.WriteLine(t.ToString());
       if (t is BoolType || t is CharType || t is IntType || t is BigOrdinalType ||
           t is RealType || t is BitvectorType || t is CollectionType) {
-        // Console.WriteLine("pre-defined type");
+        Console.WriteLine("pre-defined type");
         yield break;
       }
       var udt = (UserDefinedType)t;
@@ -241,7 +321,7 @@ namespace Microsoft.Dafny {
         // TODO traverse underlying definition as well.
       } else if (cl is NewtypeDecl) {
         var td = (NewtypeDecl)cl;
-        // Console.WriteLine($"{t.ToString()} is NewtypeDecl");
+        Console.WriteLine($"{t.ToString()} is NewtypeDecl");
         foreach (var v in TraverseType(program, td.BaseType)) {
           yield return v;
         }
