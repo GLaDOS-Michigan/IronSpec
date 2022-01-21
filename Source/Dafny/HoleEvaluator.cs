@@ -29,24 +29,29 @@ namespace Microsoft.Dafny {
             Dictionary<string, List<Expression>> typeToExpressionDict = new Dictionary<string, List<Expression>>();
             foreach (var expr in expressions) {
               c++;
-              Console.WriteLine($"{c,2} {Printer.ExprToString(expr),-20} {expr.Type}");
-              if (typeToExpressionDict.ContainsKey(expr.Type.ToString())) {
-                bool containsItem = typeToExpressionDict[expr.Type.ToString()].Any(
+              var exprString = Printer.ExprToString(expr);
+              var typeString = expr.Type.ToString();
+              Console.WriteLine($"{c,2} {exprString,-20} {typeString}");
+              if (expr.Type == Type.Bool && exprString[exprString.Length - 1] == '?') {
+                typeString = "_questionMark_";
+              }
+              if (typeToExpressionDict.ContainsKey(typeString)) {
+                bool containsItem = typeToExpressionDict[typeString].Any(
                      item => Printer.ExprToString(item) == Printer.ExprToString(expr));
                 if (!containsItem) {
-                  typeToExpressionDict[expr.Type.ToString()].Add(expr);
+                  typeToExpressionDict[typeString].Add(expr);
                 }
               } else {
                 var lst = new List<Expression>();
                 lst.Add(expr);
-                typeToExpressionDict.Add(expr.Type.ToString(), lst);
+                typeToExpressionDict.Add(typeString, lst);
               }
               // AddExpression(program, topLevelDecl, expr);
             }
             Console.WriteLine("");
             foreach (var k in typeToExpressionDict.Keys) {
               foreach (var v in typeToExpressionDict[k]) {
-                Console.WriteLine($"{Printer.ExprToString(v),-20} {v.Type}");
+                Console.WriteLine($"{Printer.ExprToString(v),-20} {k}");
               }
             }
             Function topLevelDeclCopy = new Function(
@@ -66,67 +71,79 @@ namespace Microsoft.Dafny {
             }
             foreach (var k in typeToExpressionDict.Keys) {
               var values = typeToExpressionDict[k];
-              for (int i = 0; i < values.Count; i++) {
-                for (int j = i + 1; j < values.Count; j++) {
-                  if (values[i] is LiteralExpr && values[j] is LiteralExpr) {
-                    continue;
-                  }
-                  // Equality
+              if (k == "_questionMark_") {
+                for (int i = 0; i < values.Count; i++) {
                   {
                     cnt = cnt + 1;
-                    var equalityExpr = Expression.CreateEq(values[i], values[j], values[i].Type);
-                    var expr = equalityExpr;
+                    // No change to the type, print as is
+                    var expr = values[i];
                     PrintExpr(program, topLevelDecl, expr, cnt);
                     topLevelDecl.Body = topLevelDeclCopy.Body;
                   }
+                }
+              } else {
+                for (int i = 0; i < values.Count; i++) {
+                  for (int j = i + 1; j < values.Count; j++) {
+                    if (values[i] is LiteralExpr && values[j] is LiteralExpr) {
+                      continue;
+                    }
+                    // Equality
+                    {
+                      cnt = cnt + 1;
+                      var equalityExpr = Expression.CreateEq(values[i], values[j], values[i].Type);
+                      var expr = equalityExpr;
+                      PrintExpr(program, topLevelDecl, expr, cnt);
+                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                    }
 
-                  // Non-Equality
-                  {
-                    cnt = cnt + 1;
-                    var neqExpr = Expression.CreateNot(values[i].tok, Expression.CreateEq(values[i], values[j], values[i].Type));
-                    var expr = neqExpr;
-                    PrintExpr(program, topLevelDecl, expr, cnt);
-                    topLevelDecl.Body = topLevelDeclCopy.Body;
-                  }
+                    // Non-Equality
+                    {
+                      cnt = cnt + 1;
+                      var neqExpr = Expression.CreateNot(values[i].tok, Expression.CreateEq(values[i], values[j], values[i].Type));
+                      var expr = neqExpr;
+                      PrintExpr(program, topLevelDecl, expr, cnt);
+                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                    }
 
-                  if (k == "bool") {
-                    continue;
-                  }
+                    if (k == "bool") {
+                      continue;
+                    }
 
-                  // Lower than
-                  {
-                    cnt = cnt + 1;
-                    var lowerThanExpr = Expression.CreateLess(values[i], values[j]);
-                    var expr = lowerThanExpr;
-                    PrintExpr(program, topLevelDecl, expr, cnt);
-                    topLevelDecl.Body = topLevelDeclCopy.Body;
-                  }
+                    // Lower than
+                    {
+                      cnt = cnt + 1;
+                      var lowerThanExpr = Expression.CreateLess(values[i], values[j]);
+                      var expr = lowerThanExpr;
+                      PrintExpr(program, topLevelDecl, expr, cnt);
+                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                    }
 
-                  // Greater Equal = !(Lower than)
-                  {
-                    cnt = cnt + 1;
-                    var geExpr = Expression.CreateNot(values[i].tok,Expression.CreateLess(values[i], values[j]));
-                    var expr = geExpr;
-                    PrintExpr(program, topLevelDecl, expr, cnt);
-                    topLevelDecl.Body = topLevelDeclCopy.Body;
-                  }
+                    // Greater Equal = !(Lower than)
+                    {
+                      cnt = cnt + 1;
+                      var geExpr = Expression.CreateNot(values[i].tok, Expression.CreateLess(values[i], values[j]));
+                      var expr = geExpr;
+                      PrintExpr(program, topLevelDecl, expr, cnt);
+                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                    }
 
-                  // Lower Equal
-                  {
-                    cnt = cnt + 1;
-                    var leExpr = Expression.CreateAtMost(values[i], values[j]);
-                    var expr = leExpr;
-                    PrintExpr(program, topLevelDecl, expr, cnt);
-                    topLevelDecl.Body = topLevelDeclCopy.Body;
-                  }
+                    // Lower Equal
+                    {
+                      cnt = cnt + 1;
+                      var leExpr = Expression.CreateAtMost(values[i], values[j]);
+                      var expr = leExpr;
+                      PrintExpr(program, topLevelDecl, expr, cnt);
+                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                    }
 
-                  // Greater Than = !(Lower equal)
-                  {
-                    cnt = cnt + 1;
-                    var gtExpr = Expression.CreateNot(values[i].tok,Expression.CreateAtMost(values[i], values[j]));
-                    var expr = gtExpr;
-                    PrintExpr(program, topLevelDecl, expr, cnt);
-                    topLevelDecl.Body = topLevelDeclCopy.Body;
+                    // Greater Than = !(Lower equal)
+                    {
+                      cnt = cnt + 1;
+                      var gtExpr = Expression.CreateNot(values[i].tok, Expression.CreateAtMost(values[i], values[j]));
+                      var expr = gtExpr;
+                      PrintExpr(program, topLevelDecl, expr, cnt);
+                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                    }
                   }
                 }
               }
@@ -201,7 +218,7 @@ namespace Microsoft.Dafny {
         if (t is BoolType) {
           var trueLiteralExpr = Expression.CreateBoolLiteral(expr.tok, true);
           yield return trueLiteralExpr;
-          // NOTE: No need to add false literal since we also check non-equality.
+          // NOTE: No need to add false literal since we also check for non-equality.
         } else if (t is IntType) {
           var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
           yield return zeroLiteralExpr;
@@ -260,10 +277,13 @@ namespace Microsoft.Dafny {
         var dt = (DatatypeDecl)cl;
         var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
         // Console.WriteLine($"{variable.Name} is DatatypeDecl");
-        // Console.WriteLine($"Ctor.Count:{dt.Ctors.Count}");
         foreach (var ctor in dt.Ctors) {
+          if (dt.Ctors.Count > 1) {
+            var exprDot = new ExprDotName(ctor.tok, expr, ctor.tok.val + "?", null);
+            exprDot.Type = Type.Bool;
+            yield return exprDot;
+          }
           foreach (var formal in ctor.Formals) {
-            // Console.WriteLine(formal.Name);
             // Console.WriteLine($"type={formal.Type} => {Resolver.SubstType(formal.Type, subst)}");
             // var convertedFormal = new Formal(formal.tok, formal.Name, 
             //     Resolver.SubstType(formal.Type, subst), formal.InParam, formal.IsGhost,
