@@ -9,6 +9,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using System.Diagnostics;
 using System.Reflection;
 using System.Linq;
 using Microsoft.Boogie;
@@ -17,13 +18,15 @@ namespace Microsoft.Dafny {
 
   public class HoleEvaluator {
 
-    public static void Evaluate(Program program, string funcName) {
+    public bool Evaluate(Program program, string funcName) {
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
+      var foundDesiredFunction = false;
       foreach (var kvp in program.ModuleSigs) {
         // iterate over all functions / predicates (this doesn't include lemmas)
         foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
           if (topLevelDecl.FullDafnyName == funcName) {
             Console.WriteLine("Found desired function.");
+            foundDesiredFunction = true;
             var expressions = ListArguments(program, topLevelDecl);
             var c = 0;
             Dictionary<string, List<Expression>> typeToExpressionDict = new Dictionary<string, List<Expression>>();
@@ -63,12 +66,14 @@ namespace Microsoft.Dafny {
               topLevelDecl.Attributes, topLevelDecl.SignatureEllipsis);
             // check equality of each pair of same type expressions
             var cnt = 0;
-            using (var wr = new System.IO.StringWriter()) {
-              var pr = new Printer(wr);
-              pr.PrintProgram(program, true);
-              File.WriteAllTextAsync($"/tmp/{funcName}_base.dfy",
-                Printer.ToStringWithoutNewline(wr));
-            }
+            var trueExpr = Expression.CreateBoolLiteral(topLevelDecl.Body.tok, true);
+            PrintExpr(program, topLevelDecl, trueExpr, cnt);
+            // using (var wr = new System.IO.StringWriter()) {
+            //   var pr = new Printer(wr);
+            //   pr.PrintProgram(program, true);
+            //   File.WriteAllTextAsync($"/tmp/{funcName}_base.dfy",
+            //     Printer.ToStringWithoutNewline(wr));
+            // }
             foreach (var k in typeToExpressionDict.Keys) {
               var values = typeToExpressionDict[k];
               if (k == "_questionMark_") {
@@ -151,9 +156,60 @@ namespace Microsoft.Dafny {
           }
         }
       }
+      if (!foundDesiredFunction) {
+        Console.WriteLine($"{funcName} was not found!");
+        return false;
+      }
+      foreach (var p in dafnyProcesses) {
+        p.WaitForExit();
+      }
+      foreach (var p in dafnyProcesses) {
+        var cnt = processToCnt[p];
+        var position = processToLemmaPosition[p];
+        var expectedStart =
+          $"/tmp/{funcName}_{cnt}.dfy({position + 3},0): Error: A postcondition might not hold on this return path." +
+          Environment.NewLine +
+          $"/tmp/{funcName}_{cnt}.dfy({position + 2},10): Related location: This is the postcondition that might not hold.";
+        var output = dafnyOutput[p];
+        if (output.StartsWith(expectedStart) && output.EndsWith("1 error" + Environment.NewLine)) {
+          // Console.WriteLine(output);
+          Console.WriteLine(p.StartInfo.Arguments);
+          Console.WriteLine(Printer.ExprToString(processToExpr[p]));
+        }
+      }
+      return true;
     }
 
-    public static void PrintExpr(Program program, Function func, Expression expr, int cnt) {
+    private Process startProcessWithOutput(string command, string args) {
+      Process p = new Process();
+      p.StartInfo = new ProcessStartInfo(command, args);
+      p.StartInfo.RedirectStandardOutput = true;
+      p.StartInfo.RedirectStandardError = false;
+      p.StartInfo.UseShellExecute = false;
+      p.StartInfo.CreateNoWindow = true;
+      p.OutputDataReceived += new DataReceivedEventHandler(DafnyOutputHandler);
+      p.Start();
+      p.BeginOutputReadLine();
+
+      return p;
+    }
+
+    private void DafnyOutputHandler(object sendingProcess,
+            DataReceivedEventArgs outLine) {
+      // Collect the net view command output.
+      if (!String.IsNullOrEmpty(outLine.Data)) {
+        // Add the text to the collected output.
+        dafnyOutput[sendingProcess as Process] += outLine.Data + Environment.NewLine;
+      }
+    }
+
+    private Dictionary<Process, string> dafnyOutput = new Dictionary<Process, string>();
+    private List<Process> dafnyProcesses = new List<Process>();
+    private Dictionary<Process, Expression> processToExpr = new Dictionary<Process, Expression>();
+    private Dictionary<Process, int> processToCnt = new Dictionary<Process, int>();
+    private Dictionary<Process, int> processToLemmaPosition = new Dictionary<Process, int>();
+
+    public void PrintExpr(Program program, Function func, Expression expr, int cnt) {
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
 
       var funcName = func.FullDafnyName;
@@ -170,17 +226,27 @@ namespace Microsoft.Dafny {
       lemmaForExprValidityString += "  requires ";
       lemmaForExprValidityString += funcName + "(" + paramNames + ")\n";
       lemmaForExprValidityString += "  ensures false\n{}";
+      int lemmaForExprValidityPosition = 0;
 
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr);
         func.Body = Expression.CreateAnd(func.Body, expr);
         pr.PrintProgram(program, true);
-        File.WriteAllTextAsync($"/tmp/{funcName}_{cnt}.dfy",
-          $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) +
-          "\n\n" + lemmaForExprValidityString + "\n");
+        var code = $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+        lemmaForExprValidityPosition = code.Count(f => f == '\n') + 1;
+        code += lemmaForExprValidityString + "\n";
+        File.WriteAllTextAsync($"/tmp/{funcName}_{cnt}.dfy", code);
         // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
         // Console.WriteLine("");
       }
+      Process p = startProcessWithOutput("/Users/arminvak/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny",
+        $"/compile:0 /timeLimit:10 /tmp/{funcName}_{cnt}.dfy");
+      dafnyProcesses.Add(p);
+      processToExpr[p] = expr;
+      processToCnt[p] = cnt;
+      processToLemmaPosition[p] = lemmaForExprValidityPosition;
+      dafnyOutput[p] = "";
+
       // Printer.PrintFunction(transformedFunction, 0, false);
     }
 
@@ -194,7 +260,7 @@ namespace Microsoft.Dafny {
     //   return result;
     // }
 
-    public static IEnumerable<Expression> ListArguments(Program program, Function func) {
+    public IEnumerable<Expression> ListArguments(Program program, Function func) {
       foreach (var formal in func.Formals) {
         // Console.WriteLine($"\n{formal.Name}\t{formal.Type.ToString()}");
         // Console.WriteLine(formal.Type.NormalizeExpand().IsTopLevelTypeWithMembers);
@@ -209,7 +275,7 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public static IEnumerable<Expression> TraverseFormal(Program program, Expression expr) {
+    public IEnumerable<Expression> TraverseFormal(Program program, Expression expr) {
       Contract.Requires(expr != null);
       yield return expr;
       var t = expr.Type;
@@ -318,7 +384,7 @@ namespace Microsoft.Dafny {
       // }
     }
 
-    public static IEnumerable<IToken> TraverseType(Program program, Type t) {
+    public IEnumerable<IToken> TraverseType(Program program, Type t) {
       Console.WriteLine(t.ToString());
       if (t is BoolType || t is CharType || t is IntType || t is BigOrdinalType ||
           t is RealType || t is BitvectorType || t is CollectionType) {
