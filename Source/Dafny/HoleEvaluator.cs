@@ -239,8 +239,18 @@ namespace Microsoft.Dafny {
         // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
         // Console.WriteLine("");
       }
-      Process p = startProcessWithOutput("/Users/arminvak/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny",
-        $"/compile:0 /timeLimit:10 /tmp/{funcName}_{cnt}.dfy");
+      string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
+      dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
+      string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
+      var argList = env.Split(' ');
+      string args = "";
+      foreach (var arg in argList) {
+        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval:")) {
+          args += arg + " ";
+        }
+      }
+      Process p = startProcessWithOutput(dafnyBinaryPath,
+        $"{args} /tmp/{funcName}_{cnt}.dfy");
       dafnyProcesses.Add(p);
       processToExpr[p] = expr;
       processToCnt[p] = cnt;
