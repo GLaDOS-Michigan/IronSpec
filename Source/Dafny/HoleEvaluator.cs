@@ -17,16 +17,29 @@ using Microsoft.Boogie;
 namespace Microsoft.Dafny {
 
   public class HoleEvaluator {
+    private Dictionary<Process, List<string>> dafnyOutput = new Dictionary<Process, List<string>>();
+    private List<Process> dafnyProcesses = new List<Process>();
+    private Dictionary<Process, Expression> processToExpr = new Dictionary<Process, Expression>();
+    private Dictionary<Process, int> processToCnt = new Dictionary<Process, int>();
+    private Dictionary<Process, int> processToLemmaPosition = new Dictionary<Process, int>();
+
+    private List<Process> correctProcesses = new List<Process>();
+
+    private List<Process> dafnyImpliesProcesses = new List<Process>();
+    private Dictionary<Process, int> impliesProcessToProcessAIndex = new Dictionary<Process, int>();
+    private Dictionary<Process, int> impliesProcessToProcessBIndex = new Dictionary<Process, int>();
 
     public bool Evaluate(Program program, string funcName) {
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
       var foundDesiredFunction = false;
+      Function desiredFunction = null;
       foreach (var kvp in program.ModuleSigs) {
         // iterate over all functions / predicates (this doesn't include lemmas)
         foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
           if (topLevelDecl.FullDafnyName == funcName) {
             Console.WriteLine("Found desired function.");
             foundDesiredFunction = true;
+            desiredFunction = topLevelDecl;
             var expressions = ListArguments(program, topLevelDecl);
             var c = 0;
             Dictionary<string, List<Expression>> typeToExpressionDict = new Dictionary<string, List<Expression>>();
@@ -165,35 +178,70 @@ namespace Microsoft.Dafny {
       }
       foreach (var p in dafnyProcesses) {
         var cnt = processToCnt[p];
-        File.WriteAllTextAsync($"/tmp/output_{funcName}_{cnt}.txt", dafnyOutput[p]);
+        File.WriteAllTextAsync($"/tmp/output_{funcName}_{cnt}.txt", String.Join('\n', dafnyOutput[p]));
       }
-      var findCorrectAnswer = false;
       foreach (var p in dafnyProcesses) {
         var cnt = processToCnt[p];
         var position = processToLemmaPosition[p];
-        var expectedStart =
-          $"/tmp/{funcName}_{cnt}.dfy({position + 3},0): Error: A postcondition might not hold on this return path." +
-          Environment.NewLine +
-          $"/tmp/{funcName}_{cnt}.dfy({position + 2},10): Related location: This is the postcondition that might not hold.";
+        var expectedOutput =
+          $"/tmp/{funcName}_{cnt}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
         var output = dafnyOutput[p];
-        if (output.StartsWith(expectedStart) && output.EndsWith("1 error" + Environment.NewLine)) {
-          findCorrectAnswer = true;
+        if (output.Count >= 5 && output[output.Count - 5] == expectedOutput &&
+            output[output.Count - 1].EndsWith("1 error")) {
+          correctProcesses.Add(p);
           // Console.WriteLine(output);
           Console.WriteLine(p.StartInfo.Arguments);
           Console.WriteLine(Printer.ExprToString(processToExpr[p]));
         }
       }
-      if (findCorrectAnswer == false) {
+      if (correctProcesses.Count == 0) {
         Console.WriteLine("Couldn't find any correct answer. Printing 0 error ones");
         foreach (var p in dafnyProcesses) {
           var output = dafnyOutput[p];
-          if (output.EndsWith("0 errors" + Environment.NewLine)) {
+          if (output[0].EndsWith("0 errors")) {
             // Console.WriteLine(output);
             Console.WriteLine(p.StartInfo.Arguments);
             Console.WriteLine(Printer.ExprToString(processToExpr[p]));
           }
         }
       }
+      // The 0th process represents no change to the predicate, and
+      // if that is a correct predicate, it means the proof already 
+      // goes through and no additional conjunction is needed.
+      if (correctProcesses[0] == dafnyProcesses[0]) {
+        Console.WriteLine("proof already goes through and no additional conjunction is needed!");
+        return true;
+      }
+      for (int i = 0; i < correctProcesses.Count; i++) {
+        for (int j = i + 1; j < correctProcesses.Count; j++) {
+          {
+            PrintImplies(program, desiredFunction, processToCnt[correctProcesses[i]], processToCnt[correctProcesses[j]]);
+            PrintImplies(program, desiredFunction, processToCnt[correctProcesses[j]], processToCnt[correctProcesses[i]]);
+          }
+        }
+      }
+      foreach (var p in dafnyImpliesProcesses) {
+        p.WaitForExit();
+      }
+      string graphVizOutput = $"digraph {funcName}_implies_graph {{\n";
+      graphVizOutput += "  // The list of correct expressions\n";
+      foreach (var p in correctProcesses) {
+        graphVizOutput += $"  {processToCnt[p]} [label=\"{Printer.ExprToString(processToExpr[p])}\"];\n";
+      }
+      graphVizOutput += "\n  ordering = \"out\";\n";
+      graphVizOutput += "  // The list of edges:\n";
+      foreach (var p in dafnyImpliesProcesses) {
+        var processAIndex = impliesProcessToProcessAIndex[p];
+        var processBIndex = impliesProcessToProcessBIndex[p];
+        File.WriteAllTextAsync($"/tmp/output_{funcName}_implies_{processAIndex}_{processBIndex}.txt", String.Join('\n', dafnyOutput[p]));
+        var output = dafnyOutput[p];
+        if (output.Count == 1 && output[0] == "Dafny program verifier finished with 1 verified, 0 errors") {
+          Console.WriteLine($"edge from {processAIndex} to {processBIndex}");
+          graphVizOutput += $"  {processAIndex} -> {processBIndex};\n";
+        }
+      }
+      graphVizOutput += "}\n";
+      File.WriteAllTextAsync($"/tmp/graph_{funcName}_implies.dot", graphVizOutput);
       return true;
     }
 
@@ -216,15 +264,58 @@ namespace Microsoft.Dafny {
       // Collect the net view command output.
       if (!String.IsNullOrEmpty(outLine.Data)) {
         // Add the text to the collected output.
-        dafnyOutput[sendingProcess as Process] += outLine.Data + Environment.NewLine;
+        dafnyOutput[sendingProcess as Process].Add(outLine.Data);
       }
     }
 
-    private Dictionary<Process, string> dafnyOutput = new Dictionary<Process, string>();
-    private List<Process> dafnyProcesses = new List<Process>();
-    private Dictionary<Process, Expression> processToExpr = new Dictionary<Process, Expression>();
-    private Dictionary<Process, int> processToCnt = new Dictionary<Process, int>();
-    private Dictionary<Process, int> processToLemmaPosition = new Dictionary<Process, int>();
+    public void PrintImplies(Program program, Function func, int processAIndex, int processBIndex) {
+      Console.WriteLine($"print implies {processAIndex} {processBIndex}");
+      var funcName = func.FullDafnyName;
+      string parameterNameTypes = "";
+      string paramNames = "";
+      foreach (var param in func.Formals) {
+        parameterNameTypes += param.Name + ":" + param.Type.ToString() + ", ";
+        paramNames += param.Name + ", ";
+      }
+      parameterNameTypes = parameterNameTypes.Remove(parameterNameTypes.Length - 2, 2);
+      paramNames = paramNames.Remove(paramNames.Length - 2, 2);
+      string lemmaForCheckingImpliesString = "lemma checkIfExprAImpliesExprB(";
+      lemmaForCheckingImpliesString += parameterNameTypes + ")\n";
+      Expression A = processToExpr[dafnyProcesses[processAIndex]];
+      Expression B = processToExpr[dafnyProcesses[processBIndex]];
+      lemmaForCheckingImpliesString += "  requires " + Printer.ExprToString(A) + "\n";
+      lemmaForCheckingImpliesString += "  ensures " + Printer.ExprToString(B) + "\n";
+      lemmaForCheckingImpliesString += "{}";
+
+      int lemmaForCheckingImpliesPosition = 0;
+
+      using (var wr = new System.IO.StringWriter()) {
+        var pr = new Printer(wr);
+        pr.PrintProgram(program, true);
+        var code = $"// Implies {Printer.ExprToString(A)} ==> {Printer.ExprToString(B)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+        lemmaForCheckingImpliesPosition = code.Count(f => f == '\n') + 1;
+        code += lemmaForCheckingImpliesString + "\n";
+        File.WriteAllTextAsync($"/tmp/{funcName}_implies_{processAIndex}_{processBIndex}.dfy", code);
+      }
+
+      string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
+      dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
+      string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
+      var argList = env.Split(' ');
+      string args = "";
+      foreach (var arg in argList) {
+        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval:")) {
+          args += arg + " ";
+        }
+      }
+      Process p = startProcessWithOutput(dafnyBinaryPath,
+        $"{args} /tmp/{funcName}_implies_{processAIndex}_{processBIndex}.dfy /proc:*checkIfExprAImpliesExprB*");
+      dafnyImpliesProcesses.Add(p);
+      impliesProcessToProcessAIndex[p] = processAIndex;
+      impliesProcessToProcessBIndex[p] = processBIndex;
+      processToLemmaPosition[p] = lemmaForCheckingImpliesPosition;
+      dafnyOutput[p] = new List<string>();
+    }
 
     public void PrintExpr(Program program, Function func, Expression expr, int cnt) {
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
@@ -272,7 +363,7 @@ namespace Microsoft.Dafny {
       processToExpr[p] = expr;
       processToCnt[p] = cnt;
       processToLemmaPosition[p] = lemmaForExprValidityPosition;
-      dafnyOutput[p] = "";
+      dafnyOutput[p] = new List<string>();
 
       // Printer.PrintFunction(transformedFunction, 0, false);
     }
