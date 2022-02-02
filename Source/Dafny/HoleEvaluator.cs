@@ -165,6 +165,11 @@ namespace Microsoft.Dafny {
       }
       foreach (var p in dafnyProcesses) {
         var cnt = processToCnt[p];
+        File.WriteAllTextAsync($"/tmp/output_{funcName}_{cnt}.txt", dafnyOutput[p]);
+      }
+      var findCorrectAnswer = false;
+      foreach (var p in dafnyProcesses) {
+        var cnt = processToCnt[p];
         var position = processToLemmaPosition[p];
         var expectedStart =
           $"/tmp/{funcName}_{cnt}.dfy({position + 3},0): Error: A postcondition might not hold on this return path." +
@@ -172,9 +177,21 @@ namespace Microsoft.Dafny {
           $"/tmp/{funcName}_{cnt}.dfy({position + 2},10): Related location: This is the postcondition that might not hold.";
         var output = dafnyOutput[p];
         if (output.StartsWith(expectedStart) && output.EndsWith("1 error" + Environment.NewLine)) {
+          findCorrectAnswer = true;
           // Console.WriteLine(output);
           Console.WriteLine(p.StartInfo.Arguments);
           Console.WriteLine(Printer.ExprToString(processToExpr[p]));
+        }
+      }
+      if (findCorrectAnswer == false) {
+        Console.WriteLine("Couldn't find any correct answer. Printing 0 error ones");
+        foreach (var p in dafnyProcesses) {
+          var output = dafnyOutput[p];
+          if (output.EndsWith("0 errors" + Environment.NewLine)) {
+            // Console.WriteLine(output);
+            Console.WriteLine(p.StartInfo.Arguments);
+            Console.WriteLine(Printer.ExprToString(processToExpr[p]));
+          }
         }
       }
       return true;
