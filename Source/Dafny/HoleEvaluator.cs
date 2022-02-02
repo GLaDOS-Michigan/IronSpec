@@ -233,9 +233,9 @@ namespace Microsoft.Dafny {
       foreach (var p in dafnyImpliesProcesses) {
         var processAIndex = impliesProcessToProcessAIndex[p];
         var processBIndex = impliesProcessToProcessBIndex[p];
-        File.WriteAllTextAsync($"/tmp/output_{funcName}_implies_{processAIndex}_{processBIndex}.txt", String.Join('\n', dafnyOutput[p]));
+        File.WriteAllTextAsync($"/tmp/output_{funcName}_implies_{processAIndex}_{processBIndex}.txt", String.Join('\n', dafnyOutput[p]) + "\n");
         var output = dafnyOutput[p];
-        if (output.Count == 1 && output[0] == "Dafny program verifier finished with 1 verified, 0 errors") {
+        if (output[output.Count - 1].EndsWith("0 errors")) {
           Console.WriteLine($"edge from {processAIndex} to {processBIndex}");
           graphVizOutput += $"  {processAIndex} -> {processBIndex};\n";
         }
@@ -283,6 +283,8 @@ namespace Microsoft.Dafny {
       lemmaForCheckingImpliesString += parameterNameTypes + ")\n";
       Expression A = processToExpr[dafnyProcesses[processAIndex]];
       Expression B = processToExpr[dafnyProcesses[processBIndex]];
+      lemmaForCheckingImpliesString += "  requires ";
+      lemmaForCheckingImpliesString += funcName + "(" + paramNames + ")\n";
       lemmaForCheckingImpliesString += "  requires " + Printer.ExprToString(A) + "\n";
       lemmaForCheckingImpliesString += "  ensures " + Printer.ExprToString(B) + "\n";
       lemmaForCheckingImpliesString += "{}";
