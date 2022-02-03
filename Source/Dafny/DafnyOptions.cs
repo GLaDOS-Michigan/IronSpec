@@ -141,6 +141,7 @@ namespace Microsoft.Dafny {
       testGenOptions ??= new TestGenerationOptions();
 
     public string HoleEvaluatorFunctionName = null;
+    public int HoleEvaluatorDepth = 1;
 
     protected override bool ParseOption(string name, Bpl.CommandLineOptionEngine.CommandLineParseState ps) {
       var args = ps.args; // convenient synonym
@@ -486,6 +487,10 @@ namespace Microsoft.Dafny {
           if (ps.ConfirmArgumentCount(1)) {
             HoleEvaluatorFunctionName = args[ps.i];
           }
+          return true;
+
+        case "holeEvalDepth":
+          ps.GetNumericArgument(ref HoleEvaluatorDepth, 4);
           return true;
 
         case "verificationLogger":
