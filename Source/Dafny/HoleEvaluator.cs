@@ -169,7 +169,7 @@ namespace Microsoft.Dafny {
         Console.WriteLine($"{funcName} was not found!");
         return false;
       }
-      dafnyMainExecutor.waitUntilAllProcessesFinishAndDumpTheirOutputs();
+      dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
 
       foreach (var p in dafnyMainExecutor.dafnyProcesses) {
         var fileName = dafnyMainExecutor.inputFileName[p];
@@ -179,7 +179,7 @@ namespace Microsoft.Dafny {
         var output = dafnyMainExecutor.dafnyOutput[p];
         if (output.Count >= 5 && output[output.Count - 5] == expectedOutput &&
             output[output.Count - 1].EndsWith("1 error")) {
-          correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
+          // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
           // Console.WriteLine(output);
           Console.WriteLine(p.StartInfo.Arguments);
           Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
@@ -205,7 +205,7 @@ namespace Microsoft.Dafny {
           }
         }
       }
-      dafnyMainExecutor.waitUntilAllProcessesFinishAndDumpTheirOutputs();
+      dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
 
       foreach (var p in dafnyMainExecutor.dafnyProcesses) {
         var fileName = dafnyMainExecutor.inputFileName[p];
@@ -252,7 +252,7 @@ namespace Microsoft.Dafny {
           }
         }
       }
-      dafnyImpliesExecutor.waitUntilAllProcessesFinishAndDumpTheirOutputs();
+      dafnyImpliesExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
       string graphVizOutput = $"digraph {funcName}_implies_graph {{\n";
       graphVizOutput += "  // The list of correct expressions\n";
       for (int i = 0; i < correctExpressions.Count; i++) {
@@ -262,6 +262,10 @@ namespace Microsoft.Dafny {
       foreach (var p in dafnyImpliesExecutor.dafnyProcesses) {
         var corrExprAIndex = dafnyImpliesExecutor.processToCorrExprAIndex[p];
         var corrExprBIndex = dafnyImpliesExecutor.processToCorrExprBIndex[p];
+        // skip connecting all nodes to true
+        if (Printer.ExprToString(correctExpressions[corrExprAIndex]) == "true" ||
+            Printer.ExprToString(correctExpressions[corrExprBIndex]) == "true")
+            continue;
         var output = dafnyImpliesExecutor.dafnyOutput[p];
         if (output[output.Count - 1].EndsWith("0 errors")) {
           Console.WriteLine($"edge from {corrExprAIndex} to {corrExprBIndex}");
@@ -277,19 +281,14 @@ namespace Microsoft.Dafny {
       Console.WriteLine($"print implies {corrExprAIndex} {corrExprBIndex}");
       var funcName = func.FullDafnyName;
       string parameterNameTypes = "";
-      string paramNames = "";
       foreach (var param in func.Formals) {
         parameterNameTypes += param.Name + ":" + param.Type.ToString() + ", ";
-        paramNames += param.Name + ", ";
       }
       parameterNameTypes = parameterNameTypes.Remove(parameterNameTypes.Length - 2, 2);
-      paramNames = paramNames.Remove(paramNames.Length - 2, 2);
       string lemmaForCheckingImpliesString = "lemma checkIfExprAImpliesExprB(";
       lemmaForCheckingImpliesString += parameterNameTypes + ")\n";
       Expression A = correctExpressions[corrExprAIndex];
       Expression B = correctExpressions[corrExprBIndex];
-      lemmaForCheckingImpliesString += "  requires ";
-      lemmaForCheckingImpliesString += funcName + "(" + paramNames + ")\n";
       lemmaForCheckingImpliesString += "  requires " + Printer.ExprToString(A) + "\n";
       lemmaForCheckingImpliesString += "  ensures " + Printer.ExprToString(B) + "\n";
       lemmaForCheckingImpliesString += "{}";
@@ -315,8 +314,8 @@ namespace Microsoft.Dafny {
           args += arg + " ";
         }
       }
-      dafnyImpliesExecutor.startProcessWithOutput(dafnyBinaryPath,
-        $"{args} /tmp/{funcName}_implies_{corrExprAIndex}_{corrExprBIndex}.dfy /proc:*checkIfExprAImpliesExprB*",
+      dafnyImpliesExecutor.createProcessWithOutput(dafnyBinaryPath,
+        $"{args} /tmp/{funcName}_implies_{corrExprAIndex}_{corrExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
         corrExprAIndex, corrExprBIndex, lemmaForCheckingImpliesPosition,
         $"{funcName}_implies_{corrExprAIndex}_{corrExprBIndex}.dfy");
     }
@@ -361,7 +360,7 @@ namespace Microsoft.Dafny {
           args += arg + " ";
         }
       }
-      dafnyMainExecutor.startProcessWithOutput(dafnyBinaryPath,
+      dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
           $"{args} /tmp/{funcName}_{cnt}.dfy", expr, cnt, lemmaForExprValidityPosition,
           $"{funcName}_{cnt}");
       // Printer.PrintFunction(transformedFunction, 0, false);

@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Linq;
 using Microsoft.Boogie;
+using System.Threading.Tasks;
 
 namespace Microsoft.Dafny {
 
@@ -20,23 +21,30 @@ namespace Microsoft.Dafny {
     public Dictionary<Process, List<string>> dafnyOutput = new Dictionary<Process, List<string>>();
     public Dictionary<Process, string> inputFileName = new Dictionary<Process, string>();
     public List<Process> dafnyProcesses = new List<Process>();
+    private List<Process> readyProcesses = new List<Process>();
     public Dictionary<Process, Expression> processToExpr = new Dictionary<Process, Expression>();
     public Dictionary<Process, int> processToCnt = new Dictionary<Process, int>();
     public Dictionary<Process, int> processToCorrExprAIndex = new Dictionary<Process, int>();
     public Dictionary<Process, int> processToCorrExprBIndex = new Dictionary<Process, int>();
     public Dictionary<Process, int> processToLemmaPosition = new Dictionary<Process, int>();
 
-    public void waitUntilAllProcessesFinishAndDumpTheirOutputs() {
-      foreach (var p in dafnyProcesses) {
-        p.WaitForExit();
-      }
-      foreach (var p in dafnyProcesses) {
-        File.WriteAllTextAsync($"/tmp/output_{inputFileName[p]}.txt",
-          String.Join('\n', dafnyOutput[p]) + "\n");
-      }
+    public void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
+      Parallel.For(0, readyProcesses.Count,
+        new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount - 1 },
+        i => {
+          if (i % 1000 == 0) {
+            Console.WriteLine($"Executing {i}");
+          }
+          readyProcesses[i].Start();
+          readyProcesses[i].BeginOutputReadLine();
+          readyProcesses[i].WaitForExit();
+          File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}.txt",
+            String.Join('\n', dafnyOutput[readyProcesses[i]]) + "\n");
+        });
+      readyProcesses.Clear();
     }
 
-    public void startProcessWithOutput(string command, string args, Expression expr,
+    public void createProcessWithOutput(string command, string args, Expression expr,
         int cnt, int lemmaPos, string inputFile) {
       Process p = new Process();
       p.StartInfo = new ProcessStartInfo(command, args);
@@ -45,8 +53,9 @@ namespace Microsoft.Dafny {
       p.StartInfo.UseShellExecute = false;
       p.StartInfo.CreateNoWindow = true;
       p.OutputDataReceived += new DataReceivedEventHandler(DafnyOutputHandler);
-      p.Start();
-      p.BeginOutputReadLine();
+      // p.Start();
+      // p.BeginOutputReadLine();
+      readyProcesses.Add(p);
       dafnyProcesses.Add(p);
       processToExpr[p] = expr;
       processToCnt[p] = cnt;
@@ -55,7 +64,7 @@ namespace Microsoft.Dafny {
       inputFileName[p] = inputFile;
     }
 
-    public void startProcessWithOutput(string command, string args,
+    public void createProcessWithOutput(string command, string args,
         int corrExprAIndex, int corrExprBIndex, int lemmaPos, string inputFile) {
       Process p = new Process();
       p.StartInfo = new ProcessStartInfo(command, args);
@@ -64,8 +73,9 @@ namespace Microsoft.Dafny {
       p.StartInfo.UseShellExecute = false;
       p.StartInfo.CreateNoWindow = true;
       p.OutputDataReceived += new DataReceivedEventHandler(DafnyOutputHandler);
-      p.Start();
-      p.BeginOutputReadLine();
+      // p.Start();
+      // p.BeginOutputReadLine();
+      readyProcesses.Add(p);
       dafnyProcesses.Add(p);
       processToCorrExprAIndex[p] = corrExprAIndex;
       processToCorrExprBIndex[p] = corrExprBIndex;
