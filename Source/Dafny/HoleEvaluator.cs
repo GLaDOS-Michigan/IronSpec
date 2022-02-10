@@ -6,23 +6,136 @@
 //
 //-----------------------------------------------------------------------------
 using System;
+using System.Text;
 using System.IO;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Diagnostics;
 using System.Reflection;
 using System.Linq;
 using Microsoft.Boogie;
+using System.Threading.Tasks;
 
 namespace Microsoft.Dafny {
 
   public class HoleEvaluator {
-    private List<Expression> correctExpressions = new List<Expression>();
-    private List<List<Expression>> availableExprAtDepth;
-
+    private List<Expression> availableExpressions = new List<Expression>();
+    private List<BitArray> bitArrayList = new List<BitArray>();
+    enum Result {
+      Unknown = 0,
+      CorrectProof = 1,
+      IncorrectProof = 2,
+      FalsePredicate = 3,
+      InvalidExpr = 4
+    }
+    private bool IsGoodResult(Result result) {
+      return (result == Result.CorrectProof ||
+              result == Result.IncorrectProof ||
+              result == Result.Unknown);
+    }
+    private Dictionary<int, Result> combinationResults = new Dictionary<int, Result>();
+    private Dictionary<int, int> negateOfExpressionIndex = new Dictionary<int, int>();
+    private HashSet<string> currCombinations = new HashSet<string>();
+    private Dictionary<string, int> bitArrayStringToIndex = new Dictionary<string, int>();
     private DafnyExecutor dafnyMainExecutor = new DafnyExecutor();
     private DafnyExecutor dafnyImpliesExecutor = new DafnyExecutor();
 
+    private string ToBitString(BitArray bits, bool skipZero) {
+      var sb = new StringBuilder();
+
+      for (int i = skipZero ? 1 : 0; i < bits.Count; i++) {
+        char c = bits[i] ? '1' : '0';
+        sb.Append(c);
+      }
+
+      return sb.ToString();
+    }
+
+    private void UpdateCombinationResult(int index) {
+      var p = dafnyMainExecutor.dafnyProcesses[index];
+      var fileName = dafnyMainExecutor.inputFileName[p];
+      var position = dafnyMainExecutor.processToLemmaPosition[p];
+      var expectedOutput =
+        $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
+      var output = dafnyMainExecutor.dafnyOutput[p];
+      if (output.Count >= 5 && output[output.Count - 5] == expectedOutput &&
+          output[output.Count - 1].EndsWith("1 error")) {
+        // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
+        // Console.WriteLine(output);
+        combinationResults[index] = Result.CorrectProof;
+        Console.WriteLine(p.StartInfo.Arguments);
+        Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
+      } else if (output[output.Count - 1].EndsWith("0 errors")) {
+        combinationResults[index] = Result.FalsePredicate;
+      } else if (output[output.Count - 1].EndsWith($"resolution/type errors detected in {fileName}.dfy")) {
+        combinationResults[index] = Result.InvalidExpr;
+      } else {
+        combinationResults[index] = Result.IncorrectProof;
+      }
+    }
+
+    public void Increment(ref BitArray bArray) {
+      for (int i = 0; i < bArray.Count; i++) {
+        bool previous = bArray[i];
+        bArray[i] = !previous;
+        if (!previous) {
+          // Found a clear bit - now that we've set it, we're done
+          return;
+        }
+      }
+    }
+
+    public bool IsGoodExprCombinationToExecute(int indexI, int indexJ) {
+      Contract.Requires(indexI >= 0 && indexI < availableExpressions.Count);
+      Contract.Requires(indexJ >= 0 && indexJ < availableExpressions.Count);
+      if ((!IsGoodResult(combinationResults[indexI])) ||
+          (!IsGoodResult(combinationResults[indexJ]))) {
+        return false;
+      }
+      BitArray combinedBitArray = new BitArray(bitArrayList[indexI]);
+      combinedBitArray.Or(bitArrayList[indexJ]);
+
+      // Check if the combination is same as input combinations or not
+      if (combinedBitArray.Equals(bitArrayList[indexI]) || combinedBitArray.Equals(bitArrayList[indexJ])) {
+        return false;
+      }
+      // Check if this combination has been already executed or not
+      if (currCombinations.Contains(ToBitString(combinedBitArray, true))) {
+        return false;
+      }
+      // Check if negate of an expression also exists in this expr combination or not.
+      List<int> enabledExprIndexes = new List<int>();
+      for (int i = 0; i < combinedBitArray.Count; i++) {
+        if (combinedBitArray[i]) {
+          enabledExprIndexes.Add(i);
+          if (negateOfExpressionIndex.ContainsKey(i)) {
+            var negateIndex = negateOfExpressionIndex[i];
+            if (combinedBitArray[negateIndex])
+              return false;
+          }
+        }
+      }
+      BitArray countBitArray = new BitArray(enabledExprIndexes.Count, false);
+      countBitArray[0] = true;
+      BitArray zeroBitArray = new BitArray(enabledExprIndexes.Count, false);
+      while (ToBitString(countBitArray, false) != ToBitString(zeroBitArray, false)) {
+        BitArray subsetBitArray = new BitArray(combinedBitArray.Count, false);
+        for (int i = 0; i < enabledExprIndexes.Count; i++) {
+          subsetBitArray[enabledExprIndexes[i]] = countBitArray[i];
+        }
+        string subsetString = ToBitString(subsetBitArray, true);
+        // Console.WriteLine($"{indexI} {indexJ} {subsetString}");
+        // Console.WriteLine($"{ToBitString(countBitArray)} {ToBitString(zeroBitArray)} {countBitArray.Equals(zeroBitArray)}");
+        if (bitArrayStringToIndex.ContainsKey(subsetString)) {
+          int index = bitArrayStringToIndex[subsetString];
+          if (!IsGoodResult(combinationResults[index]))
+            return false;
+        }
+        Increment(ref countBitArray);
+      }
+      return true;
+    }
 
     public bool Evaluate(Program program, string funcName, int depth) {
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
@@ -76,23 +189,15 @@ namespace Microsoft.Dafny {
               topLevelDecl.Attributes, topLevelDecl.SignatureEllipsis);
             // check equality of each pair of same type expressions
             var trueExpr = Expression.CreateBoolLiteral(topLevelDecl.Body.tok, true);
-            PrintExpr(program, topLevelDecl, trueExpr, cnt);
-            // using (var wr = new System.IO.StringWriter()) {
-            //   var pr = new Printer(wr);
-            //   pr.PrintProgram(program, true);
-            //   File.WriteAllTextAsync($"/tmp/{funcName}_base.dfy",
-            //     Printer.ToStringWithoutNewline(wr));
-            // }
+            availableExpressions.Add(trueExpr);
             foreach (var k in typeToExpressionDict.Keys) {
               var values = typeToExpressionDict[k];
               if (k == "_questionMark_") {
                 for (int i = 0; i < values.Count; i++) {
                   {
-                    cnt = cnt + 1;
-                    // No change to the type, print as is
+                    // No change to the type, add as is
                     var expr = values[i];
-                    PrintExpr(program, topLevelDecl, expr, cnt);
-                    topLevelDecl.Body = topLevelDeclCopy.Body;
+                    availableExpressions.Add(expr);
                   }
                 }
               } else {
@@ -103,60 +208,43 @@ namespace Microsoft.Dafny {
                     }
                     // Equality
                     {
-                      cnt = cnt + 1;
                       var equalityExpr = Expression.CreateEq(values[i], values[j], values[i].Type);
-                      var expr = equalityExpr;
-                      PrintExpr(program, topLevelDecl, expr, cnt);
-                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                      availableExpressions.Add(equalityExpr);
                     }
-
                     // Non-Equality
                     {
-                      cnt = cnt + 1;
                       var neqExpr = Expression.CreateNot(values[i].tok, Expression.CreateEq(values[i], values[j], values[i].Type));
-                      var expr = neqExpr;
-                      PrintExpr(program, topLevelDecl, expr, cnt);
-                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                      availableExpressions.Add(neqExpr);
+                      negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
+                      negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
                     }
-
                     if (k == "bool") {
                       continue;
                     }
 
                     // Lower than
                     {
-                      cnt = cnt + 1;
                       var lowerThanExpr = Expression.CreateLess(values[i], values[j]);
-                      var expr = lowerThanExpr;
-                      PrintExpr(program, topLevelDecl, expr, cnt);
-                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                      availableExpressions.Add(lowerThanExpr);
                     }
-
                     // Greater Equal = !(Lower than)
                     {
-                      cnt = cnt + 1;
                       var geExpr = Expression.CreateNot(values[i].tok, Expression.CreateLess(values[i], values[j]));
-                      var expr = geExpr;
-                      PrintExpr(program, topLevelDecl, expr, cnt);
-                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                      availableExpressions.Add(geExpr);
+                      negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
+                      negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
                     }
-
                     // Lower Equal
                     {
-                      cnt = cnt + 1;
                       var leExpr = Expression.CreateAtMost(values[i], values[j]);
-                      var expr = leExpr;
-                      PrintExpr(program, topLevelDecl, expr, cnt);
-                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                      availableExpressions.Add(leExpr);
                     }
-
                     // Greater Than = !(Lower equal)
                     {
-                      cnt = cnt + 1;
                       var gtExpr = Expression.CreateNot(values[i].tok, Expression.CreateAtMost(values[i], values[j]));
-                      var expr = gtExpr;
-                      PrintExpr(program, topLevelDecl, expr, cnt);
-                      topLevelDecl.Body = topLevelDeclCopy.Body;
+                      availableExpressions.Add(gtExpr);
+                      negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
+                      negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
                     }
                   }
                 }
@@ -169,107 +257,134 @@ namespace Microsoft.Dafny {
         Console.WriteLine($"{funcName} was not found!");
         return false;
       }
+      for (int i = 0; i < availableExpressions.Count; i++) {
+        PrintExprAndCreateProcess(program, desiredFunction, availableExpressions[i], i);
+        desiredFunction.Body = topLevelDeclCopy.Body;
+        BitArray bitArray = new BitArray(availableExpressions.Count, false);
+        bitArray[i] = true;
+        bitArrayList.Add(bitArray);
+        if (i == 0) {
+          currCombinations.Add(ToBitString(bitArray, false));
+          bitArrayStringToIndex[ToBitString(bitArray, false)] = i;
+        }
+        else {
+          currCombinations.Add(ToBitString(bitArray, true));
+          bitArrayStringToIndex[ToBitString(bitArray, true)] = i;
+        }
+        combinationResults[i] = Result.Unknown;
+      }
       dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
 
-      foreach (var p in dafnyMainExecutor.dafnyProcesses) {
-        var fileName = dafnyMainExecutor.inputFileName[p];
-        var position = dafnyMainExecutor.processToLemmaPosition[p];
-        var expectedOutput =
-          $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
-        var output = dafnyMainExecutor.dafnyOutput[p];
-        if (output.Count >= 5 && output[output.Count - 5] == expectedOutput &&
-            output[output.Count - 1].EndsWith("1 error")) {
-          // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
-          // Console.WriteLine(output);
-          Console.WriteLine(p.StartInfo.Arguments);
-          Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
-        }
+      for (int i = 0; i < availableExpressions.Count; i++) {
+        UpdateCombinationResult(i);
       }
+
+      // for (int i = 0; i < bitArrayList.Count; i++) {
+      //   var ba = bitArrayList[i];
+      //   Console.WriteLine("------------------------------");
+      //   Console.WriteLine(i + " : " +
+      //                     Printer.ExprToString(availableExpressions[i]) + " : " +
+      //                     combinationResults[i].ToString());
+      //   Console.WriteLine(ToBitString(ba));
+      //   Console.WriteLine("------------------------------");
+      // }
+
       // Until here, we only check depth 1 of expressions.
       // Now we try to check next depths
-      availableExprAtDepth = new List<List<Expression>>();
-      for (int i = 0; i <= depth; i++) {
-        availableExprAtDepth.Add(new List<Expression>());
-      }
-      foreach (var p in dafnyMainExecutor.dafnyProcesses) {
-        availableExprAtDepth[1].Add(dafnyMainExecutor.processToExpr[p]);
-      }
-      for (int i = 2; i <= depth; i++) {
-        foreach (var exprA in availableExprAtDepth[i - 1]) {
-          foreach (var exprB in availableExprAtDepth[1]) {
-            cnt = cnt + 1;
-            var conjunctExpr = Expression.CreateAnd(exprA, exprB);
-            availableExprAtDepth[i].Add(conjunctExpr);
-            PrintExpr(program, desiredFunction, conjunctExpr, cnt);
-            desiredFunction.Body = topLevelDeclCopy.Body;
+      int numberOfSingleExpr = availableExpressions.Count;
+      int prevDepthExprStartIndex = 0;
+      cnt = availableExpressions.Count;
+      for (int dd = 2; dd <= depth; dd++) {
+        var tmp = availableExpressions.Count;
+        for (int i = prevDepthExprStartIndex; i < tmp; i++) {
+          for (int j = 0; j < numberOfSingleExpr; j++) {
+            if (IsGoodExprCombinationToExecute(i, j)) {
+              var exprA = availableExpressions[i];
+              var exprB = availableExpressions[j];
+              var conjunctExpr = Expression.CreateAnd(exprA, exprB);
+              availableExpressions.Add(conjunctExpr);
+              BitArray bitArray = new BitArray(bitArrayList[i]);
+              bitArray.Or(bitArrayList[j]);
+              bitArrayList.Add(bitArray);
+              currCombinations.Add(ToBitString(bitArray, true));
+              bitArrayStringToIndex[ToBitString(bitArray, true)] = bitArrayList.Count - 1;
+              combinationResults[bitArrayList.Count - 1] = Result.Unknown;
+              PrintExprAndCreateProcess(program, desiredFunction, conjunctExpr, cnt);
+              cnt++;
+              desiredFunction.Body = topLevelDeclCopy.Body;
+            }
           }
         }
-      }
-      dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
-
-      foreach (var p in dafnyMainExecutor.dafnyProcesses) {
-        var fileName = dafnyMainExecutor.inputFileName[p];
-        var position = dafnyMainExecutor.processToLemmaPosition[p];
-        var expectedOutput =
-          $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
-        var output = dafnyMainExecutor.dafnyOutput[p];
-        if (output.Count >= 5 && output[output.Count - 5] == expectedOutput &&
-            output[output.Count - 1].EndsWith("1 error")) {
-          correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
-          // Console.WriteLine(output);
-          Console.WriteLine(p.StartInfo.Arguments);
-          Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
+        dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+        for (int i = tmp; i < availableExpressions.Count; i++) {
+          UpdateCombinationResult(i);
         }
+        prevDepthExprStartIndex = tmp;
       }
+      // for (int i = 0; i < bitArrayList.Count; i++) {
+      //   var ba = bitArrayList[i];
+      //   Console.WriteLine("------------------------------");
+      //   Console.WriteLine(i + " : " +
+      //                     Printer.ExprToString(availableExpressions[i]) + " : " +
+      //                     combinationResults[i].ToString());
+      //   Console.WriteLine(ToBitString(ba));
+      //   Console.WriteLine("------------------------------");
+      // }
+      // return true;
 
-      if (correctExpressions.Count == 0) {
-        Console.WriteLine("Couldn't find any correct answer. Printing 0 error ones");
-        foreach (var p in dafnyMainExecutor.dafnyProcesses) {
-          var output = dafnyMainExecutor.dafnyOutput[p];
-          if (output[0].EndsWith("0 errors")) {
-            // Console.WriteLine(output);
-            Console.WriteLine(p.StartInfo.Arguments);
-            Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
-          }
-        }
-        return false;
-      }
+      // int correctExpressionCount = combinationResults.Count(elem => elem.Value == Result.CorrectProof);
+      // if (correctExpressionCount == 0) {
+      //   Console.WriteLine("Couldn't find any correct answer. Printing 0 error ones");
+      //   for (int i = 0; i < availableExpressions.Count; i++) {
+      //     if (combinationResults[i] == Result.InvalidExpr) {
+      //       var p = dafnyMainExecutor.dafnyProcesses[i];
+      //       Console.WriteLine(p.StartInfo.Arguments);
+      //       Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
+      //     }
+      //   }
+      //   return false;
+      // }
       // The 0th process represents no change to the predicate, and
       // if that is a correct predicate, it means the proof already 
       // goes through and no additional conjunction is needed.
-      if (correctExpressions[0] == dafnyMainExecutor.processToExpr[dafnyMainExecutor.dafnyProcesses[0]]) {
+      if (combinationResults[0] == Result.CorrectProof) {
         Console.WriteLine("proof already goes through and no additional conjunction is needed!");
         return true;
       }
-      for (int i = 0; i < correctExpressions.Count; i++) {
-        Console.WriteLine($"correct Expr #{i,3}: {Printer.ExprToString(correctExpressions[i])}");
+      List<int> correctExpressionsIndex = new List<int>();
+      for (int i = 0; i < availableExpressions.Count; i++) {
+        if (combinationResults[i] == Result.CorrectProof)
+          correctExpressionsIndex.Add(i);
       }
-      for (int i = 0; i < correctExpressions.Count; i++) {
-        for (int j = i + 1; j < correctExpressions.Count; j++) {
+      for (int i = 0; i < correctExpressionsIndex.Count; i++) {
+        Console.WriteLine($"correct Expr #{correctExpressionsIndex[i],3}: {Printer.ExprToString(availableExpressions[correctExpressionsIndex[i]])}");
+      }
+      for (int i = 0; i < correctExpressionsIndex.Count; i++) {
+        for (int j = i + 1; j < correctExpressionsIndex.Count; j++) {
           {
-            PrintImplies(program, desiredFunction, i, j);
-            PrintImplies(program, desiredFunction, j, i);
+            PrintImplies(program, desiredFunction, correctExpressionsIndex[i], correctExpressionsIndex[j]);
+            PrintImplies(program, desiredFunction, correctExpressionsIndex[j], correctExpressionsIndex[i]);
           }
         }
       }
       dafnyImpliesExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
       string graphVizOutput = $"digraph {funcName}_implies_graph {{\n";
       graphVizOutput += "  // The list of correct expressions\n";
-      for (int i = 0; i < correctExpressions.Count; i++) {
-        graphVizOutput += $"  {i} [label=\"{Printer.ExprToString(correctExpressions[i])}\"];\n";
+      for (int i = 0; i < correctExpressionsIndex.Count; i++) {
+        graphVizOutput += $"  {correctExpressionsIndex[i]} [label=\"{Printer.ExprToString(availableExpressions[correctExpressionsIndex[i]])}\"];\n";
       }
       graphVizOutput += "\n  // The list of edges:\n";
       foreach (var p in dafnyImpliesExecutor.dafnyProcesses) {
-        var corrExprAIndex = dafnyImpliesExecutor.processToCorrExprAIndex[p];
-        var corrExprBIndex = dafnyImpliesExecutor.processToCorrExprBIndex[p];
+        var availableExprAIndex = dafnyImpliesExecutor.processToAvailableExprAIndex[p];
+        var availableExprBIndex = dafnyImpliesExecutor.processToAvailableExprBIndex[p];
         // skip connecting all nodes to true
-        if (Printer.ExprToString(correctExpressions[corrExprAIndex]) == "true" ||
-            Printer.ExprToString(correctExpressions[corrExprBIndex]) == "true")
-            continue;
+        if (Printer.ExprToString(availableExpressions[availableExprAIndex]) == "true" ||
+            Printer.ExprToString(availableExpressions[availableExprBIndex]) == "true")
+          continue;
         var output = dafnyImpliesExecutor.dafnyOutput[p];
         if (output[output.Count - 1].EndsWith("0 errors")) {
-          Console.WriteLine($"edge from {corrExprAIndex} to {corrExprBIndex}");
-          graphVizOutput += $"  {corrExprAIndex} -> {corrExprBIndex};\n";
+          Console.WriteLine($"edge from {availableExprAIndex} to {availableExprBIndex}");
+          graphVizOutput += $"  {availableExprAIndex} -> {availableExprBIndex};\n";
         }
       }
       graphVizOutput += "}\n";
@@ -277,8 +392,8 @@ namespace Microsoft.Dafny {
       return true;
     }
 
-    public void PrintImplies(Program program, Function func, int corrExprAIndex, int corrExprBIndex) {
-      Console.WriteLine($"print implies {corrExprAIndex} {corrExprBIndex}");
+    public void PrintImplies(Program program, Function func, int availableExprAIndex, int availableExprBIndex) {
+      Console.WriteLine($"print implies {availableExprAIndex} {availableExprBIndex}");
       var funcName = func.FullDafnyName;
       string parameterNameTypes = "";
       foreach (var param in func.Formals) {
@@ -287,8 +402,8 @@ namespace Microsoft.Dafny {
       parameterNameTypes = parameterNameTypes.Remove(parameterNameTypes.Length - 2, 2);
       string lemmaForCheckingImpliesString = "lemma checkIfExprAImpliesExprB(";
       lemmaForCheckingImpliesString += parameterNameTypes + ")\n";
-      Expression A = correctExpressions[corrExprAIndex];
-      Expression B = correctExpressions[corrExprBIndex];
+      Expression A = availableExpressions[availableExprAIndex];
+      Expression B = availableExpressions[availableExprBIndex];
       lemmaForCheckingImpliesString += "  requires " + Printer.ExprToString(A) + "\n";
       lemmaForCheckingImpliesString += "  ensures " + Printer.ExprToString(B) + "\n";
       lemmaForCheckingImpliesString += "{}";
@@ -301,7 +416,7 @@ namespace Microsoft.Dafny {
         var code = $"// Implies {Printer.ExprToString(A)} ==> {Printer.ExprToString(B)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
         lemmaForCheckingImpliesPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForCheckingImpliesString + "\n";
-        File.WriteAllTextAsync($"/tmp/{funcName}_implies_{corrExprAIndex}_{corrExprBIndex}.dfy", code);
+        File.WriteAllTextAsync($"/tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy", code);
       }
 
       string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
@@ -315,12 +430,12 @@ namespace Microsoft.Dafny {
         }
       }
       dafnyImpliesExecutor.createProcessWithOutput(dafnyBinaryPath,
-        $"{args} /tmp/{funcName}_implies_{corrExprAIndex}_{corrExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
-        corrExprAIndex, corrExprBIndex, lemmaForCheckingImpliesPosition,
-        $"{funcName}_implies_{corrExprAIndex}_{corrExprBIndex}.dfy");
+        $"{args} /tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
+        availableExprAIndex, availableExprBIndex, lemmaForCheckingImpliesPosition,
+        $"{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy");
     }
 
-    public void PrintExpr(Program program, Function func, Expression expr, int cnt) {
+    public void PrintExprAndCreateProcess(Program program, Function func, Expression expr, int cnt) {
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
 
       var funcName = func.FullDafnyName;

@@ -24,8 +24,8 @@ namespace Microsoft.Dafny {
     private List<Process> readyProcesses = new List<Process>();
     public Dictionary<Process, Expression> processToExpr = new Dictionary<Process, Expression>();
     public Dictionary<Process, int> processToCnt = new Dictionary<Process, int>();
-    public Dictionary<Process, int> processToCorrExprAIndex = new Dictionary<Process, int>();
-    public Dictionary<Process, int> processToCorrExprBIndex = new Dictionary<Process, int>();
+    public Dictionary<Process, int> processToAvailableExprAIndex = new Dictionary<Process, int>();
+    public Dictionary<Process, int> processToAvailableExprBIndex = new Dictionary<Process, int>();
     public Dictionary<Process, int> processToLemmaPosition = new Dictionary<Process, int>();
 
     public void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
@@ -65,7 +65,7 @@ namespace Microsoft.Dafny {
     }
 
     public void createProcessWithOutput(string command, string args,
-        int corrExprAIndex, int corrExprBIndex, int lemmaPos, string inputFile) {
+        int availableExprAIndex, int availableExprBIndex, int lemmaPos, string inputFile) {
       Process p = new Process();
       p.StartInfo = new ProcessStartInfo(command, args);
       p.StartInfo.RedirectStandardOutput = true;
@@ -77,8 +77,8 @@ namespace Microsoft.Dafny {
       // p.BeginOutputReadLine();
       readyProcesses.Add(p);
       dafnyProcesses.Add(p);
-      processToCorrExprAIndex[p] = corrExprAIndex;
-      processToCorrExprBIndex[p] = corrExprBIndex;
+      processToAvailableExprAIndex[p] = availableExprAIndex;
+      processToAvailableExprBIndex[p] = availableExprBIndex;
       processToLemmaPosition[p] = lemmaPos;
       inputFileName[p] = inputFile;
       dafnyOutput[p] = new List<string>();
