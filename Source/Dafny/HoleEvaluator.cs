@@ -137,6 +137,104 @@ namespace Microsoft.Dafny {
       return true;
     }
 
+    public class Graph<T> {
+      public Graph() { }
+      public Graph(IEnumerable<T> vertices, IEnumerable<Tuple<T, T>> edges) {
+        foreach (var vertex in vertices)
+          AddVertex(vertex);
+
+        foreach (var edge in edges)
+          AddEdge(edge);
+      }
+
+      public Dictionary<T, HashSet<T>> AdjacencyList { get; } = new Dictionary<T, HashSet<T>>();
+
+      public void AddVertex(T vertex) {
+        AdjacencyList[vertex] = new HashSet<T>();
+      }
+
+      public void AddEdge(Tuple<T, T> edge) {
+        if (AdjacencyList.ContainsKey(edge.Item1) && AdjacencyList.ContainsKey(edge.Item2)) {
+          AdjacencyList[edge.Item1].Add(edge.Item2);
+          AdjacencyList[edge.Item2].Add(edge.Item1);
+        }
+      }
+    }
+
+    public HashSet<T> DFS<T>(Graph<T> graph, T start) {
+      var visited = new HashSet<T>();
+
+      if (!graph.AdjacencyList.ContainsKey(start))
+        return visited;
+
+      var stack = new Stack<T>();
+      stack.Push(start);
+
+      while (stack.Count > 0) {
+        var vertex = stack.Pop();
+
+        if (visited.Contains(vertex))
+          continue;
+
+        visited.Add(vertex);
+
+        foreach (var neighbor in graph.AdjacencyList[vertex])
+          if (!visited.Contains(neighbor))
+            stack.Push(neighbor);
+      }
+
+      return visited;
+    }
+    
+    public Dictionary<string, List<string>> GetEqualExpressionList(Expression expr) {
+      // The first element of each value's list in the result is the type of list
+      Dictionary<string, List<string>> result = new Dictionary<string, List<string>>();
+      Graph<string> G = new Graph<string>();
+      foreach (var e in Expression.Conjuncts(expr)) {
+        if (e is BinaryExpr && (e as BinaryExpr).ResolvedOp == BinaryExpr.ResolvedOpcode.EqCommon) {
+          var be = e as BinaryExpr;
+          var e0 = Printer.ExprToString(be.E0);
+          var e1 = Printer.ExprToString(be.E1);
+          if (e0 == e1) {
+            continue;
+          }
+          if (!G.AdjacencyList.ContainsKey(e0)) {
+            G.AddVertex(e0);
+          }
+          if (!G.AdjacencyList.ContainsKey(e1)) {
+            G.AddVertex(e1);
+          }
+          G.AddEdge(new Tuple<string, string>(e0, e1));
+        }
+      }
+      HashSet<string> visited = new HashSet<string>();
+      foreach (var e in Expression.Conjuncts(expr)) {
+        if (e is BinaryExpr && (e as BinaryExpr).ResolvedOp == BinaryExpr.ResolvedOpcode.EqCommon) {
+          var be = e as BinaryExpr;
+          var e0 = Printer.ExprToString(be.E0);
+          var e1 = Printer.ExprToString(be.E1);
+          if (e0 == e1) {
+            continue;
+          }
+          if (visited.Contains(e0) || visited.Contains(e1)) {
+            Debug.Assert(visited.Contains(e0));
+            Debug.Assert(visited.Contains(e1));
+            continue;
+          }
+          HashSet<string> newVisits = DFS<string>(G, e0);
+          visited.UnionWith(newVisits);
+          result[e0] = new List<string>();
+          // The first element of each value's list in the result is the type of list
+          result[e0].Add(be.E0.Type.ToString());
+          newVisits.Remove(e0);
+          foreach (string s in newVisits) {
+            result[e0].Add(s);
+          }
+        }
+      }
+      return result;
+    }
+
     public bool Evaluate(Program program, string funcName, int depth) {
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
       var foundDesiredFunction = false;
@@ -175,6 +273,28 @@ namespace Microsoft.Dafny {
               // AddExpression(program, topLevelDecl, expr);
             }
             Console.WriteLine("");
+            foreach (var k in typeToExpressionDict.Keys) {
+              foreach (var v in typeToExpressionDict[k]) {
+                Console.WriteLine($"{Printer.ExprToString(v),-20} {k}");
+              }
+            }
+            Console.WriteLine("--------------------------------");
+            Dictionary<string, List<string>> equalExprList = GetEqualExpressionList(topLevelDecl.Body);
+            foreach (var k in equalExprList.Keys) {
+              var t = equalExprList[k][0];
+              for (int i = 1; i < equalExprList[k].Count; i++) {
+                Console.WriteLine(t + " -> " + k + " = " + equalExprList[k][i]);
+              }
+              for (int i = 1; i < equalExprList[k].Count; i++) {
+                for (int j = 0; j < typeToExpressionDict[t].Count; j++) {
+                  if (Printer.ExprToString(typeToExpressionDict[t][j]) == equalExprList[k][i]) {
+                    typeToExpressionDict[t].RemoveAt(j);
+                    break;
+                  }
+                }
+              }
+            }
+            Console.WriteLine("--------------------------------");
             foreach (var k in typeToExpressionDict.Keys) {
               foreach (var v in typeToExpressionDict[k]) {
                 Console.WriteLine($"{Printer.ExprToString(v),-20} {k}");
@@ -266,8 +386,7 @@ namespace Microsoft.Dafny {
         if (i == 0) {
           currCombinations.Add(ToBitString(bitArray, false));
           bitArrayStringToIndex[ToBitString(bitArray, false)] = i;
-        }
-        else {
+        } else {
           currCombinations.Add(ToBitString(bitArray, true));
           bitArrayStringToIndex[ToBitString(bitArray, true)] = i;
         }
