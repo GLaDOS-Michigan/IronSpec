@@ -28,7 +28,7 @@ namespace Microsoft.Dafny {
     public Dictionary<Process, int> processToAvailableExprBIndex = new Dictionary<Process, int>();
     public Dictionary<Process, int> processToLemmaPosition = new Dictionary<Process, int>();
 
-    public void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
+    public void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(bool isMainExecution) {
       Parallel.For(0, readyProcesses.Count,
         new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount - 1 },
         i => {
@@ -38,6 +38,33 @@ namespace Microsoft.Dafny {
           readyProcesses[i].Start();
           readyProcesses[i].BeginOutputReadLine();
           readyProcesses[i].WaitForExit();
+          readyProcesses[i].Close();
+          var output = dafnyOutput[readyProcesses[i]];
+          if (isMainExecution && (!output[output.Count - 1].EndsWith("0 errors")) &&
+              (!output[output.Count - 1].EndsWith($"resolution/type errors detected in {inputFileName[readyProcesses[i]]}.dfy"))) {
+            var args = readyProcesses[i].StartInfo.Arguments.Split(' ');
+            args = args.SkipLast(1).ToArray();
+            Process p = new Process();
+            p.StartInfo = new ProcessStartInfo(readyProcesses[i].StartInfo.FileName, String.Join(' ', args));
+            p.StartInfo.RedirectStandardOutput = true;
+            p.StartInfo.RedirectStandardError = false;
+            p.StartInfo.UseShellExecute = false;
+            p.StartInfo.CreateNoWindow = true;
+            p.OutputDataReceived += new DataReceivedEventHandler(DafnyOutputHandler);
+            processToExpr[p] = processToExpr[readyProcesses[i]];
+            processToCnt[p] = processToCnt[readyProcesses[i]];
+            processToLemmaPosition[p] = processToLemmaPosition[readyProcesses[i]];
+            dafnyOutput[p] = new List<string>();
+            inputFileName[p] = inputFileName[readyProcesses[i]];
+            readyProcesses[i] = p;
+            dafnyProcesses[i] = p;
+            readyProcesses[i].Start();
+            readyProcesses[i].BeginOutputReadLine();
+            readyProcesses[i].WaitForExit();
+            // Console.WriteLine($"new output {String.Join(" - ", dafnyOutput[readyProcesses[i]])}");
+          }
+          Debug.Assert(inputFileName.ContainsKey(readyProcesses[i]), $"{i}");
+          Debug.Assert(dafnyOutput.ContainsKey(readyProcesses[i]), $"{i}");
           File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}.txt",
             String.Join('\n', dafnyOutput[readyProcesses[i]]) + "\n");
         });

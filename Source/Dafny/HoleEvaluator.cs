@@ -59,6 +59,7 @@ namespace Microsoft.Dafny {
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
       var output = dafnyMainExecutor.dafnyOutput[p];
+      // Console.WriteLine($"{index} => {String.Join(" --- ", output)}");
       if (output.Count >= 5 && output[output.Count - 5] == expectedOutput &&
           output[output.Count - 1].EndsWith("1 error")) {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
@@ -185,7 +186,7 @@ namespace Microsoft.Dafny {
 
       return visited;
     }
-    
+
     public Dictionary<string, List<string>> GetEqualExpressionList(Expression expr) {
       // The first element of each value's list in the result is the type of list
       Dictionary<string, List<string>> result = new Dictionary<string, List<string>>();
@@ -392,7 +393,7 @@ namespace Microsoft.Dafny {
         }
         combinationResults[i] = Result.Unknown;
       }
-      dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(true);
 
       for (int i = 0; i < availableExpressions.Count; i++) {
         UpdateCombinationResult(i);
@@ -434,7 +435,7 @@ namespace Microsoft.Dafny {
             }
           }
         }
-        dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+        dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(true);
         for (int i = tmp; i < availableExpressions.Count; i++) {
           UpdateCombinationResult(i);
         }
@@ -486,7 +487,7 @@ namespace Microsoft.Dafny {
           }
         }
       }
-      dafnyImpliesExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      dafnyImpliesExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(false);
       string graphVizOutput = $"digraph {funcName}_implies_graph {{\n";
       graphVizOutput += "  // The list of correct expressions\n";
       for (int i = 0; i < correctExpressionsIndex.Count; i++) {
@@ -595,8 +596,8 @@ namespace Microsoft.Dafny {
         }
       }
       dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
-          $"{args} /tmp/{funcName}_{cnt}.dfy", expr, cnt, lemmaForExprValidityPosition,
-          $"{funcName}_{cnt}");
+          $"{args} /tmp/{funcName}_{cnt}.dfy /proc:*checkReachableStatesNotBeFalse*",
+          expr, cnt, lemmaForExprValidityPosition, $"{funcName}_{cnt}");
       // Printer.PrintFunction(transformedFunction, 0, false);
     }
 
