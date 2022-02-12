@@ -58,8 +58,10 @@ namespace Microsoft.Dafny {
       var position = dafnyMainExecutor.processToLemmaPosition[p];
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
-      var output = p.StandardOutput.ReadToEnd();
-      // Console.WriteLine($"{index} => {output}");
+      var output = dafnyMainExecutor.dafnyOutput[p];
+      Console.WriteLine($"{index} => {output}");
+      Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
+      Console.WriteLine($"----------------------------------------------------------------");
       if (DafnyExecutor.IsCorrectOutput(output, expectedOutput)) {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
         // Console.WriteLine(output);
@@ -399,15 +401,15 @@ namespace Microsoft.Dafny {
         UpdateCombinationResult(i);
       }
 
-      // for (int i = 0; i < bitArrayList.Count; i++) {
-      //   var ba = bitArrayList[i];
-      //   Console.WriteLine("------------------------------");
-      //   Console.WriteLine(i + " : " +
-      //                     Printer.ExprToString(availableExpressions[i]) + " : " +
-      //                     combinationResults[i].ToString());
-      //   Console.WriteLine(ToBitString(ba));
-      //   Console.WriteLine("------------------------------");
-      // }
+      for (int i = 0; i < bitArrayList.Count; i++) {
+        // var ba = bitArrayList[i];
+        // Console.WriteLine("------------------------------");
+        Console.WriteLine(i + " : " +
+                          Printer.ExprToString(availableExpressions[i]) + " : " +
+                          combinationResults[i].ToString());
+        // Console.WriteLine(ToBitString(ba, false));
+        // Console.WriteLine("------------------------------");
+      }
 
       // Until here, we only check depth 1 of expressions.
       // Now we try to check next depths
@@ -503,7 +505,7 @@ namespace Microsoft.Dafny {
         if (Printer.ExprToString(availableExpressions[availableExprAIndex]) == "true" ||
             Printer.ExprToString(availableExpressions[availableExprBIndex]) == "true")
           continue;
-        var output = p.StandardOutput.ReadToEnd();
+        var output = dafnyImpliesExecutor.dafnyOutput[p];
         if (output.EndsWith("0 errors")) {
           Console.WriteLine($"edge from {availableExprAIndex} to {availableExprBIndex}");
           graphVizOutput += $"  {availableExprAIndex} -> {availableExprBIndex};\n";
