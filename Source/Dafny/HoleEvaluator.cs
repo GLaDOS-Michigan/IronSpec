@@ -59,7 +59,7 @@ namespace Microsoft.Dafny {
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
       var output = dafnyMainExecutor.dafnyOutput[p];
-      // Console.WriteLine($"{index} => {String.Join(" --- ", output)}");
+      Console.WriteLine($"{index} => {String.Join(" --- ", output)}");
       if (output.Count >= 5 && output[output.Count - 5] == expectedOutput &&
           output[output.Count - 1].EndsWith("1 error")) {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
@@ -237,6 +237,7 @@ namespace Microsoft.Dafny {
     }
 
     public bool Evaluate(Program program, string funcName, int depth) {
+      dafnyMainExecutor.sw = Stopwatch.StartNew();
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
       var foundDesiredFunction = false;
       Function desiredFunction = null;
