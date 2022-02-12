@@ -19,6 +19,7 @@ namespace Microsoft.Dafny {
 
   public class DafnyExecutor {
     public Stopwatch sw;
+    public Dictionary<Process, string> dafnyOutput = new Dictionary<Process, string>();
     public Dictionary<Process, string> inputFileName = new Dictionary<Process, string>();
     public List<Process> dafnyProcesses = new List<Process>();
     private List<Process> readyProcesses = new List<Process>();
@@ -99,12 +100,14 @@ namespace Microsoft.Dafny {
             if (IsCorrectOutput(output, expectedOutput)) {
               Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{i}: {Printer.ExprToString(processToExpr[p])}");
             }
+            dafnyOutput[readyProcesses[i]] = output;
             File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}.txt",
               output + "\n");
             // Console.WriteLine($"new output {String.Join(" - ", dafnyOutput[readyProcesses[i]])}");
           } else {
             // Debug.Assert(inputFileName.ContainsKey(readyProcesses[i]), $"{i}");
             // Debug.Assert(dafnyOutput.ContainsKey(readyProcesses[i]), $"{i}");
+            dafnyOutput[readyProcesses[i]] = firstOutput;
             File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}.txt",
               firstOutput + "\n");
           }
@@ -128,7 +131,7 @@ namespace Microsoft.Dafny {
       processToExpr[p] = expr;
       processToCnt[p] = cnt;
       processToLemmaPosition[p] = lemmaPos;
-      // dafnyOutput[p] = new List<string>();
+      dafnyOutput[p] = "";
       inputFileName[p] = inputFile;
     }
 
@@ -149,7 +152,7 @@ namespace Microsoft.Dafny {
       processToAvailableExprBIndex[p] = availableExprBIndex;
       processToLemmaPosition[p] = lemmaPos;
       inputFileName[p] = inputFile;
-      // dafnyOutput[p] = new List<string>();
+      dafnyOutput[p] = "";
     }
 
     // private void DafnyOutputHandler(object sendingProcess,
