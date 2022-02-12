@@ -58,18 +58,17 @@ namespace Microsoft.Dafny {
       var position = dafnyMainExecutor.processToLemmaPosition[p];
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
-      var output = dafnyMainExecutor.dafnyOutput[p];
-      Console.WriteLine($"{index} => {String.Join(" --- ", output)}");
-      if (output.Count >= 5 && output[output.Count - 5] == expectedOutput &&
-          output[output.Count - 1].EndsWith("1 error")) {
+      var output = dafnyMainExecutor.dafnyOutput[index];
+      // Console.WriteLine($"{index} => {output}");
+      if (DafnyExecutor.IsCorrectOutput(output, expectedOutput)) {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
         // Console.WriteLine(output);
         combinationResults[index] = Result.CorrectProof;
         Console.WriteLine(p.StartInfo.Arguments);
         Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
-      } else if (output[output.Count - 1].EndsWith("0 errors")) {
+      } else if (output.EndsWith("0 errors\n")) {
         combinationResults[index] = Result.FalsePredicate;
-      } else if (output[output.Count - 1].EndsWith($"resolution/type errors detected in {fileName}.dfy")) {
+      } else if (output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")) {
         combinationResults[index] = Result.InvalidExpr;
       } else {
         combinationResults[index] = Result.IncorrectProof;
@@ -502,8 +501,8 @@ namespace Microsoft.Dafny {
         if (Printer.ExprToString(availableExpressions[availableExprAIndex]) == "true" ||
             Printer.ExprToString(availableExpressions[availableExprBIndex]) == "true")
           continue;
-        var output = dafnyImpliesExecutor.dafnyOutput[p];
-        if (output[output.Count - 1].EndsWith("0 errors")) {
+        var output = p.StandardOutput.ReadToEnd();
+        if (output.EndsWith("0 errors")) {
           Console.WriteLine($"edge from {availableExprAIndex} to {availableExprBIndex}");
           graphVizOutput += $"  {availableExprAIndex} -> {availableExprBIndex};\n";
         }
