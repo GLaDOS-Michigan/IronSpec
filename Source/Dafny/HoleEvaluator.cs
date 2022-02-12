@@ -59,9 +59,9 @@ namespace Microsoft.Dafny {
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
       var output = dafnyMainExecutor.dafnyOutput[p];
-      Console.WriteLine($"{index} => {output}");
-      Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
-      Console.WriteLine($"----------------------------------------------------------------");
+      // Console.WriteLine($"{index} => {output}");
+      // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
+      // Console.WriteLine($"----------------------------------------------------------------");
       if (DafnyExecutor.IsCorrectOutput(output, expectedOutput)) {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
         // Console.WriteLine(output);
@@ -479,9 +479,9 @@ namespace Microsoft.Dafny {
         if (combinationResults[i] == Result.CorrectProof)
           correctExpressionsIndex.Add(i);
       }
-      for (int i = 0; i < correctExpressionsIndex.Count; i++) {
-        Console.WriteLine($"correct Expr #{correctExpressionsIndex[i],3}: {Printer.ExprToString(availableExpressions[correctExpressionsIndex[i]])}");
-      }
+      // for (int i = 0; i < correctExpressionsIndex.Count; i++) {
+      //   Console.WriteLine($"correct Expr #{correctExpressionsIndex[i],3}: {Printer.ExprToString(availableExpressions[correctExpressionsIndex[i]])}");
+      // }
       for (int i = 0; i < correctExpressionsIndex.Count; i++) {
         for (int j = i + 1; j < correctExpressionsIndex.Count; j++) {
           {
