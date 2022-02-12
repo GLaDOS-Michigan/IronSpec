@@ -19,7 +19,6 @@ namespace Microsoft.Dafny {
 
   public class DafnyExecutor {
     public Stopwatch sw;
-    public List<string> dafnyOutput = new List<string>();
     public Dictionary<Process, string> inputFileName = new Dictionary<Process, string>();
     public List<Process> dafnyProcesses = new List<Process>();
     private List<Process> readyProcesses = new List<Process>();
@@ -38,19 +37,19 @@ namespace Microsoft.Dafny {
       }
     }
 
-    private void ResizeDafnyOutputList(int size) {
-      int count = dafnyOutput.Count;
-      if (size < count) {
-        return;
-      }
-      if (size > dafnyOutput.Capacity)   // Optimization
-        dafnyOutput.Capacity = size;
+    // private void ResizeDafnyOutputList(int size) {
+    //   int count = dafnyOutput.Count;
+    //   if (size < count) {
+    //     return;
+    //   }
+    //   if (size > dafnyOutput.Capacity)   // Optimization
+    //     dafnyOutput.Capacity = size;
 
-      dafnyOutput.AddRange(Enumerable.Repeat("", size - count));
-    }
+    //   dafnyOutput.AddRange(Enumerable.Repeat("", size - count));
+    // }
 
     public void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(bool isMainExecution) {
-      ResizeDafnyOutputList(readyProcesses.Count);
+      // ResizeDafnyOutputList(readyProcesses.Count);
       Parallel.For(0, readyProcesses.Count,
         new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount - 1 },
         i => {
@@ -61,11 +60,10 @@ namespace Microsoft.Dafny {
           // readyProcesses[i].BeginOutputReadLine();
           readyProcesses[i].WaitForExit();
           var firstOutput = readyProcesses[i].StandardOutput.ReadToEnd();
-          dafnyOutput[i] = firstOutput;
-          if (isMainExecution)
-            readyProcesses[i].Close();
+          // dafnyOutput[i] = firstOutput;
           if (isMainExecution && (!firstOutput.EndsWith("0 errors\n")) &&
               (!firstOutput.EndsWith($"resolution/type errors detected in {inputFileName[readyProcesses[i]]}.dfy\n"))) {
+            readyProcesses[i].Close();
             var args = readyProcesses[i].StartInfo.Arguments.Split(' ');
             args = args.SkipLast(1).ToArray();
             var p = readyProcesses[i];
@@ -94,7 +92,7 @@ namespace Microsoft.Dafny {
             // p.BeginOutputReadLine();
             p.WaitForExit();
             var output = p.StandardOutput.ReadToEnd();
-            dafnyOutput[i] = output;
+            // dafnyOutput[i] = output;
             var expectedOutput =
               $"/tmp/{inputFileName[p]}.dfy({processToLemmaPosition[p] + 3},0): Error: A postcondition might not hold on this return path.";
             // Console.WriteLine($"finish {i} => {dafnyProcesses[i].StartInfo.Arguments} -- {output}\n{expectedOutput}");

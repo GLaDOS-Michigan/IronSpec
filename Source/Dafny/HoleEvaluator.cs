@@ -58,7 +58,7 @@ namespace Microsoft.Dafny {
       var position = dafnyMainExecutor.processToLemmaPosition[p];
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
-      var output = dafnyMainExecutor.dafnyOutput[index];
+      var output = p.StandardOutput.ReadToEnd();
       // Console.WriteLine($"{index} => {output}");
       if (DafnyExecutor.IsCorrectOutput(output, expectedOutput)) {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
@@ -441,6 +441,7 @@ namespace Microsoft.Dafny {
         }
         prevDepthExprStartIndex = tmp;
       }
+      Console.WriteLine($"{dafnyMainExecutor.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   var ba = bitArrayList[i];
       //   Console.WriteLine("------------------------------");
@@ -488,6 +489,7 @@ namespace Microsoft.Dafny {
         }
       }
       dafnyImpliesExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(false);
+      Console.WriteLine($"{dafnyMainExecutor.sw.ElapsedMilliseconds / 1000}:: finish calculating implies, printing the dot graph");
       string graphVizOutput = $"digraph {funcName}_implies_graph {{\n";
       graphVizOutput += "  // The list of correct expressions\n";
       for (int i = 0; i < correctExpressionsIndex.Count; i++) {
@@ -509,6 +511,7 @@ namespace Microsoft.Dafny {
       }
       graphVizOutput += "}\n";
       File.WriteAllTextAsync($"/tmp/graph_{funcName}_implies.dot", graphVizOutput);
+      Console.WriteLine($"{dafnyMainExecutor.sw.ElapsedMilliseconds / 1000}:: end");
       return true;
     }
 
