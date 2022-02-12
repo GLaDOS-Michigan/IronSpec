@@ -98,7 +98,7 @@ namespace Microsoft.Dafny {
               $"/tmp/{inputFileName[p]}.dfy({processToLemmaPosition[p] + 3},0): Error: A postcondition might not hold on this return path.";
             // Console.WriteLine($"finish {i} => {dafnyProcesses[i].StartInfo.Arguments} -- {output}\n{expectedOutput}");
             if (IsCorrectOutput(output, expectedOutput)) {
-              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{i}: {Printer.ExprToString(processToExpr[p])}");
+              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
             }
             dafnyOutput[readyProcesses[i]] = output;
             File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}.txt",
