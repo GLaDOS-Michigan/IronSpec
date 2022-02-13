@@ -20,6 +20,14 @@ using System.Threading.Tasks;
 namespace Microsoft.Dafny {
 
   public class HoleEvaluator {
+    private string UnderscoreStr = "";
+    private static Random random = new Random();
+
+    public static string RandomString(int length) {
+      const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      return new string(Enumerable.Repeat(chars, length)
+          .Select(s => s[random.Next(s.Length)]).ToArray());
+    }
     private List<Expression> availableExpressions = new List<Expression>();
     private List<BitArray> bitArrayList = new List<BitArray>();
     enum Result {
@@ -238,6 +246,7 @@ namespace Microsoft.Dafny {
     }
 
     public bool Evaluate(Program program, string funcName, int depth) {
+      UnderscoreStr = RandomString(8);
       dafnyMainExecutor.sw = Stopwatch.StartNew();
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
       var foundDesiredFunction = false;
@@ -537,6 +546,7 @@ namespace Microsoft.Dafny {
 
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr);
+        pr.UniqueStringBeforeUnderscore = UnderscoreStr;
         pr.PrintProgram(program, true);
         var code = $"// Implies {Printer.ExprToString(A)} ==> {Printer.ExprToString(B)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
         lemmaForCheckingImpliesPosition = code.Count(f => f == '\n') + 1;
@@ -550,7 +560,7 @@ namespace Microsoft.Dafny {
       var argList = env.Split(' ');
       string args = "";
       foreach (var arg in argList) {
-        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval:")) {
+        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && !arg.StartsWith("/proc:")) {
           args += arg + " ";
         }
       }
@@ -581,6 +591,7 @@ namespace Microsoft.Dafny {
 
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr);
+        pr.UniqueStringBeforeUnderscore = UnderscoreStr;
         func.Body = Expression.CreateAnd(func.Body, expr);
         pr.PrintProgram(program, true);
         var code = $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";

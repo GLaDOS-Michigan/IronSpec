@@ -21,6 +21,7 @@ namespace Microsoft.Dafny {
     bool afterResolver;
     bool printingExportSet = false;
     bool printingDesugared = false;
+    public string UniqueStringBeforeUnderscore = "";
 
     [ContractInvariantMethod]
     void ObjectInvariant() {
@@ -1993,7 +1994,12 @@ namespace Microsoft.Dafny {
       if (mc.Arguments.Count != 0) {
         string sep = "(";
         foreach (BoundVar bv in mc.Arguments) {
-          wr.Write("{0}{1}", sep, bv.DisplayName);
+          var displayName = bv.DisplayName;
+          if (displayName.StartsWith("_")) {
+            wr.Write("{0}{1}", sep, UniqueStringBeforeUnderscore + bv.DisplayName);
+          } else {
+            wr.Write("{0}{1}", sep, bv.DisplayName);
+          }
           string typeName = bv.Type.TypeName(null, true);
           if (bv.Type is NonProxyType && !typeName.StartsWith("_")) {
             wr.Write(": {0}", typeName);
@@ -2086,7 +2092,12 @@ namespace Microsoft.Dafny {
         wr.Write("this");
 
       } else if (expr is IdentifierExpr) {
-        wr.Write(((IdentifierExpr)expr).Name);
+        var displayName = ((IdentifierExpr)expr).Name;
+        if (displayName.StartsWith("_")) {
+          // Console.WriteLine($"IdentifierExpr starts with _: {displayName}");
+          wr.Write(UniqueStringBeforeUnderscore);
+        }
+        wr.Write(displayName);
 
       } else if (expr is DatatypeValue) {
         var dtv = (DatatypeValue)expr;
