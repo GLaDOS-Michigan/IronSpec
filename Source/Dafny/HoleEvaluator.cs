@@ -63,9 +63,9 @@ namespace Microsoft.Dafny {
     private void UpdateCombinationResult(int index) {
       var p = dafnyMainExecutor.dafnyProcesses[index];
       var fileName = dafnyMainExecutor.inputFileName[p];
-      var position = dafnyMainExecutor.processToLemmaPosition[p];
+      var position = dafnyMainExecutor.processToPostConditionPosition[p];
       var expectedOutput =
-        $"/tmp/{fileName}.dfy({position + 3},0): Error: A postcondition might not hold on this return path.";
+        $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
       var output = dafnyMainExecutor.dafnyOutput[p];
       // Console.WriteLine($"{index} => {output}");
       // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
@@ -410,15 +410,11 @@ namespace Microsoft.Dafny {
         UpdateCombinationResult(i);
       }
 
-      for (int i = 0; i < bitArrayList.Count; i++) {
-        // var ba = bitArrayList[i];
-        // Console.WriteLine("------------------------------");
-        Console.WriteLine(i + " : " +
-                          Printer.ExprToString(availableExpressions[i]) + " : " +
-                          combinationResults[i].ToString());
-        // Console.WriteLine(ToBitString(ba, false));
-        // Console.WriteLine("------------------------------");
-      }
+      // for (int i = 0; i < bitArrayList.Count; i++) {
+      //   Console.WriteLine(i + " : " +
+      //                     Printer.ExprToString(availableExpressions[i]) + " : " +
+      //                     combinationResults[i].ToString());
+      // }
 
       // Until here, we only check depth 1 of expressions.
       // Now we try to check next depths
@@ -515,7 +511,7 @@ namespace Microsoft.Dafny {
             Printer.ExprToString(availableExpressions[availableExprBIndex]) == "true")
           continue;
         var output = dafnyImpliesExecutor.dafnyOutput[p];
-        if (output.EndsWith("0 errors")) {
+        if (output.EndsWith("0 errors\n")) {
           Console.WriteLine($"edge from {availableExprAIndex} to {availableExprBIndex}");
           graphVizOutput += $"  {availableExprAIndex} -> {availableExprBIndex};\n";
         }
@@ -526,8 +522,10 @@ namespace Microsoft.Dafny {
       return true;
     }
 
-    public string GetFullModuleName (ModuleDefinition moduleDef) {
-      if (moduleDef.EnclosingModule.Name == "_module") {
+    public string GetFullModuleName(ModuleDefinition moduleDef) {
+      if (moduleDef.Name == "_module") {
+        return "";
+      } else if (moduleDef.EnclosingModule.Name == "_module") {
         return moduleDef.Name;
       } else {
         return GetFullModuleName(moduleDef.EnclosingModule) + "." + moduleDef.Name;
@@ -538,7 +536,8 @@ namespace Microsoft.Dafny {
       if (type is UserDefinedType) {
         foreach (var decl in ModuleDefinition.AllTypesWithMembers(moduleDef.TopLevelDecls)) {
           if (decl.ToString() == type.ToString()) {
-            return GetFullModuleName(moduleDef) + "." + type.ToString();
+            var moduleName = GetFullModuleName(moduleDef);
+            return (moduleName == "") ? type.ToString() : (moduleName + "." + type.ToString());
           }
         }
         foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
@@ -604,8 +603,8 @@ namespace Microsoft.Dafny {
         func.Body = Expression.CreateAnd(func.Body, expr);
         pr.PrintProgram(program, true);
         var code = $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
-        lemmaForExprValidityPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForExprValidityString + "\n";
+        lemmaForExprValidityPosition = code.Count(f => f == '\n');
         File.WriteAllTextAsync($"/tmp/{funcName}_{cnt}.dfy", code);
         // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
         // Console.WriteLine("");
@@ -646,8 +645,8 @@ namespace Microsoft.Dafny {
         pr.UniqueStringBeforeUnderscore = UnderscoreStr;
         pr.PrintProgram(program, true);
         var code = $"// Implies {Printer.ExprToString(A)} ==> {Printer.ExprToString(B)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
-        lemmaForCheckingImpliesPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForCheckingImpliesString + "\n";
+        lemmaForCheckingImpliesPosition = code.Count(f => f == '\n');
         File.WriteAllTextAsync($"/tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy", code);
       }
 

@@ -27,7 +27,7 @@ namespace Microsoft.Dafny {
     public Dictionary<Process, int> processToCnt = new Dictionary<Process, int>();
     public Dictionary<Process, int> processToAvailableExprAIndex = new Dictionary<Process, int>();
     public Dictionary<Process, int> processToAvailableExprBIndex = new Dictionary<Process, int>();
-    public Dictionary<Process, int> processToLemmaPosition = new Dictionary<Process, int>();
+    public Dictionary<Process, int> processToPostConditionPosition = new Dictionary<Process, int>();
 
     public static bool IsCorrectOutput(string output, string expectedOutput) {
       if (output.EndsWith("1 error\n")) {
@@ -58,10 +58,8 @@ namespace Microsoft.Dafny {
             Console.WriteLine($"Executing {i}");
           }
           readyProcesses[i].Start();
-          // readyProcesses[i].BeginOutputReadLine();
           readyProcesses[i].WaitForExit();
           var firstOutput = readyProcesses[i].StandardOutput.ReadToEnd();
-          // dafnyOutput[i] = firstOutput;
           if (isMainExecution && (!firstOutput.EndsWith("0 errors\n")) &&
               (!firstOutput.EndsWith($"resolution/type errors detected in {inputFileName[readyProcesses[i]]}.dfy\n"))) {
             readyProcesses[i].Close();
@@ -73,40 +71,19 @@ namespace Microsoft.Dafny {
             p.StartInfo.RedirectStandardError = false;
             p.StartInfo.UseShellExecute = false;
             p.StartInfo.CreateNoWindow = true;
-            // p.OutputDataReceived += new DataReceivedEventHandler(DafnyOutputHandler);
-            // processToExpr[p] = processToExpr[readyProcesses[i]];
-            // processToCnt[p] = processToCnt[readyProcesses[i]];
-            // processToLemmaPosition[p] = processToLemmaPosition[readyProcesses[i]];
-            // inputFileName[p] = inputFileName[readyProcesses[i]];
-            // dafnyOutput[p] = new List<string>();
 
-            // remove previous process
-            // processToExpr.Remove(readyProcesses[i]);
-            // processToCnt.Remove(readyProcesses[i]);
-            // processToLemmaPosition.Remove(readyProcesses[i]);
-            // inputFileName.Remove(readyProcesses[i]);
-            // dafnyOutput.Remove(readyProcesses[i]);
-
-            // readyProcesses[i] = p;
-            // dafnyProcesses[i] = p;
             p.Start();
-            // p.BeginOutputReadLine();
             p.WaitForExit();
             var output = p.StandardOutput.ReadToEnd();
-            // dafnyOutput[i] = output;
             var expectedOutput =
-              $"/tmp/{inputFileName[p]}.dfy({processToLemmaPosition[p] + 3},0): Error: A postcondition might not hold on this return path.";
-            // Console.WriteLine($"finish {i} => {dafnyProcesses[i].StartInfo.Arguments} -- {output}\n{expectedOutput}");
+              $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
             if (IsCorrectOutput(output, expectedOutput)) {
               Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
             }
             dafnyOutput[readyProcesses[i]] = output;
             File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}.txt",
               output + "\n");
-            // Console.WriteLine($"new output {String.Join(" - ", dafnyOutput[readyProcesses[i]])}");
           } else {
-            // Debug.Assert(inputFileName.ContainsKey(readyProcesses[i]), $"{i}");
-            // Debug.Assert(dafnyOutput.ContainsKey(readyProcesses[i]), $"{i}");
             dafnyOutput[readyProcesses[i]] = firstOutput;
             File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}.txt",
               firstOutput + "\n");
@@ -116,7 +93,7 @@ namespace Microsoft.Dafny {
     }
 
     public void createProcessWithOutput(string command, string args, Expression expr,
-        int cnt, int lemmaPos, string inputFile) {
+        int cnt, int postConditionPos, string inputFile) {
       Process p = new Process();
       p.StartInfo = new ProcessStartInfo(command, args);
       p.StartInfo.RedirectStandardOutput = true;
@@ -130,13 +107,13 @@ namespace Microsoft.Dafny {
       dafnyProcesses.Add(p);
       processToExpr[p] = expr;
       processToCnt[p] = cnt;
-      processToLemmaPosition[p] = lemmaPos;
+      processToPostConditionPosition[p] = postConditionPos;
       dafnyOutput[p] = "";
       inputFileName[p] = inputFile;
     }
 
     public void createProcessWithOutput(string command, string args,
-        int availableExprAIndex, int availableExprBIndex, int lemmaPos, string inputFile) {
+        int availableExprAIndex, int availableExprBIndex, int postConditionPos, string inputFile) {
       Process p = new Process();
       p.StartInfo = new ProcessStartInfo(command, args);
       p.StartInfo.RedirectStandardOutput = true;
@@ -150,7 +127,7 @@ namespace Microsoft.Dafny {
       dafnyProcesses.Add(p);
       processToAvailableExprAIndex[p] = availableExprAIndex;
       processToAvailableExprBIndex[p] = availableExprBIndex;
-      processToLemmaPosition[p] = lemmaPos;
+      processToPostConditionPosition[p] = postConditionPos;
       inputFileName[p] = inputFile;
       dafnyOutput[p] = "";
     }
