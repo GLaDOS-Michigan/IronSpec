@@ -526,50 +526,6 @@ namespace Microsoft.Dafny {
       return true;
     }
 
-    public void PrintImplies(Program program, Function func, int availableExprAIndex, int availableExprBIndex) {
-      Console.WriteLine($"print implies {availableExprAIndex} {availableExprBIndex}");
-      var funcName = func.FullDafnyName;
-      string parameterNameTypes = "";
-      foreach (var param in func.Formals) {
-        parameterNameTypes += param.Name + ":" + param.Type.ToString() + ", ";
-      }
-      parameterNameTypes = parameterNameTypes.Remove(parameterNameTypes.Length - 2, 2);
-      string lemmaForCheckingImpliesString = "lemma checkIfExprAImpliesExprB(";
-      lemmaForCheckingImpliesString += parameterNameTypes + ")\n";
-      Expression A = availableExpressions[availableExprAIndex];
-      Expression B = availableExpressions[availableExprBIndex];
-      lemmaForCheckingImpliesString += "  requires " + Printer.ExprToString(A) + "\n";
-      lemmaForCheckingImpliesString += "  ensures " + Printer.ExprToString(B) + "\n";
-      lemmaForCheckingImpliesString += "{}";
-
-      int lemmaForCheckingImpliesPosition = 0;
-
-      using (var wr = new System.IO.StringWriter()) {
-        var pr = new Printer(wr);
-        pr.UniqueStringBeforeUnderscore = UnderscoreStr;
-        pr.PrintProgram(program, true);
-        var code = $"// Implies {Printer.ExprToString(A)} ==> {Printer.ExprToString(B)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
-        lemmaForCheckingImpliesPosition = code.Count(f => f == '\n') + 1;
-        code += lemmaForCheckingImpliesString + "\n";
-        File.WriteAllTextAsync($"/tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy", code);
-      }
-
-      string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
-      dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
-      string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
-      var argList = env.Split(' ');
-      string args = "";
-      foreach (var arg in argList) {
-        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && !arg.StartsWith("/proc:")) {
-          args += arg + " ";
-        }
-      }
-      dafnyImpliesExecutor.createProcessWithOutput(dafnyBinaryPath,
-        $"{args} /tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
-        availableExprAIndex, availableExprBIndex, lemmaForCheckingImpliesPosition,
-        $"{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy");
-    }
-
     public string GetFullModuleName (ModuleDefinition moduleDef) {
       if (moduleDef.EnclosingModule.Name == "_module") {
         return moduleDef.Name;
@@ -668,6 +624,47 @@ namespace Microsoft.Dafny {
           $"{args} /tmp/{funcName}_{cnt}.dfy /proc:*checkReachableStatesNotBeFalse*",
           expr, cnt, lemmaForExprValidityPosition, $"{funcName}_{cnt}");
       // Printer.PrintFunction(transformedFunction, 0, false);
+    }
+
+    public void PrintImplies(Program program, Function func, int availableExprAIndex, int availableExprBIndex) {
+      Console.WriteLine($"print implies {availableExprAIndex} {availableExprBIndex}");
+      var funcName = func.FullDafnyName;
+      var paramList = GetFunctionParamList(func);
+      var parameterNameTypes = paramList.Item2;
+      string lemmaForCheckingImpliesString = "lemma checkIfExprAImpliesExprB(";
+      lemmaForCheckingImpliesString += parameterNameTypes + ")\n";
+      Expression A = availableExpressions[availableExprAIndex];
+      Expression B = availableExpressions[availableExprBIndex];
+      lemmaForCheckingImpliesString += "  requires " + Printer.ExprToString(A) + "\n";
+      lemmaForCheckingImpliesString += "  ensures " + Printer.ExprToString(B) + "\n";
+      lemmaForCheckingImpliesString += "{}";
+
+      int lemmaForCheckingImpliesPosition = 0;
+
+      using (var wr = new System.IO.StringWriter()) {
+        var pr = new Printer(wr);
+        pr.UniqueStringBeforeUnderscore = UnderscoreStr;
+        pr.PrintProgram(program, true);
+        var code = $"// Implies {Printer.ExprToString(A)} ==> {Printer.ExprToString(B)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+        lemmaForCheckingImpliesPosition = code.Count(f => f == '\n') + 1;
+        code += lemmaForCheckingImpliesString + "\n";
+        File.WriteAllTextAsync($"/tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy", code);
+      }
+
+      string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
+      dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
+      string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
+      var argList = env.Split(' ');
+      string args = "";
+      foreach (var arg in argList) {
+        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && !arg.StartsWith("/proc:")) {
+          args += arg + " ";
+        }
+      }
+      dafnyImpliesExecutor.createProcessWithOutput(dafnyBinaryPath,
+        $"{args} /tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
+        availableExprAIndex, availableExprBIndex, lemmaForCheckingImpliesPosition,
+        $"{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy");
     }
 
     // public static Function AddExpression(Function func, Expression expr)
