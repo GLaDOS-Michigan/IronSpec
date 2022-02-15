@@ -24,7 +24,7 @@ namespace Microsoft.Dafny {
     private static Random random = new Random();
 
     public static string RandomString(int length) {
-      const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
       return new string(Enumerable.Repeat(chars, length)
           .Select(s => s[random.Next(s.Length)]).ToArray());
     }
@@ -570,27 +570,80 @@ namespace Microsoft.Dafny {
         $"{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy");
     }
 
+    public string GetFullModuleName (ModuleDefinition moduleDef) {
+      if (moduleDef.EnclosingModule.Name == "_module") {
+        return moduleDef.Name;
+      } else {
+        return GetFullModuleName(moduleDef.EnclosingModule) + "." + moduleDef.Name;
+      }
+    }
+
+    public string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
+      if (type is UserDefinedType) {
+        foreach (var decl in ModuleDefinition.AllTypesWithMembers(moduleDef.TopLevelDecls)) {
+          if (decl.ToString() == type.ToString()) {
+            return GetFullModuleName(moduleDef) + "." + type.ToString();
+          }
+        }
+        foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
+          if (imp is ModuleDecl) {
+            var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type);
+            if (result != "") {
+              return result;
+            }
+          }
+        }
+        // couldn't find the type definition here, so we should search the parent
+        return GetFullTypeString(moduleDef.EnclosingModule, type);
+      } else if (type is CollectionType) {
+        var ct = type as CollectionType;
+        var result = ct.CollectionTypeName + "<";
+        var sep = "";
+        foreach (var typeArg in ct.TypeArgs) {
+          result += sep + GetFullTypeString(moduleDef, typeArg);
+          sep = ",";
+        }
+        result += ">";
+        return result;
+      } else {
+        return type.ToString();
+      }
+    }
+
+    public Tuple<string, string> GetFunctionParamList(Function func) {
+      var funcName = func.FullDafnyName;
+      string parameterNameTypes = "";
+      string paramNames = "";
+      var sep = "";
+      foreach (var param in func.Formals) {
+        parameterNameTypes += sep + param.Name + ":" + GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type);
+        paramNames += sep + param.Name;
+        sep = ", ";
+      }
+      return new Tuple<string, string>(paramNames, parameterNameTypes);
+    }
+
     public void PrintExprAndCreateProcess(Program program, Function func, Expression expr, int cnt) {
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
 
       var funcName = func.FullDafnyName;
-      string parameterNameTypes = "";
-      string paramNames = "";
-      foreach (var param in func.Formals) {
-        parameterNameTypes += param.Name + ":" + param.Type.ToString() + ", ";
-        paramNames += param.Name + ", ";
-      }
-      parameterNameTypes = parameterNameTypes.Remove(parameterNameTypes.Length - 2, 2);
-      paramNames = paramNames.Remove(paramNames.Length - 2, 2);
+      var paramList = GetFunctionParamList(func);
+      var paramNames = paramList.Item1;
+      var parameterNameTypes = paramList.Item2;
       string lemmaForExprValidityString = "lemma checkReachableStatesNotBeFalse(";
-      lemmaForExprValidityString += parameterNameTypes + ")\n";
+      lemmaForExprValidityString += parameterNameTypes + ")";
+      using (var wr = new System.IO.StringWriter()) {
+        var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
+        pr.PrintSpec("requires", func.Req, 2);
+        lemmaForExprValidityString += Printer.ToStringWithoutNewline(wr) + "\n";
+      }
       lemmaForExprValidityString += "  requires ";
       lemmaForExprValidityString += funcName + "(" + paramNames + ")\n";
       lemmaForExprValidityString += "  ensures false\n{}";
       int lemmaForExprValidityPosition = 0;
 
       using (var wr = new System.IO.StringWriter()) {
-        var pr = new Printer(wr);
+        var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
         pr.UniqueStringBeforeUnderscore = UnderscoreStr;
         func.Body = Expression.CreateAnd(func.Body, expr);
         pr.PrintProgram(program, true);

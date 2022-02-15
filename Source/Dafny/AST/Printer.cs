@@ -1996,7 +1996,8 @@ namespace Microsoft.Dafny {
         foreach (BoundVar bv in mc.Arguments) {
           var displayName = bv.DisplayName;
           if (displayName.StartsWith("_")) {
-            wr.Write("{0}{1}", sep, UniqueStringBeforeUnderscore + bv.DisplayName);
+            var tmp = bv.DisplayName.Replace("#", "");
+            wr.Write("{0}{1}", sep, UniqueStringBeforeUnderscore + tmp);
           } else {
             wr.Write("{0}{1}", sep, bv.DisplayName);
           }
@@ -2094,10 +2095,12 @@ namespace Microsoft.Dafny {
       } else if (expr is IdentifierExpr) {
         var displayName = ((IdentifierExpr)expr).Name;
         if (displayName.StartsWith("_")) {
-          // Console.WriteLine($"IdentifierExpr starts with _: {displayName}");
           wr.Write(UniqueStringBeforeUnderscore);
+          var tmp = displayName.Replace("#", "");
+          wr.Write(tmp);
+        } else {
+          wr.Write(displayName);
         }
-        wr.Write(displayName);
 
       } else if (expr is DatatypeValue) {
         var dtv = (DatatypeValue)expr;
