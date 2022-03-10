@@ -141,7 +141,11 @@ namespace Microsoft.Dafny {
       testGenOptions ??= new TestGenerationOptions();
 
     public string HoleEvaluatorFunctionName = null;
+    public string HoleEvaluatorBaseFunctionName = null;
     public int HoleEvaluatorDepth = 1;
+    public bool HoleEvaluatorRunOnce = false;
+    public string HoleEvaluatorInvariant = null;
+    public string HoleEvaluatorConstraint = null;
 
     protected override bool ParseOption(string name, Bpl.CommandLineOptionEngine.CommandLineParseState ps) {
       var args = ps.args; // convenient synonym
@@ -489,8 +493,30 @@ namespace Microsoft.Dafny {
           }
           return true;
 
+        case "holeEvalBase":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorBaseFunctionName = args[ps.i];
+          }
+          return true;
+
+        case "holeEvalInv":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorInvariant = args[ps.i];
+          }
+          return true;
+        
+        case "holeEvalCons":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorConstraint = args[ps.i];
+          }
+          return true;
+
         case "holeEvalDepth":
           ps.GetNumericArgument(ref HoleEvaluatorDepth, 4);
+          return true;
+        
+        case "holeEvalRunOnce":
+          HoleEvaluatorRunOnce = true;
           return true;
 
         case "verificationLogger":

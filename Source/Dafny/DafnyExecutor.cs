@@ -49,24 +49,31 @@ namespace Microsoft.Dafny {
     //   dafnyOutput.AddRange(Enumerable.Repeat("", size - count));
     // }
 
-    public void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(bool isMainExecution) {
+    public void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(bool runOnlyOnce) {
       // ResizeDafnyOutputList(readyProcesses.Count);
       Parallel.For(0, readyProcesses.Count,
-        new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount - 1 },
+        new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount / 2 },
         i => {
-          if (i % 1000 == 0) {
-            Console.WriteLine($"Executing {i}");
-          }
+          // if (i % 1000 == 0) {
+          //   Console.WriteLine($"Executing {i}");
+          // }
           readyProcesses[i].Start();
           readyProcesses[i].WaitForExit();
           var firstOutput = readyProcesses[i].StandardOutput.ReadToEnd();
-          if (isMainExecution && (!firstOutput.EndsWith("0 errors\n")) &&
+          if (!runOnlyOnce && (!firstOutput.EndsWith("0 errors\n")) &&
               (!firstOutput.EndsWith($"resolution/type errors detected in {inputFileName[readyProcesses[i]]}.dfy\n"))) {
-            readyProcesses[i].Close();
-            var args = readyProcesses[i].StartInfo.Arguments.Split(' ');
-            args = args.SkipLast(1).ToArray();
             var p = readyProcesses[i];
-            p.StartInfo = new ProcessStartInfo(readyProcesses[i].StartInfo.FileName, String.Join(' ', args));
+            // Console.WriteLine($"1 {i}");
+            p.Close();
+
+            File.WriteAllTextAsync($"/tmp/output_{inputFileName[p]}_0.txt",
+              (processToExpr.ContainsKey(p) ? "// " + Printer.ExprToString(processToExpr[p]) + "\n" : "") +
+              "// " + p.StartInfo.Arguments + "\n" + firstOutput + "\n");
+            
+            var args = p.StartInfo.Arguments.Split(' ');
+            args = args.SkipLast(1).Append("/exitAfterFirstError").ToArray();
+            // args = args.Append("/exitAfterFirstError");
+            p.StartInfo = new ProcessStartInfo(p.StartInfo.FileName, String.Join(' ', args));
             p.StartInfo.RedirectStandardOutput = true;
             p.StartInfo.RedirectStandardError = false;
             p.StartInfo.UseShellExecute = false;
@@ -81,13 +88,26 @@ namespace Microsoft.Dafny {
               Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
             }
             dafnyOutput[readyProcesses[i]] = output;
-            File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}.txt",
-              output + "\n");
+            File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}_1.txt",
+              (processToExpr.ContainsKey(readyProcesses[i]) ? "// " + Printer.ExprToString(processToExpr[readyProcesses[i]]) + "\n" : "") + 
+              "// " + String.Join(' ', args) + "\n" + output + "\n");
           } else {
-            dafnyOutput[readyProcesses[i]] = firstOutput;
-            File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}.txt",
-              firstOutput + "\n");
+            var p = readyProcesses[i];
+            // Console.WriteLine($"2 {i}");
+            p.Close();
+            var output = firstOutput;
+            var expectedOutput =
+              $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
+            if (IsCorrectOutput(output, expectedOutput)) {
+              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
+            }
+            dafnyOutput[p] = output;
+            var args = p.StartInfo.Arguments;
+            File.WriteAllTextAsync($"/tmp/output_{inputFileName[p]}_0.txt",
+              (processToExpr.ContainsKey(p) ? "// " + Printer.ExprToString(processToExpr[p]) + "\n" : "") +
+              "// " + args + "\n" + output + "\n");
           }
+          // Console.WriteLine($"finish executing {i}");
         });
       readyProcesses.Clear();
     }

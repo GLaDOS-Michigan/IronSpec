@@ -23,6 +23,15 @@ namespace Microsoft.Dafny {
     bool printingDesugared = false;
     public string UniqueStringBeforeUnderscore = "";
 
+    private string GetAppenededUnique(string name) {
+      if (name.StartsWith("_")) {
+        var tmp = name.Replace("#", "");
+        return UniqueStringBeforeUnderscore + tmp;
+      } else {
+        return name;
+      }
+    }
+
     [ContractInvariantMethod]
     void ObjectInvariant() {
       Contract.Invariant(wr != null);
@@ -1475,7 +1484,7 @@ namespace Microsoft.Dafny {
             PrintAttributes(mc.Attributes);
             wr.Write(" ");
             if (!mc.Ctor.Name.StartsWith(BuiltIns.TupleTypeCtorNamePrefix)) {
-              wr.Write(mc.Ctor.Name);
+              wr.Write(GetAppenededUnique(mc.Ctor.Name));
             }
 
             PrintMatchCaseArgument(mc);
@@ -1714,6 +1723,7 @@ namespace Microsoft.Dafny {
         wr.Write("case");
         PrintAttributes(alternative.Attributes);
         wr.Write(" ");
+        // TODO(armin): CHECK HERE
         if (alternative.IsBindingGuard) {
           var exists = (ExistsExpr)alternative.Guard;
           PrintBindingGuard(exists);
@@ -1942,7 +1952,7 @@ namespace Microsoft.Dafny {
             wr.Write("case");
             PrintAttributes(mc.Attributes);
             wr.Write(" ");
-            wr.Write(mc.Ctor.Name);
+            wr.Write(GetAppenededUnique(mc.Ctor.Name));
             PrintMatchCaseArgument(mc);
             wr.WriteLine(" =>");
             PrintExtendedExpr(mc.Body, ind + IndentAmount, isLastCase, isLastCase && (parensNeeded || endWithCloseParen));
@@ -1994,13 +2004,8 @@ namespace Microsoft.Dafny {
       if (mc.Arguments.Count != 0) {
         string sep = "(";
         foreach (BoundVar bv in mc.Arguments) {
-          var displayName = bv.DisplayName;
-          if (displayName.StartsWith("_")) {
-            var tmp = bv.DisplayName.Replace("#", "");
-            wr.Write("{0}{1}", sep, UniqueStringBeforeUnderscore + tmp);
-          } else {
-            wr.Write("{0}{1}", sep, bv.DisplayName);
-          }
+          var displayName = GetAppenededUnique(bv.DisplayName);
+          wr.Write("{0}{1}", sep, displayName);
           string typeName = bv.Type.TypeName(null, true);
           if (bv.Type is NonProxyType && !typeName.StartsWith("_")) {
             wr.Write(": {0}", typeName);
@@ -2093,14 +2098,8 @@ namespace Microsoft.Dafny {
         wr.Write("this");
 
       } else if (expr is IdentifierExpr) {
-        var displayName = ((IdentifierExpr)expr).Name;
-        if (displayName.StartsWith("_")) {
-          wr.Write(UniqueStringBeforeUnderscore);
-          var tmp = displayName.Replace("#", "");
-          wr.Write(tmp);
-        } else {
-          wr.Write(displayName);
-        }
+        var displayName = GetAppenededUnique((expr as IdentifierExpr).Name);
+        wr.Write(displayName);
 
       } else if (expr is DatatypeValue) {
         var dtv = (DatatypeValue)expr;
@@ -2778,7 +2777,7 @@ namespace Microsoft.Dafny {
           int i = 0;
           foreach (var mc in e.Cases) {
             bool isLastCase = i == e.Cases.Count - 1;
-            wr.Write(" case {0}", mc.Ctor.Name);
+            wr.Write(" case {0}", GetAppenededUnique(mc.Ctor.Name));
             PrintMatchCaseArgument(mc);
             wr.Write(" => ");
             PrintExpression(mc.Body, isRightmost && isLastCase, !parensNeeded && isFollowedBySemicolon);
@@ -2858,7 +2857,7 @@ namespace Microsoft.Dafny {
         case IdPattern idPat:
           if (idPat.Id.StartsWith(BuiltIns.TupleTypeCtorNamePrefix)) {
           } else {
-            wr.Write(idPat.Id);
+            wr.Write(GetAppenededUnique(idPat.Id));
           }
           if (idPat.Arguments != null) {
             wr.Write("(");
@@ -2872,7 +2871,7 @@ namespace Microsoft.Dafny {
           }
           break;
         case LitPattern litPat:
-          wr.Write(litPat.ToString());
+          wr.Write(GetAppenededUnique(litPat.ToString()));
           break;
       }
     }

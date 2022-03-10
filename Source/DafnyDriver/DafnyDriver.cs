@@ -286,8 +286,9 @@ namespace Microsoft.Dafny {
       string err = Dafny.Main.ParseCheck(dafnyFiles, programName, reporter, out dafnyProgram);
       if (DafnyOptions.O.HoleEvaluatorFunctionName != null) {
         var holeEvaluator = new HoleEvaluator();
-        var foundDesiredFunction = holeEvaluator.Evaluate(
-            dafnyProgram, DafnyOptions.O.HoleEvaluatorFunctionName,
+        var foundDesiredFunction = holeEvaluator.Evaluate(dafnyProgram,
+            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.HoleEvaluatorBaseFunctionName,
             DafnyOptions.O.HoleEvaluatorDepth);
         return foundDesiredFunction ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
       }
@@ -374,6 +375,9 @@ namespace Microsoft.Dafny {
       watch.Start();
 
       foreach (var prog in boogiePrograms) {
+        if (CommandLineOptions.Clo.ExitAfterFirstError && !isVerified) {
+          break;
+        }
         if (DafnyOptions.O.SeparateModuleOutput) {
           ExecutionEngine.printer.AdvisoryWriteLine("For module: {0}", prog.Item1);
         }
