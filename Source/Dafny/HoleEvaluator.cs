@@ -147,59 +147,10 @@ namespace Microsoft.Dafny {
       return true;
     }
 
-    public class Graph<T> {
-      public Graph() { }
-      public Graph(IEnumerable<T> vertices, IEnumerable<Tuple<T, T>> edges) {
-        foreach (var vertex in vertices)
-          AddVertex(vertex);
-
-        foreach (var edge in edges)
-          AddEdge(edge);
-      }
-
-      public Dictionary<T, HashSet<T>> AdjacencyList { get; } = new Dictionary<T, HashSet<T>>();
-
-      public void AddVertex(T vertex) {
-        AdjacencyList[vertex] = new HashSet<T>();
-      }
-
-      public void AddEdge(Tuple<T, T> edge) {
-        if (AdjacencyList.ContainsKey(edge.Item1) && AdjacencyList.ContainsKey(edge.Item2)) {
-          AdjacencyList[edge.Item1].Add(edge.Item2);
-          AdjacencyList[edge.Item2].Add(edge.Item1);
-        }
-      }
-    }
-
-    public HashSet<T> DFS<T>(Graph<T> graph, T start) {
-      var visited = new HashSet<T>();
-
-      if (!graph.AdjacencyList.ContainsKey(start))
-        return visited;
-
-      var stack = new Stack<T>();
-      stack.Push(start);
-
-      while (stack.Count > 0) {
-        var vertex = stack.Pop();
-
-        if (visited.Contains(vertex))
-          continue;
-
-        visited.Add(vertex);
-
-        foreach (var neighbor in graph.AdjacencyList[vertex])
-          if (!visited.Contains(neighbor))
-            stack.Push(neighbor);
-      }
-
-      return visited;
-    }
-
     public Dictionary<string, List<string>> GetEqualExpressionList(Expression expr) {
       // The first element of each value's list in the result is the type of list
       Dictionary<string, List<string>> result = new Dictionary<string, List<string>>();
-      Graph<string> G = new Graph<string>();
+      HoleEvalGraph<string> G = new HoleEvalGraph<string>();
       foreach (var e in Expression.Conjuncts(expr)) {
         if (e is BinaryExpr && (e as BinaryExpr).ResolvedOp == BinaryExpr.ResolvedOpcode.EqCommon) {
           var be = e as BinaryExpr;
@@ -231,7 +182,7 @@ namespace Microsoft.Dafny {
             Debug.Assert(visited.Contains(e1));
             continue;
           }
-          HashSet<string> newVisits = DFS<string>(G, e0);
+          HashSet<string> newVisits = G.DFS(e0);
           visited.UnionWith(newVisits);
           result[e0] = new List<string>();
           // The first element of each value's list in the result is the type of list
@@ -245,13 +196,78 @@ namespace Microsoft.Dafny {
       return result;
     }
 
-    // public bool PrintValidityLemma(Program program, string funcName, string baseFuncName) {
-    //   Find
-    // }
+    public DirectedCallGraph<Function, FunctionCallExpr> GetCallGraph(Function baseFunc) {
+      Contract.Requires(baseFunc != null);
+      DirectedCallGraph<Function, FunctionCallExpr> G = new DirectedCallGraph<Function, FunctionCallExpr>();
+      Queue<Tuple<Expression, Function>> queue = new Queue<Tuple<Expression, Function>>();
+      queue.Enqueue(new Tuple<Expression, Function>(baseFunc.Body, baseFunc));
+      G.AddVertex(baseFunc);
+      // HashSet<string> keys = new HashSet<string>();
+      // keys.Add(Printer.ExprToString(baseF.Body) + ":" + baseF.Body);
+      while (queue.Count > 0) {
+        Tuple<Expression, Function> currExprParentTuple = queue.Dequeue();
+        if (currExprParentTuple.Item1 == null) continue;
+        // Console.WriteLine("Processing " + currExprParentTuple.Item1 + ": " + Printer.ExprToString(currExprParentTuple.Item1));
+        if (currExprParentTuple.Item1 is FunctionCallExpr /*&& (currExpr as FunctionCallExpr).Function.Body != null*/) {
+          // if (!keys.Contains(Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body) + ":" + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body)) {
+          // Console.WriteLine("Adding " + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body + ": " + Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body));
+          // Console.WriteLine($"function call: {Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr))}");
+          // Console.WriteLine($"{currExprParentTuple.Item2.Name} -> {(currExprParentTuple.Item1 as FunctionCallExpr).Function.Name}");
+          queue.Enqueue(new Tuple<Expression, Function>((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body, (currExprParentTuple.Item1 as FunctionCallExpr).Function));
+          G.AddVertex((currExprParentTuple.Item1 as FunctionCallExpr).Function);
+          G.AddEdge(currExprParentTuple.Item2, (currExprParentTuple.Item1 as FunctionCallExpr).Function, currExprParentTuple.Item1 as FunctionCallExpr);
+          // Console.WriteLine("-------------------------------------");
+          // keys.Add(Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body) + ":" + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body);
+          // }
+        }
+        foreach (var e in currExprParentTuple.Item1.SubExpressions) {
+          // if (!keys.Contains(Printer.ExprToString(e) + ":" + e)) {
+          // Console.WriteLine("Adding " + e + ": " + Printer.ExprToString(e));
+          queue.Enqueue(new Tuple<Expression, Function>(e, currExprParentTuple.Item2));
+          G.AddVertex(currExprParentTuple.Item2);
+          // keys.Add(Printer.ExprToString(e) + ":" + e);
+          // }
+        }
+      }
+      return G;
+    }
+
+    DirectedCallGraph<Function, FunctionCallExpr> CG;
+    List<List<Tuple<Function, FunctionCallExpr>>> Paths = new List<List<Tuple<Function, FunctionCallExpr>>>();
+    List<Tuple<Function, FunctionCallExpr>> CurrentPath = new List<Tuple<Function, FunctionCallExpr>>();
+
+    public void GetAllPaths(Function source, Function destination) {
+      if (source.FullDafnyName == destination.FullDafnyName) {
+        Paths.Add(new List<Tuple<Function, FunctionCallExpr>>(CurrentPath));
+        return;
+      }
+      foreach (var nwPair in CG.AdjacencyWeightList[source]) {
+        CurrentPath.Add(new Tuple<Function, FunctionCallExpr>(nwPair.Item1, nwPair.Item2));
+        GetAllPaths(nwPair.Item1, destination);
+        CurrentPath.RemoveAt(CurrentPath.Count - 1);
+      }
+    }
 
     public bool Evaluate(Program program, string funcName, string baseFuncName, int depth) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
-      // PrintValidityLemma(program, funcName, baseFuncName);
+      Function baseFunc = GetFunction(program, baseFuncName);
+      CG = GetCallGraph(baseFunc);
+      Function func = GetFunction(program, funcName);
+      CurrentPath.Add(new Tuple<Function, FunctionCallExpr>(baseFunc, null));
+      GetAllPaths(baseFunc, func);
+      Console.WriteLine(Paths.Count);
+      foreach (var p in Paths) {
+        foreach (var v in p) {
+          if (v.Item2 != null) {
+            Console.WriteLine($" -> {Printer.ExprToString(v.Item2)}");
+            Console.Write($"{v.Item1.FullDafnyName}");
+          } else {
+            Console.Write($"{v.Item1.FullDafnyName}");
+          }
+        }
+        Console.WriteLine("\n----------------------------------------------------------------");
+      }
+      return true;
       UnderscoreStr = RandomString(8);
       dafnyMainExecutor.sw = Stopwatch.StartNew();
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
