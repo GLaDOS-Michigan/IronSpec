@@ -248,26 +248,86 @@ namespace Microsoft.Dafny {
       }
     }
 
+    public string GetPrefixedString(string prefix, Expression expr) {
+      using (var wr = new System.IO.StringWriter()) {
+        var pr = new Printer(wr);
+        pr.Prefix = prefix;
+        pr.PrintExpression(expr, false);
+        return wr.ToString();
+      }
+    }
+
+    public string GetValidityLemma(List<Tuple<Function, FunctionCallExpr>> path) {
+      string res = "lemma validityCheck";
+      foreach (var nwPair in path) {
+        res += "_" + nwPair.Item1.Name;
+      }
+      res += "(";
+      var sep = "";
+      foreach (var nwPair in path) {
+        res += sep + "\n    ";
+        sep = "";
+        res += GetFunctionParamList(nwPair.Item1, nwPair.Item1.Name + "_").Item2;
+        sep = ", ";
+      }
+      res += ")\n";
+      foreach (var req in path[0].Item1.Req) {
+        res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E) + "\n";
+      }
+      res += "  requires " + path[0].Item1.FullDafnyName + "(";
+      sep = "";
+      foreach (var formal in path[0].Item1.Formals) {
+        res += sep + path[0].Item1.Name + "_" + formal.Name;
+        sep = ", ";
+      }
+      res += ")\n";
+      for (int i = 0; i < path.Count - 1; i++) {
+        var callExpr = path[i + 1].Item2;
+        for (int j = 0; j < callExpr.Args.Count; j++) {
+          res += "  requires ";
+          res += GetPrefixedString(path[i].Item1.Name + "_", callExpr.Args[j]);
+          res += " == ";
+          res += path[i + 1].Item1.Name + "_" + path[i + 1].Item1.Formals[j].Name + "\n";
+        }
+        foreach (var req in callExpr.Function.Req) {
+          res += "  requires " + GetPrefixedString(path[i + 1].Item1.Name + "_", req.E) + "\n";
+        }
+        res += "  requires " + callExpr.Function.FullDafnyName + "(";
+        sep = "";
+        foreach (var arg in callExpr.Args) {
+          res += sep + GetPrefixedString(path[i].Item1.Name + "_", arg);
+          sep = ", ";
+        }
+        res += ")\n";
+      }
+      if (DafnyOptions.O.HoleEvaluatorConstraint != null) {
+        res += "  requires " + DafnyOptions.O.HoleEvaluatorConstraint + "\n";
+      }
+      res += "  ensures false\n{}";
+      return res;
+    }
+
     public bool Evaluate(Program program, string funcName, string baseFuncName, int depth) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
+
+      // Collect all paths from baseFunc to func
+      if (baseFuncName == "") {
+        baseFuncName = funcName;
+      }
       Function baseFunc = GetFunction(program, baseFuncName);
+      if (baseFunc == null) {
+        return false;
+      }
       CG = GetCallGraph(baseFunc);
       Function func = GetFunction(program, funcName);
       CurrentPath.Add(new Tuple<Function, FunctionCallExpr>(baseFunc, null));
       GetAllPaths(baseFunc, func);
-      Console.WriteLine(Paths.Count);
-      foreach (var p in Paths) {
-        foreach (var v in p) {
-          if (v.Item2 != null) {
-            Console.WriteLine($" -> {Printer.ExprToString(v.Item2)}");
-            Console.Write($"{v.Item1.FullDafnyName}");
-          } else {
-            Console.Write($"{v.Item1.FullDafnyName}");
-          }
-        }
-        Console.WriteLine("\n----------------------------------------------------------------");
-      }
-      return true;
+      // foreach (var p in Paths) {
+      //   Console.WriteLine(GetValidityLemma(p));
+      //   Console.WriteLine("\n----------------------------------------------------------------\n");
+      // }
+      // return true;
+
       UnderscoreStr = RandomString(8);
       dafnyMainExecutor.sw = Stopwatch.StartNew();
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
@@ -585,14 +645,14 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public Tuple<string, string> GetFunctionParamList(Function func) {
+    public Tuple<string, string> GetFunctionParamList(Function func, string namePrefix = "") {
       var funcName = func.FullDafnyName;
       string parameterNameTypes = "";
       string paramNames = "";
       var sep = "";
       foreach (var param in func.Formals) {
-        parameterNameTypes += sep + param.Name + ":" + GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type);
-        paramNames += sep + param.Name;
+        parameterNameTypes += sep + namePrefix + param.Name + ":" + GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type);
+        paramNames += sep + namePrefix + param.Name;
         sep = ", ";
       }
       return new Tuple<string, string>(paramNames, parameterNameTypes);
@@ -612,31 +672,9 @@ namespace Microsoft.Dafny {
     public void PrintExprAndCreateProcess(Program program, Function func, Expression expr, int cnt) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
+      string lemmaForExprValidityString = GetValidityLemma(Paths[0]);
 
       var funcName = func.FullDafnyName;
-      var paramList = GetFunctionParamList(func);
-      var paramNames = paramList.Item1;
-      var parameterNameTypes = paramList.Item2;
-      string lemmaForExprValidityString = "lemma checkReachableStatesNotBeFalse(";
-      lemmaForExprValidityString += parameterNameTypes + ")";
-      using (var wr = new System.IO.StringWriter()) {
-        var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
-        pr.PrintSpec("requires", func.Req, 2);
-        lemmaForExprValidityString += Printer.ToStringWithoutNewline(wr) + "\n";
-      }
-      if (DafnyOptions.O.HoleEvaluatorConstraint != null) {
-        // var invFunc = GetFunction(program, DafnyOptions.O.HoleEvaluatorInvariant);
-        // if (invFunc != null) {
-        lemmaForExprValidityString += "  requires ";
-        lemmaForExprValidityString += DafnyOptions.O.HoleEvaluatorConstraint + "\n";
-        // lemmaForExprValidityString += "  requires ";
-        // lemmaForExprValidityString += invFunc.FullDafnyName + "(s')\n";
-        // foreach (var )
-        // }
-      }
-      lemmaForExprValidityString += "  requires ";
-      lemmaForExprValidityString += funcName + "(" + paramNames + ")\n";
-      lemmaForExprValidityString += "  ensures false\n{}";
       int lemmaForExprValidityPosition = 0;
 
       using (var wr = new System.IO.StringWriter()) {
@@ -662,7 +700,7 @@ namespace Microsoft.Dafny {
         }
       }
       dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
-          $"{args} /tmp/{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:*checkReachableStatesNotBeFalse*"),
+          $"{args} /tmp/{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
           expr, cnt, lemmaForExprValidityPosition, $"{funcName}_{cnt}");
       // Printer.PrintFunction(transformedFunction, 0, false);
     }

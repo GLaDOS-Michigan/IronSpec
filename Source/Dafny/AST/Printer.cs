@@ -22,13 +22,14 @@ namespace Microsoft.Dafny {
     bool printingExportSet = false;
     bool printingDesugared = false;
     public string UniqueStringBeforeUnderscore = "";
+    public string Prefix = "";
 
     private string GetAppenededUnique(string name) {
       if (name.StartsWith("_")) {
         var tmp = name.Replace("#", "");
-        return UniqueStringBeforeUnderscore + tmp;
+        return Prefix + UniqueStringBeforeUnderscore + tmp;
       } else {
-        return name;
+        return Prefix + name;
       }
     }
 
@@ -2135,7 +2136,7 @@ namespace Microsoft.Dafny {
 
       } else if (expr is NameSegment) {
         var e = (NameSegment)expr;
-        wr.Write(e.Name);
+        wr.Write(GetAppenededUnique(e.Name));
         if (e.OptTypeArguments != null) {
           PrintTypeInstantiation(e.OptTypeArguments);
         }
@@ -2179,7 +2180,17 @@ namespace Microsoft.Dafny {
           PrintExpression(e.Lhs, false);
           wr.Write(")");
         } else {
-          PrintExpr(e.Lhs, opBindingStrength, false, false, !parensNeeded && isFollowedBySemicolon, -1, keyword);
+          if (Prefix != "" && e.Lhs is NameSegment) {
+            var mse = (e.Lhs.Resolved as MemberSelectExpr);
+            if (mse != null) {
+              var f = mse.Member as Function;
+              wr.Write(f.FullDafnyName);
+            } else {
+              PrintExpr(e.Lhs, opBindingStrength, false, false, !parensNeeded && isFollowedBySemicolon, -1, keyword);
+            }
+          } else {
+            PrintExpr(e.Lhs, opBindingStrength, false, false, !parensNeeded && isFollowedBySemicolon, -1, keyword);
+          }
         }
         string name = e.Lhs is NameSegment ? ((NameSegment)e.Lhs).Name : e.Lhs is ExprDotName ? ((ExprDotName)e.Lhs).SuffixName : null;
         PrintActualArguments(e.Bindings, name, e.AtTok);
