@@ -274,7 +274,22 @@ namespace Microsoft.Dafny {
             queue.Enqueue(new Tuple<Expression, Expression, Function>(
               c.Body, cond, currExprCondParentTuple.Item3));
           }
+          G.AddVertex(currExprCondParentTuple.Item3);
           // Console.WriteLine("----------------------------------------------------------------");
+        } else if (currExprCondParentTuple.Item1 is ExistsExpr) {
+          var existsExpr = currExprCondParentTuple.Item1 as ExistsExpr;
+          var lhss = new List<CasePattern<BoundVar>>();
+          var rhss = new List<Expression>();
+          foreach (var bv in existsExpr.BoundVars) {
+            lhss.Add(new CasePattern<BoundVar>(bv.Tok, 
+              new BoundVar(bv.Tok, currExprCondParentTuple.Item3.Name + "_" + bv.Name, bv.Type)));
+          }
+          rhss.Add(existsExpr.Term);
+          var cond = Expression.CreateLet(existsExpr.BodyStartTok, lhss, rhss, 
+            Expression.CreateBoolLiteral(existsExpr.BodyStartTok, true), false);
+
+          queue.Enqueue(new Tuple<Expression, Expression, Function>(existsExpr.Term, cond, currExprCondParentTuple.Item3));
+          G.AddVertex(currExprCondParentTuple.Item3);
         } else {
           foreach (var e in currExprCondParentTuple.Item1.SubExpressions) {
             // if (!keys.Contains(Printer.ExprToString(e) + ":" + e)) {
@@ -299,31 +314,37 @@ namespace Microsoft.Dafny {
     }
 
     DirectedCallGraph<Function, FunctionCallExpr, Expression> CG;
-    List<List<Tuple<Function, FunctionCallExpr>>> Paths = new List<List<Tuple<Function, FunctionCallExpr>>>();
-    List<Tuple<Function, FunctionCallExpr>> CurrentPath = new List<Tuple<Function, FunctionCallExpr>>();
+    List<List<Tuple<Function, FunctionCallExpr, Expression>>> Paths =
+      new List<List<Tuple<Function, FunctionCallExpr, Expression>>>();
+    List<Tuple<Function, FunctionCallExpr, Expression>> CurrentPath =
+      new List<Tuple<Function, FunctionCallExpr, Expression>>();
 
     public void GetAllPaths(Function source, Function destination) {
       if (source.FullDafnyName == destination.FullDafnyName) {
-        Paths.Add(new List<Tuple<Function, FunctionCallExpr>>(CurrentPath));
+        Paths.Add(new List<Tuple<Function, FunctionCallExpr, Expression>>(CurrentPath));
         return;
       }
       foreach (var nwPair in CG.AdjacencyWeightList[source]) {
-        CurrentPath.Add(new Tuple<Function, FunctionCallExpr>(nwPair.Item1, nwPair.Item2));
+        CurrentPath.Add(new Tuple<Function, FunctionCallExpr, Expression>(
+          nwPair.Item1, nwPair.Item2, nwPair.Item3));
         GetAllPaths(nwPair.Item1, destination);
         CurrentPath.RemoveAt(CurrentPath.Count - 1);
       }
     }
 
+    public ModuleDefinition CurrentModuleDef = null;
+
     public string GetPrefixedString(string prefix, Expression expr) {
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr);
         pr.Prefix = prefix;
+        pr.ModuleForTypes = CurrentModuleDef;
         pr.PrintExpression(expr, false);
         return wr.ToString();
       }
     }
 
-    public string GetValidityLemma(List<Tuple<Function, FunctionCallExpr>> path) {
+    public string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path) {
       string res = "lemma validityCheck";
       foreach (var nwPair in path) {
         res += "_" + nwPair.Item1.Name;
@@ -349,6 +370,11 @@ namespace Microsoft.Dafny {
       res += ")\n";
       for (int i = 0; i < path.Count - 1; i++) {
         var callExpr = path[i + 1].Item2;
+        var condExpr = path[i + 1].Item3;
+        if (condExpr != null) {
+          CurrentModuleDef = path[i].Item1.EnclosingClass.EnclosingModuleDefinition;
+          res += "  requires " + GetPrefixedString(path[i].Item1.Name + "_", condExpr) + "\n";
+        }
         for (int j = 0; j < callExpr.Args.Count; j++) {
           res += "  requires ";
           res += GetPrefixedString(path[i].Item1.Name + "_", callExpr.Args[j]);
@@ -386,13 +412,13 @@ namespace Microsoft.Dafny {
       }
       CG = GetCallGraph(baseFunc);
       Function func = GetFunction(program, funcName);
-      CurrentPath.Add(new Tuple<Function, FunctionCallExpr>(baseFunc, null));
+      CurrentPath.Add(new Tuple<Function, FunctionCallExpr, Expression>(baseFunc, null, null));
       GetAllPaths(baseFunc, func);
       // foreach (var p in Paths) {
       //   Console.WriteLine(GetValidityLemma(p));
       //   Console.WriteLine("\n----------------------------------------------------------------\n");
       // }
-      return true;
+      // return true;
 
       UnderscoreStr = RandomString(8);
       dafnyMainExecutor.sw = Stopwatch.StartNew();

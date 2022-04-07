@@ -23,6 +23,7 @@ namespace Microsoft.Dafny {
     bool printingDesugared = false;
     public string UniqueStringBeforeUnderscore = "";
     public string Prefix = "";
+    public ModuleDefinition ModuleForTypes = null;
 
     private string GetAppenededUnique(string name) {
       if (name.StartsWith("_")) {
@@ -1103,9 +1104,58 @@ namespace Microsoft.Dafny {
 
     // ----------------------------- PrintType -----------------------------
 
+    public string GetFullModuleName(ModuleDefinition moduleDef) {
+      if (moduleDef.Name == "_module") {
+        return "";
+      } else if (moduleDef.EnclosingModule.Name == "_module") {
+        return moduleDef.Name;
+      } else {
+        return GetFullModuleName(moduleDef.EnclosingModule) + "." + moduleDef.Name;
+      }
+    }
+    public string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
+      if (moduleDef is null) {
+        return type.ToString();
+      }
+      if (type is UserDefinedType) {
+        foreach (var decl in ModuleDefinition.AllTypesWithMembers(moduleDef.TopLevelDecls)) {
+          if (decl.ToString() == type.ToString()) {
+            var moduleName = GetFullModuleName(moduleDef);
+            return (moduleName == "") ? type.ToString() : (moduleName + "." + type.ToString());
+          }
+        }
+        foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
+          if (imp is ModuleDecl) {
+            var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type);
+            if (result != "") {
+              return result;
+            }
+          }
+        }
+        // couldn't find the type definition here, so we should search the parent
+        return GetFullTypeString(moduleDef.EnclosingModule, type);
+      } else if (type is CollectionType) {
+        var ct = type as CollectionType;
+        var result = ct.CollectionTypeName + "<";
+        var sep = "";
+        foreach (var typeArg in ct.TypeArgs) {
+          result += sep + GetFullTypeString(moduleDef, typeArg);
+          sep = ",";
+        }
+        result += ">";
+        return result;
+      } else {
+        return type.ToString();
+      }
+    }
+    
     public void PrintType(Type ty) {
       Contract.Requires(ty != null);
-      wr.Write(ty.TypeName(null, true));
+      if (ModuleForTypes != null) {
+        wr.Write(GetFullTypeString(ModuleForTypes, ty));
+      } else {
+        wr.Write(ty.TypeName(null, true));
+      }
     }
 
     public void PrintType(string prefix, Type ty) {
@@ -1114,7 +1164,13 @@ namespace Microsoft.Dafny {
       if (DafnyOptions.O.DafnyPrintResolvedFile != null) {
         ty = ty.Normalize();
       }
-      string s = ty.TypeName(null, true);
+      string s;
+      if (ModuleForTypes != null) {
+        s = GetFullTypeString(ModuleForTypes, ty);
+      }
+      else {
+        s = ty.TypeName(null, true);
+      }
       if (!(ty is TypeProxy) && !s.StartsWith("_")) {
         wr.Write("{0}{1}", prefix, s);
       }
