@@ -196,43 +196,109 @@ namespace Microsoft.Dafny {
       return result;
     }
 
-    public DirectedCallGraph<Function, FunctionCallExpr> GetCallGraph(Function baseFunc) {
+    public DirectedCallGraph<Function, FunctionCallExpr, Expression> GetCallGraph(Function baseFunc) {
       Contract.Requires(baseFunc != null);
-      DirectedCallGraph<Function, FunctionCallExpr> G = new DirectedCallGraph<Function, FunctionCallExpr>();
-      Queue<Tuple<Expression, Function>> queue = new Queue<Tuple<Expression, Function>>();
-      queue.Enqueue(new Tuple<Expression, Function>(baseFunc.Body, baseFunc));
+      DirectedCallGraph<Function, FunctionCallExpr, Expression> G = new DirectedCallGraph<Function, FunctionCallExpr, Expression>();
+      // Tuple of SubExpression that is going to be parsed, pre-condition to reach this SubExpression, containing Function
+      Queue<Tuple<Expression, Expression, Function>> queue = new Queue<Tuple<Expression, Expression, Function>>();
+      queue.Enqueue(new Tuple<Expression, Expression, Function>(baseFunc.Body, null, baseFunc));
       G.AddVertex(baseFunc);
       // HashSet<string> keys = new HashSet<string>();
       // keys.Add(Printer.ExprToString(baseF.Body) + ":" + baseF.Body);
+      // TODO: Check an example in which a function is called in another function with two different pre-conditions
       while (queue.Count > 0) {
-        Tuple<Expression, Function> currExprParentTuple = queue.Dequeue();
-        if (currExprParentTuple.Item1 == null) continue;
+        Tuple<Expression, Expression, Function> currExprCondParentTuple = queue.Dequeue();
+        if (currExprCondParentTuple.Item1 == null) continue;
         // Console.WriteLine("Processing " + currExprParentTuple.Item1 + ": " + Printer.ExprToString(currExprParentTuple.Item1));
-        if (currExprParentTuple.Item1 is FunctionCallExpr /*&& (currExpr as FunctionCallExpr).Function.Body != null*/) {
+        if (currExprCondParentTuple.Item1 is FunctionCallExpr /*&& (currExpr as FunctionCallExpr).Function.Body != null*/) {
           // if (!keys.Contains(Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body) + ":" + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body)) {
           // Console.WriteLine("Adding " + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body + ": " + Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body));
-          // Console.WriteLine($"function call: {Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr))}");
-          // Console.WriteLine($"{currExprParentTuple.Item2.Name} -> {(currExprParentTuple.Item1 as FunctionCallExpr).Function.Name}");
-          queue.Enqueue(new Tuple<Expression, Function>((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body, (currExprParentTuple.Item1 as FunctionCallExpr).Function));
-          G.AddVertex((currExprParentTuple.Item1 as FunctionCallExpr).Function);
-          G.AddEdge(currExprParentTuple.Item2, (currExprParentTuple.Item1 as FunctionCallExpr).Function, currExprParentTuple.Item1 as FunctionCallExpr);
+          // Console.WriteLine($"function call: {Printer.ExprToString((currExprCondParentTuple.Item1 as FunctionCallExpr))}");
+          // Console.WriteLine($"{currExprCondParentTuple.Item3.Name} -> {(currExprCondParentTuple.Item1 as FunctionCallExpr).Function.Name}");
+          // if (currExprCondParentTuple.Item2 != null) {
+          //   Console.WriteLine($"condition : {Printer.ExprToString(currExprCondParentTuple.Item2)}");
+          // } else {
+          //   Console.WriteLine($"condition : null");
+          // }
+          queue.Enqueue(new Tuple<Expression, Expression, Function>(
+            (currExprCondParentTuple.Item1 as FunctionCallExpr).Function.Body,
+            null,
+            (currExprCondParentTuple.Item1 as FunctionCallExpr).Function));
+          G.AddVertex((currExprCondParentTuple.Item1 as FunctionCallExpr).Function);
+          G.AddEdge(
+            currExprCondParentTuple.Item3,
+            (currExprCondParentTuple.Item1 as FunctionCallExpr).Function,
+            currExprCondParentTuple.Item1 as FunctionCallExpr,
+            currExprCondParentTuple.Item2);
           // Console.WriteLine("-------------------------------------");
           // keys.Add(Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body) + ":" + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body);
           // }
         }
-        foreach (var e in currExprParentTuple.Item1.SubExpressions) {
-          // if (!keys.Contains(Printer.ExprToString(e) + ":" + e)) {
-          // Console.WriteLine("Adding " + e + ": " + Printer.ExprToString(e));
-          queue.Enqueue(new Tuple<Expression, Function>(e, currExprParentTuple.Item2));
-          G.AddVertex(currExprParentTuple.Item2);
-          // keys.Add(Printer.ExprToString(e) + ":" + e);
-          // }
+        if (currExprCondParentTuple.Item1 is ITEExpr) {
+          // Console.WriteLine($"ite expr here: {Printer.ExprToString(currExprCondParentTuple.Item1)}");
+          var iteExpr = currExprCondParentTuple.Item1 as ITEExpr;
+
+          // add Condition
+          queue.Enqueue(new Tuple<Expression, Expression, Function>(
+            iteExpr.Test, currExprCondParentTuple.Item2, currExprCondParentTuple.Item3));
+
+          // add then path
+          var thenCond = currExprCondParentTuple.Item2 != null ?
+            Expression.CreateAnd(currExprCondParentTuple.Item2, iteExpr.Test) :
+            iteExpr.Test;
+          queue.Enqueue(new Tuple<Expression, Expression, Function>(
+            iteExpr.Thn, thenCond, currExprCondParentTuple.Item3));
+
+          // add else path
+          var elseCond = currExprCondParentTuple.Item2 != null ?
+            Expression.CreateAnd(currExprCondParentTuple.Item2,
+                                 Expression.CreateNot(iteExpr.Test.tok, iteExpr.Test)) :
+            Expression.CreateNot(iteExpr.Test.tok, iteExpr.Test);
+          queue.Enqueue(new Tuple<Expression, Expression, Function>(
+            iteExpr.Els, elseCond, currExprCondParentTuple.Item3));
+
+          G.AddVertex(currExprCondParentTuple.Item3);
+        } else if (currExprCondParentTuple.Item1 is MatchExpr) {
+          var matchExpr = currExprCondParentTuple.Item1 as MatchExpr;
+          // add source
+          queue.Enqueue(new Tuple<Expression, Expression, Function>(
+            matchExpr.Source, currExprCondParentTuple.Item2, currExprCondParentTuple.Item3));
+
+          // add cases
+          // Console.WriteLine(Printer.ExprToString(matchExpr));
+          foreach (var c in matchExpr.Cases) {
+            // Console.WriteLine($"{c.Ctor} -> {c.Ctor.Name}");
+            var cond = currExprCondParentTuple.Item2 != null ?
+              Expression.CreateAnd(currExprCondParentTuple.Item2, new MemberSelectExpr(c.Ctor.tok, matchExpr.Source, c.Ctor.Name)) :
+              new MemberSelectExpr(c.Ctor.tok, matchExpr.Source, c.Ctor.Name + "?");
+            queue.Enqueue(new Tuple<Expression, Expression, Function>(
+              c.Body, cond, currExprCondParentTuple.Item3));
+          }
+          // Console.WriteLine("----------------------------------------------------------------");
+        } else {
+          foreach (var e in currExprCondParentTuple.Item1.SubExpressions) {
+            // if (!keys.Contains(Printer.ExprToString(e) + ":" + e)) {
+            // Console.WriteLine("Adding " + e + ": " + Printer.ExprToString(e));
+            // if (e is MatchExpr) {
+            //   // Console.WriteLine($"MatchExpr : {Printer.ExprToString(e)}");
+            //   queue.Enqueue(new Tuple<Expression, Expression, Function>(e, e, currExprCondParentTuple.Item3));
+            //   G.AddVertex(currExprCondParentTuple.Item3);
+            // } else if (e is ITEExpr) {
+            //   // Console.WriteLine($"ITEExpr : {Printer.ExprToString(e)}");
+            //   queue.Enqueue(new Tuple<Expression, Expression, Function>(e, e, currExprCondParentTuple.Item3));
+            //   G.AddVertex(currExprCondParentTuple.Item3);
+            // } else {
+            // Console.WriteLine($"else : {e} -> {Printer.ExprToString(e)}");
+            queue.Enqueue(new Tuple<Expression, Expression, Function>(e, currExprCondParentTuple.Item2, currExprCondParentTuple.Item3));
+            G.AddVertex(currExprCondParentTuple.Item3);
+            // }
+          }
         }
       }
       return G;
     }
 
-    DirectedCallGraph<Function, FunctionCallExpr> CG;
+    DirectedCallGraph<Function, FunctionCallExpr, Expression> CG;
     List<List<Tuple<Function, FunctionCallExpr>>> Paths = new List<List<Tuple<Function, FunctionCallExpr>>>();
     List<Tuple<Function, FunctionCallExpr>> CurrentPath = new List<Tuple<Function, FunctionCallExpr>>();
 
@@ -326,7 +392,7 @@ namespace Microsoft.Dafny {
       //   Console.WriteLine(GetValidityLemma(p));
       //   Console.WriteLine("\n----------------------------------------------------------------\n");
       // }
-      // return true;
+      return true;
 
       UnderscoreStr = RandomString(8);
       dafnyMainExecutor.sw = Stopwatch.StartNew();

@@ -67,20 +67,20 @@ namespace Microsoft.Dafny {
 
   }
 
-  public class DirectedCallGraph<U, V> {
-    public Dictionary<U, HashSet<Tuple<U, V>>> AdjacencyWeightList { get; } = new Dictionary<U, HashSet<Tuple<U, V>>>();
+  public class DirectedCallGraph<U, V, W> {
+    public Dictionary<U, HashSet<Tuple<U, V, W>>> AdjacencyWeightList { get; } = new Dictionary<U, HashSet<Tuple<U, V, W>>>();
 
     public DirectedCallGraph() { }
 
     public void AddVertex(U vertex) {
       if (!AdjacencyWeightList.ContainsKey(vertex)) {
-        AdjacencyWeightList[vertex] = new HashSet<Tuple<U, V>>();
+        AdjacencyWeightList[vertex] = new HashSet<Tuple<U, V, W>>();
       }
     }
 
-    public void AddEdge(U source, U destination, V weight) {
+    public void AddEdge(U source, U destination, V weight, W condition) {
       if (AdjacencyWeightList.ContainsKey(source) && AdjacencyWeightList.ContainsKey(destination)) {
-        AdjacencyWeightList[source].Add(new Tuple<U, V>(destination, weight));
+        AdjacencyWeightList[source].Add(new Tuple<U, V, W>(destination, weight, condition));
       }
     }
   }
