@@ -292,6 +292,14 @@ namespace Microsoft.Dafny {
             DafnyOptions.O.HoleEvaluatorDepth);
         return foundDesiredFunction ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
       }
+      if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
+        var holeEvaluator = new HoleEvaluator();
+        var foundDesiredFunction = holeEvaluator.EvaluateAfterRemoveFileLine(dafnyProgram,
+            DafnyOptions.O.HoleEvaluatorRemoveFileLine,
+            DafnyOptions.O.HoleEvaluatorBaseFunctionName,
+            DafnyOptions.O.HoleEvaluatorDepth);
+        return foundDesiredFunction ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
+      }
       if (err != null) {
         exitValue = ExitValue.DAFNY_ERROR;
         ExecutionEngine.printer.ErrorWriteLine(Console.Out, err);
