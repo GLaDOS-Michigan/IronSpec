@@ -146,6 +146,7 @@ namespace Microsoft.Dafny {
     public bool HoleEvaluatorRunOnce = false;
     public string HoleEvaluatorInvariant = null;
     public string HoleEvaluatorConstraint = null;
+    public string HoleEvaluatorRemoveFileLine = null;
 
     protected override bool ParseOption(string name, Bpl.CommandLineOptionEngine.CommandLineParseState ps) {
       var args = ps.args; // convenient synonym
@@ -504,7 +505,7 @@ namespace Microsoft.Dafny {
             HoleEvaluatorInvariant = args[ps.i];
           }
           return true;
-        
+
         case "holeEvalCons":
           if (ps.ConfirmArgumentCount(1)) {
             HoleEvaluatorConstraint = args[ps.i];
@@ -514,9 +515,15 @@ namespace Microsoft.Dafny {
         case "holeEvalDepth":
           ps.GetNumericArgument(ref HoleEvaluatorDepth, 4);
           return true;
-        
+
         case "holeEvalRunOnce":
           HoleEvaluatorRunOnce = true;
+          return true;
+
+        case "holeEvalRemoveFileLine":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorRemoveFileLine = args[ps.i];
+          }
           return true;
 
         case "verificationLogger":

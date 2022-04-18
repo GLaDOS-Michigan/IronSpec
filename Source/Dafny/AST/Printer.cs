@@ -1148,7 +1148,7 @@ namespace Microsoft.Dafny {
         return type.ToString();
       }
     }
-    
+
     public void PrintType(Type ty) {
       Contract.Requires(ty != null);
       if (ModuleForTypes != null) {
@@ -1167,8 +1167,7 @@ namespace Microsoft.Dafny {
       string s;
       if (ModuleForTypes != null) {
         s = GetFullTypeString(ModuleForTypes, ty);
-      }
-      else {
+      } else {
         s = ty.TypeName(null, true);
       }
       if (!(ty is TypeProxy) && !s.StartsWith("_")) {
@@ -2104,6 +2103,7 @@ namespace Microsoft.Dafny {
     /// <summary>
     /// An indent of -1 means print the entire expression on one line.
     /// </summary>
+
     void PrintExpr(Expression expr, int contextBindingStrength, bool fragileContext, bool isRightmost, bool isFollowedBySemicolon, int indent, string keyword = null, int resolv_count = 2) {
       Contract.Requires(-1 <= indent);
       Contract.Requires(expr != null);
@@ -2192,7 +2192,28 @@ namespace Microsoft.Dafny {
 
       } else if (expr is NameSegment) {
         var e = (NameSegment)expr;
-        wr.Write(GetAppenededUnique(e.Name));
+        if (Prefix != "") {
+          bool shouldAppend = true;
+          DatatypeDecl dt = null;
+          if (e.Type != null && e.Type.AsDatatype != null) {
+            dt = e.Type.AsDatatype;
+            // Console.WriteLine($"here {e.Name} {e.Type} {e.Type.AsDatatype}");
+            foreach (var ctor in dt.Ctors) {
+              if (ctor.Name == e.Name) {
+                shouldAppend = false;
+                break;
+              }
+            }
+          }
+          if (shouldAppend) {
+            wr.Write(GetAppenededUnique(e.Name));
+          } else {
+            var fullModuleName = GetFullModuleName(dt.EnclosingModuleDefinition);
+            wr.Write(GetFullModuleName(dt.EnclosingModuleDefinition) + "." + e.Name);
+          }
+        } else {
+          wr.Write(e.Name);
+        }
         if (e.OptTypeArguments != null) {
           PrintTypeInstantiation(e.OptTypeArguments);
         }

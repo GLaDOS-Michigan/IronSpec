@@ -281,11 +281,11 @@ namespace Microsoft.Dafny {
           var lhss = new List<CasePattern<BoundVar>>();
           var rhss = new List<Expression>();
           foreach (var bv in existsExpr.BoundVars) {
-            lhss.Add(new CasePattern<BoundVar>(bv.Tok, 
+            lhss.Add(new CasePattern<BoundVar>(bv.Tok,
               new BoundVar(bv.Tok, currExprCondParentTuple.Item3.Name + "_" + bv.Name, bv.Type)));
           }
           rhss.Add(existsExpr.Term);
-          var cond = Expression.CreateLet(existsExpr.BodyStartTok, lhss, rhss, 
+          var cond = Expression.CreateLet(existsExpr.BodyStartTok, lhss, rhss,
             Expression.CreateBoolLiteral(existsExpr.BodyStartTok, true), false);
 
           queue.Enqueue(new Tuple<Expression, Expression, Function>(existsExpr.Term, cond, currExprCondParentTuple.Item3));
@@ -399,21 +399,61 @@ namespace Microsoft.Dafny {
       return res;
     }
 
+    public bool EvaluateAfterRemoveFileLine(Program program, string removeFileLine, string baseFuncName, int depth) {
+      var fileLineArray = removeFileLine.Split(':');
+      var file = fileLineArray[0];
+      var line = Int32.Parse(fileLineArray[1]);
+      foreach (var kvp in program.ModuleSigs) {
+        foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
+          if (Path.GetFileName(topLevelDecl.tok.filename) == file) {
+            if (topLevelDecl.BodyStartTok.line <= line && line <= topLevelDecl.BodyEndTok.line) {
+              var exprList = Expression.Conjuncts(topLevelDecl.Body).ToList();
+              // Console.WriteLine($"topLevelDecl : {topLevelDecl.FullDafnyName}");
+              var i = -1;
+              for (i = 0; i < exprList.Count - 1; i++) {
+                if (exprList[i].tok.line <= line && line < exprList[i + 1].tok.line) {
+                  break;
+                }
+              }
+              // Console.WriteLine($"{i} {Printer.ExprToString(exprList[i])}");
+              exprList.RemoveAt(i);
+              var body = exprList[0];
+              for (int j = 1; j < exprList.Count; j++) {
+                body = Expression.CreateAnd(body, exprList[j]);
+              }
+              topLevelDecl.Body = body;
+              return Evaluate(program, topLevelDecl.FullDafnyName, baseFuncName, depth);
+            }
+          }
+        }
+      }
+      return false;
+    }
+
     public bool Evaluate(Program program, string funcName, string baseFuncName, int depth) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
 
       // Collect all paths from baseFunc to func
-      if (baseFuncName == "") {
+      Console.WriteLine($"{funcName} {baseFuncName} {depth}");
+      if (baseFuncName == null) {
         baseFuncName = funcName;
       }
       Function baseFunc = GetFunction(program, baseFuncName);
       if (baseFunc == null) {
+        Console.WriteLine($"couldn't find function {baseFuncName}. List of all functions:");
+        foreach (var kvp in program.ModuleSigs) {
+          foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
+            Console.WriteLine(topLevelDecl.FullDafnyName);
+          }
+        }
         return false;
       }
       CG = GetCallGraph(baseFunc);
       Function func = GetFunction(program, funcName);
       CurrentPath.Add(new Tuple<Function, FunctionCallExpr, Expression>(baseFunc, null, null));
       GetAllPaths(baseFunc, func);
+      if (Paths.Count == 0)
+        Paths.Add(new List<Tuple<Function, FunctionCallExpr, Expression>>(CurrentPath));
       // foreach (var p in Paths) {
       //   Console.WriteLine(GetValidityLemma(p));
       //   Console.WriteLine("\n----------------------------------------------------------------\n");
@@ -787,10 +827,11 @@ namespace Microsoft.Dafny {
       var argList = env.Split(' ');
       string args = "";
       foreach (var arg in argList) {
-        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && args.StartsWith("/")) {
+        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")) {
           args += arg + " ";
         }
       }
+      // Console.WriteLine($"Creating process : ");
       dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
           $"{args} /tmp/{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
           expr, cnt, lemmaForExprValidityPosition, $"{funcName}_{cnt}");
