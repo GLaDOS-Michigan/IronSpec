@@ -920,6 +920,22 @@ namespace Microsoft.Dafny {
         } else if (t is IntType) {
           var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
           yield return zeroLiteralExpr;
+          var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
+          yield return oneLiteralExpr;
+        } else if (t is CollectionType) {
+          // create cardinality
+          var cardinalityExpr = Expression.CreateCardinality(expr, program.BuiltIns);
+          yield return cardinalityExpr;
+          if (t is SeqType) {
+            var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
+            var zerothElement = new SeqSelectExpr(expr.tok, true, expr, zeroLiteralExpr, null);
+            var st = t as SeqType;
+            zerothElement.Type = st.Arg;
+            foreach (var e in TraverseFormal(program, zerothElement)) {
+              yield return e;
+            }
+            // create 0th element of the sequence
+          }
         }
         // Console.WriteLine("pre-defined variable type");
         yield break;
@@ -940,13 +956,16 @@ namespace Microsoft.Dafny {
         // TODO traverse underlying definition as well.
       } else if (cl is NewtypeDecl) {
         var td = (NewtypeDecl)cl;
-        Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name}");
+        Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.BaseType} {td.BaseType is IntType}");
         // TODO possibly figure out other expressions from td.Constraint
         if (td.BaseType is IntType) {
           var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
           zeroLiteralExpr.Type = t;
-          // Add the literal for maximum value of this newtype decl.
+          // TODO Add the literal for maximum value of this newtype decl.
           yield return zeroLiteralExpr;
+          var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
+          oneLiteralExpr.Type = t;
+          yield return oneLiteralExpr;
         }
         // foreach (var v in TraverseType(program, td.BaseType)) {
         //   // var ngv = (Formal)variable;
@@ -965,6 +984,10 @@ namespace Microsoft.Dafny {
           var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
           zeroLiteralExpr.Type = t;
           yield return zeroLiteralExpr;
+          var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
+          oneLiteralExpr.Type = t;
+          yield return oneLiteralExpr;
+
         }
         // Console.WriteLine($"{variable.Name} is SubsetTypeDecl");
         // TODO traverse underlying definition as well.
