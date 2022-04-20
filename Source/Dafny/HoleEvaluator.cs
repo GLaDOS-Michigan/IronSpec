@@ -345,7 +345,7 @@ namespace Microsoft.Dafny {
     }
 
     public string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path) {
-      string res = "lemma validityCheck";
+      string res = "lemma {:timeLimitMultiplier 3} validityCheck";
       foreach (var nwPair in path) {
         res += "_" + nwPair.Item1.Name;
       }
@@ -746,6 +746,9 @@ namespace Microsoft.Dafny {
         return type.ToString();
       }
       if (type is UserDefinedType) {
+        var udt = type as UserDefinedType;
+        if (udt.Name == "nat" || udt.Name == "object?")
+          return udt.ToString();
         foreach (var decl in ModuleDefinition.AllTypesWithMembers(moduleDef.TopLevelDecls)) {
           if (decl.ToString() == type.ToString()) {
             var moduleName = GetFullModuleName(moduleDef);
