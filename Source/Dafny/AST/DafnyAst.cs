@@ -8882,6 +8882,7 @@ namespace Microsoft.Dafny {
   [DebuggerDisplay("{Printer.ExprToString(this)}")]
   public abstract class Expression {
     public readonly IToken tok;
+    public bool HasCardinality = false;
     [ContractInvariantMethod]
     void ObjectInvariant() {
       Contract.Invariant(tok != null);
@@ -9176,6 +9177,7 @@ namespace Microsoft.Dafny {
       var s = new UnaryOpExpr(e.tok, UnaryOpExpr.Opcode.Cardinality, e) {
         Type = builtIns.Nat()
       };
+      s.HasCardinality = true;
       return s;
     }
 

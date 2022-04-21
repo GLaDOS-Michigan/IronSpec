@@ -553,11 +553,13 @@ namespace Microsoft.Dafny {
                 // Equality
                 {
                   var equalityExpr = Expression.CreateEq(values[i], values[j], values[i].Type);
+                  equalityExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
                   availableExpressions.Add(equalityExpr);
                 }
                 // Non-Equality
                 {
                   var neqExpr = Expression.CreateNot(values[i].tok, Expression.CreateEq(values[i], values[j], values[i].Type));
+                  neqExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
                   availableExpressions.Add(neqExpr);
                   negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
                   negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
@@ -569,11 +571,13 @@ namespace Microsoft.Dafny {
                 // Lower than
                 {
                   var lowerThanExpr = Expression.CreateLess(values[i], values[j]);
+                  lowerThanExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
                   availableExpressions.Add(lowerThanExpr);
                 }
                 // Greater Equal = !(Lower than)
                 {
                   var geExpr = Expression.CreateNot(values[i].tok, Expression.CreateLess(values[i], values[j]));
+                  geExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
                   availableExpressions.Add(geExpr);
                   negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
                   negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
@@ -581,11 +585,13 @@ namespace Microsoft.Dafny {
                 // Lower Equal
                 {
                   var leExpr = Expression.CreateAtMost(values[i], values[j]);
+                  leExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
                   availableExpressions.Add(leExpr);
                 }
                 // Greater Than = !(Lower equal)
                 {
                   var gtExpr = Expression.CreateNot(values[i].tok, Expression.CreateAtMost(values[i], values[j]));
+                  gtExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
                   availableExpressions.Add(gtExpr);
                   negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
                   negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
@@ -646,6 +652,7 @@ namespace Microsoft.Dafny {
               var exprA = availableExpressions[i];
               var exprB = availableExpressions[j];
               var conjunctExpr = Expression.CreateAnd(exprA, exprB);
+              conjunctExpr.HasCardinality = exprA.HasCardinality | exprB.HasCardinality;
               availableExpressions.Add(conjunctExpr);
               BitArray bitArray = new BitArray(bitArrayList[i]);
               bitArray.Or(bitArrayList[j]);
@@ -840,7 +847,11 @@ namespace Microsoft.Dafny {
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
         pr.UniqueStringBeforeUnderscore = UnderscoreStr;
-        func.Body = Expression.CreateAnd(func.Body, expr);
+        if (expr.HasCardinality) {
+          func.Body = Expression.CreateAnd(expr, func.Body);
+        } else {
+          func.Body = Expression.CreateAnd(func.Body, expr);
+        }
         pr.PrintProgram(program, true);
         var code = $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
         code += lemmaForExprValidityString + "\n";
