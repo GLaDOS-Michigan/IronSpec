@@ -867,7 +867,7 @@ namespace Microsoft.Dafny {
     }
 
     public void PrintImplies(Program program, Function func, int availableExprAIndex, int availableExprBIndex) {
-      Console.WriteLine($"print implies {availableExprAIndex} {availableExprBIndex}");
+      // Console.WriteLine($"print implies {availableExprAIndex} {availableExprBIndex}");
       var funcName = func.FullDafnyName;
       var paramList = GetFunctionParamList(func);
       var parameterNameTypes = paramList.Item2;
