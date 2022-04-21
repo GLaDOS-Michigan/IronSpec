@@ -74,7 +74,7 @@ namespace Microsoft.Dafny {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
         // Console.WriteLine(output);
         combinationResults[index] = Result.CorrectProof;
-        Console.WriteLine(p.StartInfo.Arguments);
+        // Console.WriteLine(p.StartInfo.Arguments);
         Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
       } else if (output.EndsWith("0 errors\n")) {
         combinationResults[index] = Result.FalsePredicate;
@@ -345,7 +345,7 @@ namespace Microsoft.Dafny {
     }
 
     public string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path) {
-      string res = "lemma {:timeLimitMultiplier 3} validityCheck";
+      string res = "lemma {:timeLimitMultiplier 20} validityCheck";
       foreach (var nwPair in path) {
         res += "_" + nwPair.Item1.Name;
       }
@@ -615,14 +615,22 @@ namespace Microsoft.Dafny {
       }
       dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(runOnce);
 
+      // bool foundCorrectExpr = false;
       for (int i = 0; i < availableExpressions.Count; i++) {
         UpdateCombinationResult(i);
+        // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
       }
 
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   Console.WriteLine(i + " : " +
       //                     Printer.ExprToString(availableExpressions[i]) + " : " +
       //                     combinationResults[i].ToString());
+      // }
+
+      // If no correct expression has found, try to look at depth 2
+      // TODO: make this configurable
+      // if (foundCorrectExpr == false && depth == 1) {
+      //   depth = 2;
       // }
 
       // Until here, we only check depth 1 of expressions.
@@ -658,6 +666,23 @@ namespace Microsoft.Dafny {
         prevDepthExprStartIndex = tmp;
       }
       Console.WriteLine($"{dafnyMainExecutor.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
+      int correctProofCount = 0;
+      int incorrectProofCount = 0;
+      int invalidExprCount = 0;
+      int falsePredicateCount = 0;
+      for (int i = 0; i < availableExpressions.Count; i++) {
+        switch(combinationResults[i]) {
+          case Result.InvalidExpr: invalidExprCount++; break;
+          case Result.FalsePredicate: falsePredicateCount++; break;
+          case Result.CorrectProof: correctProofCount++; break;
+          case Result.IncorrectProof: incorrectProofCount++; break;
+          case Result.Unknown: throw new NotSupportedException();
+        }
+      }
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -15}",
+        "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "Total");
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -15}",
+        invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, availableExpressions.Count);
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   var ba = bitArrayList[i];
       //   Console.WriteLine("------------------------------");
