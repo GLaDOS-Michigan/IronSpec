@@ -399,6 +399,45 @@ namespace Microsoft.Dafny {
       return res;
     }
 
+    public IEnumerable<Expression> ListConstructors(
+      DatatypeCtor ctor, 
+      Dictionary<string, List<Expression>> typeToExpressionDict,
+      List<Expression> arguments,
+      int shouldFillIndex)
+    {
+      if (shouldFillIndex == ctor.Formals.Count) {
+        List<ActualBinding> bindings = new List<ActualBinding>();
+        foreach (var arg in arguments) {
+          bindings.Add(new ActualBinding(null, arg));
+        }
+        var applySuffixExpr = new ApplySuffix(ctor.tok, null, new NameSegment(ctor.tok, ctor.Name, null), bindings);
+        yield return applySuffixExpr;
+        yield break;
+      }
+      var ty = ctor.Formals[shouldFillIndex].Type;
+      if (typeToExpressionDict.ContainsKey(ty.ToString())) {
+        foreach (var expr in typeToExpressionDict[ty.ToString()]) {
+          arguments.Add(expr);
+          foreach (var ans in ListConstructors(ctor, typeToExpressionDict, arguments, shouldFillIndex + 1)) {
+            yield return ans;
+          }
+          arguments.RemoveAt(arguments.Count - 1);
+        }
+      }
+    }
+
+    public List<Expression> GetAllPossibleConstructors(Program program, 
+      DatatypeCtor ctor, 
+      Dictionary<string, List<Expression>> typeToExpressionDict)
+    {
+      List<Expression> result = new List<Expression>();
+      List<Expression> workingList = new List<Expression>();
+      foreach (var expr in ListConstructors(ctor, typeToExpressionDict, workingList, 0)) {
+        result.Add(expr);
+      }
+      return result;
+    }
+
     public bool EvaluateAfterRemoveFileLine(Program program, string removeFileLine, string baseFuncName, int depth) {
       var fileLineArray = removeFileLine.Split(':');
       var file = fileLineArray[0];
@@ -518,12 +557,36 @@ namespace Microsoft.Dafny {
             }
           }
         }
-        Console.WriteLine("--------------------------------");
+        Dictionary<string, List<Expression>> constructorPerTypeDict = new Dictionary<string, List<Expression>>();
         foreach (var k in typeToExpressionDict.Keys) {
-          foreach (var v in typeToExpressionDict[k]) {
-            Console.WriteLine($"{Printer.ExprToString(v),-20} {k}");
+          var t = typeToExpressionDict[k][0].Type;
+          if (t is UserDefinedType) {
+            var udt = t as UserDefinedType;
+            var cl = udt.ResolvedClass;
+            if (cl is DatatypeDecl) {
+              var dt = (DatatypeDecl)cl;
+              var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
+              constructorPerTypeDict[k] = new List<Expression>();
+              // Console.WriteLine($"{variable.Name} is DatatypeDecl");
+              foreach (var ctor in dt.Ctors) {
+                var cons = GetAllPossibleConstructors(program, ctor, typeToExpressionDict);
+                constructorPerTypeDict[k].AddRange(cons);
+              }
+            }
           }
         }
+        foreach (var k in constructorPerTypeDict.Keys) {
+          typeToExpressionDict[k].AddRange(constructorPerTypeDict[k]);
+        }
+        Console.WriteLine("--------------------------------");
+        var counter = 0;
+        foreach (var k in typeToExpressionDict.Keys) {
+          foreach (var v in typeToExpressionDict[k]) {
+            Console.WriteLine($"{counter} {Printer.ExprToString(v),-60} {k}");
+            counter++;
+          }
+        }
+        return true;
         topLevelDeclCopy = new Function(
           desiredFunction.tok, desiredFunction.Name, desiredFunction.HasStaticKeyword,
           desiredFunction.IsGhost, desiredFunction.TypeArgs, desiredFunction.Formals,
@@ -678,7 +741,7 @@ namespace Microsoft.Dafny {
       int invalidExprCount = 0;
       int falsePredicateCount = 0;
       for (int i = 0; i < availableExpressions.Count; i++) {
-        switch(combinationResults[i]) {
+        switch (combinationResults[i]) {
           case Result.InvalidExpr: invalidExprCount++; break;
           case Result.FalsePredicate: falsePredicateCount++; break;
           case Result.CorrectProof: correctProofCount++; break;
@@ -982,14 +1045,17 @@ namespace Microsoft.Dafny {
         var otd = (OpaqueTypeDecl)cl;
         // Console.WriteLine($"{variable.Name} is OpaqueTypeDecl");
         // TODO traverse underlying definition as well.
+        throw new NotImplementedException();
       } else if (cl is TypeParameter) {
         var tp = (TypeParameter)cl;
         // Console.WriteLine($"{variable.Name} is TypeParameter");
         // TODO traverse underlying definition as well.
+        throw new NotImplementedException();
       } else if (cl is InternalTypeSynonymDecl) {
         var isyn = (InternalTypeSynonymDecl)cl;
         // Console.WriteLine($"{variable.Name} is InternalTypeSynonymDecl");
         // TODO traverse underlying definition as well.
+        throw new NotImplementedException();
       } else if (cl is NewtypeDecl) {
         var td = (NewtypeDecl)cl;
         Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.BaseType} {td.BaseType is IntType}");
@@ -1002,6 +1068,8 @@ namespace Microsoft.Dafny {
           var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
           oneLiteralExpr.Type = t;
           yield return oneLiteralExpr;
+        } else {
+          throw new NotImplementedException();
         }
         // foreach (var v in TraverseType(program, td.BaseType)) {
         //   // var ngv = (Formal)variable;
@@ -1026,10 +1094,10 @@ namespace Microsoft.Dafny {
 
         }
         // Console.WriteLine($"{variable.Name} is SubsetTypeDecl");
-        // TODO traverse underlying definition as well.
       } else if (cl is ClassDecl) {
         // Console.WriteLine($"{variable.Name} is ClassDecl");
         // TODO traverse underlying definition as well.
+        throw new NotImplementedException();
       } else if (cl is DatatypeDecl) {
         var dt = (DatatypeDecl)cl;
         var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
