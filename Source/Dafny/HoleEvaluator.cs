@@ -621,6 +621,9 @@ namespace Microsoft.Dafny {
                   equalityExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
                   availableExpressions.Add(equalityExpr);
                 }
+                if (values[i] is ApplySuffix || values[j] is ApplySuffix) {
+                  continue;
+                }
                 // Non-Equality
                 {
                   var neqExpr = Expression.CreateNot(values[i].tok, Expression.CreateEq(values[i], values[j], values[i].Type));
