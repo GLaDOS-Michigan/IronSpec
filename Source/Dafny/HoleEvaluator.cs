@@ -400,6 +400,7 @@ namespace Microsoft.Dafny {
     }
 
     public IEnumerable<Expression> ListConstructors(
+      Type ty,
       DatatypeCtor ctor, 
       Dictionary<string, List<Expression>> typeToExpressionDict,
       List<Expression> arguments,
@@ -408,17 +409,18 @@ namespace Microsoft.Dafny {
       if (shouldFillIndex == ctor.Formals.Count) {
         List<ActualBinding> bindings = new List<ActualBinding>();
         foreach (var arg in arguments) {
-          bindings.Add(new ActualBinding(null, arg));
+          bindings.Add(new ActualBinding(arg.tok, arg));
         }
         var applySuffixExpr = new ApplySuffix(ctor.tok, null, new NameSegment(ctor.tok, ctor.Name, null), bindings);
+        applySuffixExpr.Type = ty;
         yield return applySuffixExpr;
         yield break;
       }
-      var ty = ctor.Formals[shouldFillIndex].Type;
-      if (typeToExpressionDict.ContainsKey(ty.ToString())) {
-        foreach (var expr in typeToExpressionDict[ty.ToString()]) {
+      var t = ctor.Formals[shouldFillIndex].Type;
+      if (typeToExpressionDict.ContainsKey(t.ToString())) {
+        foreach (var expr in typeToExpressionDict[t.ToString()]) {
           arguments.Add(expr);
-          foreach (var ans in ListConstructors(ctor, typeToExpressionDict, arguments, shouldFillIndex + 1)) {
+          foreach (var ans in ListConstructors(ty, ctor, typeToExpressionDict, arguments, shouldFillIndex + 1)) {
             yield return ans;
           }
           arguments.RemoveAt(arguments.Count - 1);
@@ -426,13 +428,14 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public List<Expression> GetAllPossibleConstructors(Program program, 
+    public List<Expression> GetAllPossibleConstructors(Program program,
+      Type ty,
       DatatypeCtor ctor, 
       Dictionary<string, List<Expression>> typeToExpressionDict)
     {
       List<Expression> result = new List<Expression>();
       List<Expression> workingList = new List<Expression>();
-      foreach (var expr in ListConstructors(ctor, typeToExpressionDict, workingList, 0)) {
+      foreach (var expr in ListConstructors(ty, ctor, typeToExpressionDict, workingList, 0)) {
         result.Add(expr);
       }
       return result;
@@ -569,7 +572,7 @@ namespace Microsoft.Dafny {
               constructorPerTypeDict[k] = new List<Expression>();
               // Console.WriteLine($"{variable.Name} is DatatypeDecl");
               foreach (var ctor in dt.Ctors) {
-                var cons = GetAllPossibleConstructors(program, ctor, typeToExpressionDict);
+                var cons = GetAllPossibleConstructors(program, t, ctor, typeToExpressionDict);
                 constructorPerTypeDict[k].AddRange(cons);
               }
             }
@@ -586,7 +589,6 @@ namespace Microsoft.Dafny {
             counter++;
           }
         }
-        return true;
         topLevelDeclCopy = new Function(
           desiredFunction.tok, desiredFunction.Name, desiredFunction.HasStaticKeyword,
           desiredFunction.IsGhost, desiredFunction.TypeArgs, desiredFunction.Formals,
