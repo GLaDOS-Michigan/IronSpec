@@ -83,5 +83,30 @@ namespace Microsoft.Dafny {
         AdjacencyWeightList[source].Add(new Tuple<U, V, W>(destination, weight, condition));
       }
     }
+
+    public HashSet<U> DFS(U start) {
+      var visited = new HashSet<U>();
+
+      if (!AdjacencyWeightList.ContainsKey(start))
+        return visited;
+
+      var stack = new Stack<U>();
+      stack.Push(start);
+
+      while (stack.Count > 0) {
+        var vertex = stack.Pop();
+
+        if (visited.Contains(vertex))
+          continue;
+
+        visited.Add(vertex);
+
+        foreach (var neighbor in AdjacencyWeightList[vertex])
+          if (!visited.Contains(neighbor.Item1))
+            stack.Push(neighbor.Item1);
+      }
+
+      return visited;
+    }
   }
 }

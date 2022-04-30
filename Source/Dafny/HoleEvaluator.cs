@@ -196,7 +196,7 @@ namespace Microsoft.Dafny {
       return result;
     }
 
-    public DirectedCallGraph<Function, FunctionCallExpr, Expression> GetCallGraph(Function baseFunc) {
+    public static DirectedCallGraph<Function, FunctionCallExpr, Expression> GetCallGraph(Function baseFunc) {
       Contract.Requires(baseFunc != null);
       DirectedCallGraph<Function, FunctionCallExpr, Expression> G = new DirectedCallGraph<Function, FunctionCallExpr, Expression>();
       // Tuple of SubExpression that is going to be parsed, pre-condition to reach this SubExpression, containing Function
@@ -409,7 +409,7 @@ namespace Microsoft.Dafny {
       if (shouldFillIndex == ctor.Formals.Count) {
         List<ActualBinding> bindings = new List<ActualBinding>();
         foreach (var arg in arguments) {
-          bindings.Add(new ActualBinding(arg.tok, arg));
+          bindings.Add(new ActualBinding(null, arg));
         }
         var applySuffixExpr = new ApplySuffix(ctor.tok, null, new NameSegment(ctor.tok, ctor.Name, null), bindings);
         applySuffixExpr.Type = ty;
@@ -613,6 +613,9 @@ namespace Microsoft.Dafny {
             for (int i = 0; i < values.Count; i++) {
               for (int j = i + 1; j < values.Count; j++) {
                 if (values[i] is LiteralExpr && values[j] is LiteralExpr) {
+                  continue;
+                }
+                if (values[i] is ApplySuffix && values[j] is ApplySuffix) {
                   continue;
                 }
                 // Equality
@@ -893,7 +896,7 @@ namespace Microsoft.Dafny {
       return new Tuple<string, string>(paramNames, parameterNameTypes);
     }
 
-    public Function GetFunction(Program program, string funcName) {
+    public static Function GetFunction(Program program, string funcName) {
       foreach (var kvp in program.ModuleSigs) {
         foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
           if (topLevelDecl.FullDafnyName == funcName) {

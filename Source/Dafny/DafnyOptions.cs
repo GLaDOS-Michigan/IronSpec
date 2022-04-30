@@ -140,6 +140,7 @@ namespace Microsoft.Dafny {
     public virtual TestGenerationOptions TestGenOptions =>
       testGenOptions ??= new TestGenerationOptions();
 
+    public string FindHoleFromFunctionName = null;
     public string HoleEvaluatorFunctionName = null;
     public string HoleEvaluatorBaseFunctionName = null;
     public int HoleEvaluatorDepth = 1;
@@ -486,6 +487,12 @@ namespace Microsoft.Dafny {
 
         case "extractCounterexample":
           ExtractCounterexample = true;
+          return true;
+
+        case "holeFinder":
+          if (ps.ConfirmArgumentCount(1)) {
+            FindHoleFromFunctionName = args[ps.i];
+          }
           return true;
 
         case "holeEval":
