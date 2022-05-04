@@ -286,8 +286,15 @@ namespace Microsoft.Dafny {
       string err = Dafny.Main.ParseCheck(dafnyFiles, programName, reporter, out dafnyProgram);
       if (DafnyOptions.O.FindHoleFromFunctionName != null) {
         var holeFinder = new HoleFinder();
-        var holeFunc = holeFinder.FindHole(dafnyProgram,
-            DafnyOptions.O.FindHoleFromFunctionName);
+        Function holeFunc = null;
+        if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
+          holeFunc = holeFinder.FindHoleAfterRemoveFileLine(dafnyProgram,
+              DafnyOptions.O.HoleEvaluatorRemoveFileLine,
+              DafnyOptions.O.FindHoleFromFunctionName);
+        } else {
+          holeFunc = holeFinder.FindHole(dafnyProgram,
+              DafnyOptions.O.FindHoleFromFunctionName);
+        }
         if (holeFunc != null) {
           Console.WriteLine($"hole is at func :{holeFunc.FullDafnyName}");
         }

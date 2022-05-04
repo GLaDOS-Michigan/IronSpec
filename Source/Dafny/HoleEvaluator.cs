@@ -18,7 +18,13 @@ using Microsoft.Boogie;
 using System.Threading.Tasks;
 
 namespace Microsoft.Dafny {
-
+  enum Result {
+    Unknown = 0,
+    CorrectProof = 1,
+    IncorrectProof = 2,
+    FalsePredicate = 3,
+    InvalidExpr = 4
+  }
   public class HoleEvaluator {
     private string UnderscoreStr = "";
     private static Random random = new Random();
@@ -30,13 +36,7 @@ namespace Microsoft.Dafny {
     }
     private List<Expression> availableExpressions = new List<Expression>();
     private List<BitArray> bitArrayList = new List<BitArray>();
-    enum Result {
-      Unknown = 0,
-      CorrectProof = 1,
-      IncorrectProof = 2,
-      FalsePredicate = 3,
-      InvalidExpr = 4
-    }
+
     private bool IsGoodResult(Result result) {
       return (result == Result.CorrectProof ||
               result == Result.IncorrectProof ||
@@ -332,19 +332,17 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public ModuleDefinition CurrentModuleDef = null;
-
-    public string GetPrefixedString(string prefix, Expression expr) {
+    public static string GetPrefixedString(string prefix, Expression expr, ModuleDefinition currentModuleDef) {
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr);
         pr.Prefix = prefix;
-        pr.ModuleForTypes = CurrentModuleDef;
+        pr.ModuleForTypes = currentModuleDef;
         pr.PrintExpression(expr, false);
         return wr.ToString();
       }
     }
 
-    public string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path) {
+    public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef) {
       string res = "lemma {:timeLimitMultiplier 20} validityCheck";
       foreach (var nwPair in path) {
         res += "_" + nwPair.Item1.Name;
@@ -359,7 +357,7 @@ namespace Microsoft.Dafny {
       }
       res += ")\n";
       foreach (var req in path[0].Item1.Req) {
-        res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E) + "\n";
+        res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
       }
       res += "  requires " + path[0].Item1.FullDafnyName + "(";
       sep = "";
@@ -372,22 +370,22 @@ namespace Microsoft.Dafny {
         var callExpr = path[i + 1].Item2;
         var condExpr = path[i + 1].Item3;
         if (condExpr != null) {
-          CurrentModuleDef = path[i].Item1.EnclosingClass.EnclosingModuleDefinition;
-          res += "  requires " + GetPrefixedString(path[i].Item1.Name + "_", condExpr) + "\n";
+          currentModuleDef = path[i].Item1.EnclosingClass.EnclosingModuleDefinition;
+          res += "  requires " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) + "\n";
         }
         for (int j = 0; j < callExpr.Args.Count; j++) {
           res += "  requires ";
-          res += GetPrefixedString(path[i].Item1.Name + "_", callExpr.Args[j]);
+          res += GetPrefixedString(path[i].Item1.Name + "_", callExpr.Args[j], currentModuleDef);
           res += " == ";
           res += path[i + 1].Item1.Name + "_" + path[i + 1].Item1.Formals[j].Name + "\n";
         }
         foreach (var req in callExpr.Function.Req) {
-          res += "  requires " + GetPrefixedString(path[i + 1].Item1.Name + "_", req.E) + "\n";
+          res += "  requires " + GetPrefixedString(path[i + 1].Item1.Name + "_", req.E, currentModuleDef) + "\n";
         }
         res += "  requires " + callExpr.Function.FullDafnyName + "(";
         sep = "";
         foreach (var arg in callExpr.Args) {
-          res += sep + GetPrefixedString(path[i].Item1.Name + "_", arg);
+          res += sep + GetPrefixedString(path[i].Item1.Name + "_", arg, currentModuleDef);
           sep = ", ";
         }
         res += ")\n";
@@ -401,11 +399,10 @@ namespace Microsoft.Dafny {
 
     public IEnumerable<Expression> ListConstructors(
       Type ty,
-      DatatypeCtor ctor, 
+      DatatypeCtor ctor,
       Dictionary<string, List<Expression>> typeToExpressionDict,
       List<Expression> arguments,
-      int shouldFillIndex)
-    {
+      int shouldFillIndex) {
       if (shouldFillIndex == ctor.Formals.Count) {
         List<ActualBinding> bindings = new List<ActualBinding>();
         foreach (var arg in arguments) {
@@ -430,9 +427,8 @@ namespace Microsoft.Dafny {
 
     public List<Expression> GetAllPossibleConstructors(Program program,
       Type ty,
-      DatatypeCtor ctor, 
-      Dictionary<string, List<Expression>> typeToExpressionDict)
-    {
+      DatatypeCtor ctor,
+      Dictionary<string, List<Expression>> typeToExpressionDict) {
       List<Expression> result = new List<Expression>();
       List<Expression> workingList = new List<Expression>();
       foreach (var expr in ListConstructors(ty, ctor, typeToExpressionDict, workingList, 0)) {
@@ -834,7 +830,7 @@ namespace Microsoft.Dafny {
       return true;
     }
 
-    public string GetFullModuleName(ModuleDefinition moduleDef) {
+    public static string GetFullModuleName(ModuleDefinition moduleDef) {
       if (moduleDef.Name == "_module") {
         return "";
       } else if (moduleDef.EnclosingModule.Name == "_module") {
@@ -844,7 +840,7 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
+    public static string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
       if (moduleDef is null) {
         return type.ToString();
       }
@@ -883,7 +879,7 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public Tuple<string, string> GetFunctionParamList(Function func, string namePrefix = "") {
+    public static Tuple<string, string> GetFunctionParamList(Function func, string namePrefix = "") {
       var funcName = func.FullDafnyName;
       string parameterNameTypes = "";
       string paramNames = "";
@@ -910,7 +906,7 @@ namespace Microsoft.Dafny {
     public void PrintExprAndCreateProcess(Program program, Function func, Expression expr, int cnt) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
-      string lemmaForExprValidityString = GetValidityLemma(Paths[0]);
+      string lemmaForExprValidityString = GetValidityLemma(Paths[0], null);
 
       var funcName = func.FullDafnyName;
       int lemmaForExprValidityPosition = 0;
