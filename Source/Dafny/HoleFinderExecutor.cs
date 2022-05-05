@@ -41,7 +41,9 @@ namespace Microsoft.Dafny {
           var output = firstOutput;
           var expectedOutput =
             $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
-          if (DafnyExecutor.IsCorrectOutput(output, expectedOutput)) {
+          var expectedInconclusiveOutputStart =
+            $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+          if (DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
             if (processToFunc[p].Name == "nullFunc") {
               Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: proof goes through, and there is no hole");
             } else {

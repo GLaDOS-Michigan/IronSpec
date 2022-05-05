@@ -60,17 +60,21 @@ namespace Microsoft.Dafny {
       return sb.ToString();
     }
 
+    public static int validityLemmaNameStartCol = 0;
+
     private void UpdateCombinationResult(int index) {
       var p = dafnyMainExecutor.dafnyProcesses[index];
       var fileName = dafnyMainExecutor.inputFileName[p];
       var position = dafnyMainExecutor.processToPostConditionPosition[p];
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
+      var expectedInconclusiveOutputStart = 
+        $"/tmp/{fileName}.dfy({position},{validityLemmaNameStartCol}): Verification inconclusive";
       var output = dafnyMainExecutor.dafnyOutput[p];
       // Console.WriteLine($"{index} => {output}");
       // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
       // Console.WriteLine($"----------------------------------------------------------------");
-      if (DafnyExecutor.IsCorrectOutput(output, expectedOutput)) {
+      if (DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
         // Console.WriteLine(output);
         combinationResults[index] = Result.CorrectProof;
@@ -343,7 +347,7 @@ namespace Microsoft.Dafny {
     }
 
     public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef) {
-      string res = "lemma {:timeLimitMultiplier 20} validityCheck";
+      string res = "lemma {:timeLimitMultiplier 2} validityCheck";
       foreach (var nwPair in path) {
         res += "_" + nwPair.Item1.Name;
       }
@@ -470,6 +474,13 @@ namespace Microsoft.Dafny {
 
     public bool Evaluate(Program program, string funcName, string baseFuncName, int depth) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
+      int timeLimitMultiplier = 2;
+      int timeLimitMultiplierLength = 0;
+      while (timeLimitMultiplier >= 1) {
+        timeLimitMultiplierLength++;
+        timeLimitMultiplier /= 10;
+      }
+      validityLemmaNameStartCol = 30 + timeLimitMultiplierLength;
 
       // Collect all paths from baseFunc to func
       Console.WriteLine($"{funcName} {baseFuncName} {depth}");

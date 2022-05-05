@@ -22,7 +22,6 @@ namespace Microsoft.Dafny {
   public class HoleFinder {
     private string UnderscoreStr = "";
     private static Random random = new Random();
-
     public static string RandomString(int length) {
       const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
       return new string(Enumerable.Repeat(chars, length)
@@ -93,8 +92,10 @@ namespace Microsoft.Dafny {
         var position = holeFinderExecutor.processToPostConditionPosition[p];
         var expectedOutput =
           $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
+        var expectedInconclusiveOutputStart =
+          $"/tmp/{fileName}.dfy({position},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
         Result result;
-        if (DafnyExecutor.IsCorrectOutput(output, expectedOutput)) {
+        if (DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
           // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
           // Console.WriteLine(output);
           result = Result.CorrectProof;
@@ -163,6 +164,13 @@ namespace Microsoft.Dafny {
       return null;
     }
     public Function FindHole(Program program, string funcName, string dotGraphOutputPath = "") {
+      int timeLimitMultiplier = 2;
+      int timeLimitMultiplierLength = 0;
+      while (timeLimitMultiplier >= 1) {
+        timeLimitMultiplierLength++;
+        timeLimitMultiplier /= 10;
+      }
+      HoleEvaluator.validityLemmaNameStartCol = 30 + timeLimitMultiplierLength;
       UnderscoreStr = RandomString(8);
       holeFinderExecutor.sw = Stopwatch.StartNew();
       Function func = HoleEvaluator.GetFunction(program, funcName);
@@ -200,7 +208,9 @@ namespace Microsoft.Dafny {
       var position = holeFinderExecutor.processToPostConditionPosition[p];
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
-      if (DafnyExecutor.IsCorrectOutput(output, expectedOutput)) {
+      var expectedInconclusiveOutputStart = 
+        $"/tmp/{fileName}.dfy({position},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+      if (DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
         Console.WriteLine($"{holeFinderExecutor.sw.ElapsedMilliseconds / 1000}:: proof already goes through!");
         return null;
       }
