@@ -21,9 +21,10 @@ namespace Microsoft.Dafny {
   enum Result {
     Unknown = 0,
     CorrectProof = 1,
-    IncorrectProof = 2,
-    FalsePredicate = 3,
-    InvalidExpr = 4
+    CorrectProofByTimeout = 2,
+    IncorrectProof = 3,
+    FalsePredicate = 4,
+    InvalidExpr = 5
   }
   public class HoleEvaluator {
     private string UnderscoreStr = "";
@@ -39,6 +40,7 @@ namespace Microsoft.Dafny {
 
     private bool IsGoodResult(Result result) {
       return (result == Result.CorrectProof ||
+              result == Result.CorrectProofByTimeout ||
               result == Result.IncorrectProof ||
               result == Result.Unknown);
     }
@@ -66,18 +68,20 @@ namespace Microsoft.Dafny {
       var p = dafnyMainExecutor.dafnyProcesses[index];
       var fileName = dafnyMainExecutor.inputFileName[p];
       var position = dafnyMainExecutor.processToPostConditionPosition[p];
+      var lemmaStartPosition = dafnyMainExecutor.processToLemmaStartPosition[p];
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
       var expectedInconclusiveOutputStart = 
-        $"/tmp/{fileName}.dfy({position},{validityLemmaNameStartCol}): Verification inconclusive";
+        $"/tmp/{fileName}.dfy({lemmaStartPosition},{validityLemmaNameStartCol}): Verification inconclusive";
       var output = dafnyMainExecutor.dafnyOutput[p];
       // Console.WriteLine($"{index} => {output}");
       // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
       // Console.WriteLine($"----------------------------------------------------------------");
-      if (DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
+      var res = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
+      if (res != Result.IncorrectProof) {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
         // Console.WriteLine(output);
-        combinationResults[index] = Result.CorrectProof;
+        combinationResults[index] = res;
         // Console.WriteLine(p.StartInfo.Arguments);
         Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
       } else if (output.EndsWith("0 errors\n")) {
@@ -752,6 +756,7 @@ namespace Microsoft.Dafny {
       }
       Console.WriteLine($"{dafnyMainExecutor.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
       int correctProofCount = 0;
+      int correctProofByTimeoutCount = 0;
       int incorrectProofCount = 0;
       int invalidExprCount = 0;
       int falsePredicateCount = 0;
@@ -760,14 +765,15 @@ namespace Microsoft.Dafny {
           case Result.InvalidExpr: invalidExprCount++; break;
           case Result.FalsePredicate: falsePredicateCount++; break;
           case Result.CorrectProof: correctProofCount++; break;
+          case Result.CorrectProofByTimeout: correctProofByTimeoutCount++; break;
           case Result.IncorrectProof: incorrectProofCount++; break;
           case Result.Unknown: throw new NotSupportedException();
         }
       }
-      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -15}",
-        "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "Total");
-      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -15}",
-        invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, availableExpressions.Count);
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15]",
+        "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "Total");
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
+        invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount, availableExpressions.Count);
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   var ba = bitArrayList[i];
       //   Console.WriteLine("------------------------------");
@@ -794,13 +800,13 @@ namespace Microsoft.Dafny {
       // The 0th process represents no change to the predicate, and
       // if that is a correct predicate, it means the proof already 
       // goes through and no additional conjunction is needed.
-      if (combinationResults[0] == Result.CorrectProof) {
+      if (combinationResults[0] == Result.CorrectProof || combinationResults[0] == Result.CorrectProofByTimeout) {
         Console.WriteLine("proof already goes through and no additional conjunction is needed!");
         return true;
       }
       List<int> correctExpressionsIndex = new List<int>();
       for (int i = 0; i < availableExpressions.Count; i++) {
-        if (combinationResults[i] == Result.CorrectProof)
+        if (combinationResults[i] == Result.CorrectProof || combinationResults[i] == Result.CorrectProofByTimeout)
           correctExpressionsIndex.Add(i);
       }
       // for (int i = 0; i < correctExpressionsIndex.Count; i++) {
@@ -921,6 +927,7 @@ namespace Microsoft.Dafny {
 
       var funcName = func.FullDafnyName;
       int lemmaForExprValidityPosition = 0;
+      int lemmaForExprValidityStartPosition = 0;
 
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
@@ -932,6 +939,7 @@ namespace Microsoft.Dafny {
         }
         pr.PrintProgram(program, true);
         var code = $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+        lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForExprValidityString + "\n";
         lemmaForExprValidityPosition = code.Count(f => f == '\n');
         File.WriteAllTextAsync($"/tmp/{funcName}_{cnt}.dfy", code);
@@ -951,7 +959,7 @@ namespace Microsoft.Dafny {
       // Console.WriteLine($"Creating process : ");
       dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
           $"{args} /tmp/{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
-          expr, cnt, lemmaForExprValidityPosition, $"{funcName}_{cnt}");
+          expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, $"{funcName}_{cnt}");
       // Printer.PrintFunction(transformedFunction, 0, false);
     }
 
@@ -992,7 +1000,7 @@ namespace Microsoft.Dafny {
       }
       dafnyImpliesExecutor.createProcessWithOutput(dafnyBinaryPath,
         $"{args} /tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
-        availableExprAIndex, availableExprBIndex, lemmaForCheckingImpliesPosition,
+        availableExprAIndex, availableExprBIndex, -1, lemmaForCheckingImpliesPosition,
         $"{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy");
     }
 

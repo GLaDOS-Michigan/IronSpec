@@ -48,6 +48,7 @@ namespace Microsoft.Dafny {
       p.Add(new Tuple<Function, FunctionCallExpr, Expression>(rootFunc, null, null));
       string lemmaForExprValidityString = HoleEvaluator.GetValidityLemma(p, null);
       int lemmaForExprValidityPosition = 0;
+      int lemmaForExprValidityStartPosition = 0;
 
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
@@ -57,6 +58,7 @@ namespace Microsoft.Dafny {
         }
         pr.PrintProgram(program, true);
         var code = $"// {funcName} set to false\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+        lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForExprValidityString + "\n";
         lemmaForExprValidityPosition = code.Count(f => f == '\n');
         File.WriteAllTextAsync($"/tmp/holeFinder_{funcName}.dfy", code);
@@ -76,7 +78,7 @@ namespace Microsoft.Dafny {
       }
       holeFinderExecutor.createProcessWithOutput(dafnyBinaryPath,
           $"{args} /tmp/holeFinder_{funcName}.dfy /exitAfterFirstError",
-          func, lemmaForExprValidityPosition, $"holeFinder_{funcName}");
+          func, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, $"holeFinder_{funcName}");
     }
 
     void PrintCallGraphWithPotentialBugInfo(
@@ -90,15 +92,16 @@ namespace Microsoft.Dafny {
         var output = holeFinderExecutor.dafnyOutput[p];
         var fileName = holeFinderExecutor.inputFileName[p];
         var position = holeFinderExecutor.processToPostConditionPosition[p];
+        var lemmaStartPosition = holeFinderExecutor.processToLemmaStartPosition[p];
         var expectedOutput =
           $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
         var expectedInconclusiveOutputStart =
-          $"/tmp/{fileName}.dfy({position},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
-        Result result;
-        if (DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
+          $"/tmp/{fileName}.dfy({lemmaStartPosition},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+        Result result = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
+        if (result != Result.IncorrectProof) {
           // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
           // Console.WriteLine(output);
-          result = Result.CorrectProof;
+          // result = Result.CorrectProof;
           // Console.WriteLine(p.StartInfo.Arguments);
           Console.WriteLine(holeFinderExecutor.processToFunc[p].FullDafnyName);
         } else if (output.EndsWith("0 errors\n")) {
@@ -112,8 +115,11 @@ namespace Microsoft.Dafny {
           case Result.CorrectProof:
             graphVizOutput += $"  \"{node.FullDafnyName}\" [label=\"{node.FullDafnyName}\" style=\"filled,dashed\" color=\"black\" fillcolor=1];\n";
             break;
-          case Result.FalsePredicate:
+          case Result.CorrectProofByTimeout:
             graphVizOutput += $"  \"{node.FullDafnyName}\" [label=\"{node.FullDafnyName}\" style=\"filled,dashed\" color=\"black\" fillcolor=2];\n";
+            break;
+          case Result.FalsePredicate:
+            graphVizOutput += $"  \"{node.FullDafnyName}\" [label=\"{node.FullDafnyName}\" style=\"filled,dashed\" color=\"black\" fillcolor=3];\n";
             break;
           case Result.IncorrectProof:
           case Result.InvalidExpr:
@@ -206,12 +212,15 @@ namespace Microsoft.Dafny {
       var output = holeFinderExecutor.dafnyOutput[p];
       var fileName = holeFinderExecutor.inputFileName[p];
       var position = holeFinderExecutor.processToPostConditionPosition[p];
+      var lemmaStartPosition = holeFinderExecutor.processToLemmaStartPosition[p];
       var expectedOutput =
         $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
       var expectedInconclusiveOutputStart = 
-        $"/tmp/{fileName}.dfy({position},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
-      if (DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
-        Console.WriteLine($"{holeFinderExecutor.sw.ElapsedMilliseconds / 1000}:: proof already goes through!");
+        $"/tmp/{fileName}.dfy({lemmaStartPosition},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+      Console.WriteLine(expectedInconclusiveOutputStart);
+      var nullChangeResult = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
+      if (nullChangeResult != Result.IncorrectProof) {
+        Console.WriteLine($"{holeFinderExecutor.sw.ElapsedMilliseconds / 1000}:: proof already goes through! {nullChangeResult.ToString()}");
         return null;
       }
       if (dotGraphOutputPath == "")

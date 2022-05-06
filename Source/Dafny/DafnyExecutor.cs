@@ -28,16 +28,17 @@ namespace Microsoft.Dafny {
     public Dictionary<Process, int> processToAvailableExprAIndex = new Dictionary<Process, int>();
     public Dictionary<Process, int> processToAvailableExprBIndex = new Dictionary<Process, int>();
     public Dictionary<Process, int> processToPostConditionPosition = new Dictionary<Process, int>();
+    public Dictionary<Process, int> processToLemmaStartPosition = new Dictionary<Process, int>();
 
-    public static bool IsCorrectOutput(string output, string expectedOutput, string expectedInconclusiveOutputStart) {
+    public static Result IsCorrectOutput(string output, string expectedOutput, string expectedInconclusiveOutputStart) {
       if (output.EndsWith("1 error\n")) {
         var outputList = output.Split('\n');
-        return ((outputList.Length >= 7) && (outputList[outputList.Length - 7] == expectedOutput));
+        return ((outputList.Length >= 7) && (outputList[outputList.Length - 7] == expectedOutput)) ? Result.CorrectProof : Result.IncorrectProof;
       } else if (output.EndsWith("1 inconclusive\n")) {
         var outputList = output.Split('\n');
-        return (outputList.Length >= 4) && outputList[outputList.Length - 4].StartsWith(expectedInconclusiveOutputStart);
+        return ((outputList.Length >= 4) && outputList[outputList.Length - 4].StartsWith(expectedInconclusiveOutputStart)) ? Result.CorrectProofByTimeout : Result.IncorrectProof;
       } else {
-        return false;
+        return Result.IncorrectProof;
       }
     }
 
@@ -88,9 +89,10 @@ namespace Microsoft.Dafny {
             var expectedOutput =
               $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
             var expectedInconclusiveOutputStart =
-              $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
-            if (IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
-              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
+              $"/tmp/{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+            var result = IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
+            if (result != Result.IncorrectProof) {
+              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer {result.ToString()} #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
             }
             dafnyOutput[readyProcesses[i]] = output;
             File.WriteAllTextAsync($"/tmp/output_{inputFileName[readyProcesses[i]]}_1.txt",
@@ -104,9 +106,10 @@ namespace Microsoft.Dafny {
             var expectedOutput =
               $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
             var expectedInconclusiveOutputStart =
-              $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
-            if (IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
-              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
+              $"/tmp/{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+            var result = IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
+            if (result != Result.IncorrectProof) {
+              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer {result.ToString()} #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
             }
             dafnyOutput[p] = output;
             var args = p.StartInfo.Arguments;
@@ -120,7 +123,7 @@ namespace Microsoft.Dafny {
     }
 
     public void createProcessWithOutput(string command, string args, Expression expr,
-        int cnt, int postConditionPos, string inputFile) {
+        int cnt, int postConditionPos, int lemmaStartPos, string inputFile) {
       Process p = new Process();
       p.StartInfo = new ProcessStartInfo(command, args);
       p.StartInfo.RedirectStandardOutput = true;
@@ -135,12 +138,14 @@ namespace Microsoft.Dafny {
       processToExpr[p] = expr;
       processToCnt[p] = cnt;
       processToPostConditionPosition[p] = postConditionPos;
+      processToLemmaStartPosition[p] = lemmaStartPos;
       dafnyOutput[p] = "";
       inputFileName[p] = inputFile;
     }
 
     public void createProcessWithOutput(string command, string args,
-        int availableExprAIndex, int availableExprBIndex, int postConditionPos, string inputFile) {
+        int availableExprAIndex, int availableExprBIndex, 
+        int lemmaStartPos, int postConditionPos, string inputFile) {
       Process p = new Process();
       p.StartInfo = new ProcessStartInfo(command, args);
       p.StartInfo.RedirectStandardOutput = true;
@@ -155,6 +160,7 @@ namespace Microsoft.Dafny {
       processToAvailableExprAIndex[p] = availableExprAIndex;
       processToAvailableExprBIndex[p] = availableExprBIndex;
       processToPostConditionPosition[p] = postConditionPos;
+      processToLemmaStartPosition[p] = lemmaStartPos;
       inputFileName[p] = inputFile;
       dafnyOutput[p] = "";
     }

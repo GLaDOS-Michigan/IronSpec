@@ -24,6 +24,7 @@ namespace Microsoft.Dafny {
     public List<Process> dafnyProcesses = new List<Process>();
     private List<Process> readyProcesses = new List<Process>();
     public Dictionary<Process, int> processToPostConditionPosition = new Dictionary<Process, int>();
+    public Dictionary<Process, int> processToLemmaStartPosition = new Dictionary<Process, int>();
     public Dictionary<Process, Function> processToFunc = new Dictionary<Process, Function>();
     public Dictionary<Function, Process> funcToProcess = new Dictionary<Function, Process>();
 
@@ -42,12 +43,13 @@ namespace Microsoft.Dafny {
           var expectedOutput =
             $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
           var expectedInconclusiveOutputStart =
-            $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
-          if (DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart)) {
+            $"/tmp/{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+          var result = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
+          if (result != Result.IncorrectProof) {
             if (processToFunc[p].Name == "nullFunc") {
-              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: proof goes through, and there is no hole");
+              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: proof goes through, and there is no hole {result.ToString()}");
             } else {
-              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: possible bug in {processToFunc[p]}");
+              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: possible bug in {processToFunc[p]} {result.ToString()}");
             }
           }
           dafnyOutput[p] = output;
@@ -59,7 +61,7 @@ namespace Microsoft.Dafny {
     }
 
     public void createProcessWithOutput(string command, string args, Function func,
-        int postConditionPos, string inputFile) {
+        int postConditionPos, int lemmaStartPos, string inputFile) {
       Process p = new Process();
       p.StartInfo = new ProcessStartInfo(command, args);
       p.StartInfo.RedirectStandardOutput = true;
@@ -69,6 +71,7 @@ namespace Microsoft.Dafny {
       readyProcesses.Add(p);
       dafnyProcesses.Add(p);
       processToPostConditionPosition[p] = postConditionPos;
+      processToLemmaStartPosition[p] = lemmaStartPos;
       processToFunc[p] = func;
       funcToProcess[func] = p;
       dafnyOutput[p] = "";
