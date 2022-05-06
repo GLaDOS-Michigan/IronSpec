@@ -70,9 +70,9 @@ namespace Microsoft.Dafny {
       var position = dafnyMainExecutor.processToPostConditionPosition[p];
       var lemmaStartPosition = dafnyMainExecutor.processToLemmaStartPosition[p];
       var expectedOutput =
-        $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
+        $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
       var expectedInconclusiveOutputStart = 
-        $"/tmp/{fileName}.dfy({lemmaStartPosition},{validityLemmaNameStartCol}): Verification inconclusive";
+        $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({lemmaStartPosition},{validityLemmaNameStartCol}): Verification inconclusive";
       var output = dafnyMainExecutor.dafnyOutput[p];
       // Console.WriteLine($"{index} => {output}");
       // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
@@ -770,7 +770,7 @@ namespace Microsoft.Dafny {
           case Result.Unknown: throw new NotSupportedException();
         }
       }
-      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15]",
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
         "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "Total");
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
         invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount, availableExpressions.Count);
@@ -842,7 +842,7 @@ namespace Microsoft.Dafny {
         }
       }
       graphVizOutput += "}\n";
-      File.WriteAllTextAsync($"/tmp/graph_{funcName}_implies.dot", graphVizOutput);
+      File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}graph_{funcName}_implies.dot", graphVizOutput);
       Console.WriteLine($"{dafnyMainExecutor.sw.ElapsedMilliseconds / 1000}:: end");
       return true;
     }
@@ -942,7 +942,7 @@ namespace Microsoft.Dafny {
         lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForExprValidityString + "\n";
         lemmaForExprValidityPosition = code.Count(f => f == '\n');
-        File.WriteAllTextAsync($"/tmp/{funcName}_{cnt}.dfy", code);
+        File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
         // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
         // Console.WriteLine("");
       }
@@ -958,7 +958,7 @@ namespace Microsoft.Dafny {
       }
       // Console.WriteLine($"Creating process : ");
       dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
-          $"{args} /tmp/{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
+          $"{args} {DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
           expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, $"{funcName}_{cnt}");
       // Printer.PrintFunction(transformedFunction, 0, false);
     }
@@ -985,7 +985,7 @@ namespace Microsoft.Dafny {
         var code = $"// Implies {Printer.ExprToString(A)} ==> {Printer.ExprToString(B)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
         code += lemmaForCheckingImpliesString + "\n";
         lemmaForCheckingImpliesPosition = code.Count(f => f == '\n');
-        File.WriteAllTextAsync($"/tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy", code);
+        File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy", code);
       }
 
       string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
@@ -999,7 +999,7 @@ namespace Microsoft.Dafny {
         }
       }
       dafnyImpliesExecutor.createProcessWithOutput(dafnyBinaryPath,
-        $"{args} /tmp/{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
+        $"{args} {DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
         availableExprAIndex, availableExprBIndex, -1, lemmaForCheckingImpliesPosition,
         $"{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy");
     }

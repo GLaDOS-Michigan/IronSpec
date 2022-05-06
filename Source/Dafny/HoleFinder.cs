@@ -61,7 +61,7 @@ namespace Microsoft.Dafny {
         lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForExprValidityString + "\n";
         lemmaForExprValidityPosition = code.Count(f => f == '\n');
-        File.WriteAllTextAsync($"/tmp/holeFinder_{funcName}.dfy", code);
+        File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}holeFinder_{funcName}.dfy", code);
       }
       if (funcName != "NULL") {
         func.Body = backupFunc.Body;
@@ -77,7 +77,7 @@ namespace Microsoft.Dafny {
         }
       }
       holeFinderExecutor.createProcessWithOutput(dafnyBinaryPath,
-          $"{args} /tmp/holeFinder_{funcName}.dfy /exitAfterFirstError",
+          $"{args} {DafnyOptions.O.HoleEvaluatorWorkingDirectory}holeFinder_{funcName}.dfy /exitAfterFirstError",
           func, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, $"holeFinder_{funcName}");
     }
 
@@ -94,9 +94,9 @@ namespace Microsoft.Dafny {
         var position = holeFinderExecutor.processToPostConditionPosition[p];
         var lemmaStartPosition = holeFinderExecutor.processToLemmaStartPosition[p];
         var expectedOutput =
-          $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
+          $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
         var expectedInconclusiveOutputStart =
-          $"/tmp/{fileName}.dfy({lemmaStartPosition},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+          $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({lemmaStartPosition},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
         Result result = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
         if (result != Result.IncorrectProof) {
           // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
@@ -214,9 +214,9 @@ namespace Microsoft.Dafny {
       var position = holeFinderExecutor.processToPostConditionPosition[p];
       var lemmaStartPosition = holeFinderExecutor.processToLemmaStartPosition[p];
       var expectedOutput =
-        $"/tmp/{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
+        $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
       var expectedInconclusiveOutputStart = 
-        $"/tmp/{fileName}.dfy({lemmaStartPosition},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+        $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({lemmaStartPosition},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
       Console.WriteLine(expectedInconclusiveOutputStart);
       var nullChangeResult = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
       if (nullChangeResult != Result.IncorrectProof) {

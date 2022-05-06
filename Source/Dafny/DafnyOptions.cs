@@ -145,6 +145,7 @@ namespace Microsoft.Dafny {
     public string HoleEvaluatorBaseFunctionName = null;
     public int HoleEvaluatorDepth = 1;
     public bool HoleEvaluatorRunOnce = false;
+    public string HoleEvaluatorWorkingDirectory = "/tmp/";
     public string HoleEvaluatorInvariant = null;
     public string HoleEvaluatorConstraint = null;
     public string HoleEvaluatorRemoveFileLine = null;
@@ -530,6 +531,12 @@ namespace Microsoft.Dafny {
         case "holeEvalRemoveFileLine":
           if (ps.ConfirmArgumentCount(1)) {
             HoleEvaluatorRemoveFileLine = args[ps.i];
+          }
+          return true;
+
+        case "holeEvalWorkingDir":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorWorkingDirectory = args[ps.i] + "/";
           }
           return true;
 

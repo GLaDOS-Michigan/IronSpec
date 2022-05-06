@@ -41,9 +41,9 @@ namespace Microsoft.Dafny {
           p.Close();
           var output = firstOutput;
           var expectedOutput =
-            $"/tmp/{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
+            $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
           var expectedInconclusiveOutputStart =
-            $"/tmp/{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+            $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
           var result = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
           if (result != Result.IncorrectProof) {
             if (processToFunc[p].Name == "nullFunc") {
@@ -54,7 +54,7 @@ namespace Microsoft.Dafny {
           }
           dafnyOutput[p] = output;
           var args = p.StartInfo.Arguments;
-          File.WriteAllTextAsync($"/tmp/output_{inputFileName[p]}.txt",
+          File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}output_{inputFileName[p]}.txt",
             "// " + args + "\n" + output + "\n");
         });
       readyProcesses.Clear();
