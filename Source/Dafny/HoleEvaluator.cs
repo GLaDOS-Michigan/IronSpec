@@ -37,6 +37,7 @@ namespace Microsoft.Dafny {
     }
     private List<Expression> availableExpressions = new List<Expression>();
     private List<BitArray> bitArrayList = new List<BitArray>();
+    private Expression constraintExpr = null;
 
     private bool IsGoodResult(Result result) {
       return (result == Result.CorrectProof ||
@@ -350,7 +351,7 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef) {
+    public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr) {
       string res = "lemma {:timeLimitMultiplier 2} validityCheck";
       foreach (var nwPair in path) {
         res += "_" + nwPair.Item1.Name;
@@ -398,19 +399,20 @@ namespace Microsoft.Dafny {
         }
         res += ")\n";
       }
-      if (DafnyOptions.O.HoleEvaluatorConstraint != null) {
-        res += "  requires " + DafnyOptions.O.HoleEvaluatorConstraint + "\n";
+      if (constraintExpr != null) {
+        currentModuleDef = path[0].Item1.EnclosingClass.EnclosingModuleDefinition;
+        res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", constraintExpr, currentModuleDef) + "\n";
       }
       res += "  ensures false\n{}";
       return res;
     }
 
-    public IEnumerable<Expression> ListConstructors(
-      Type ty,
-      DatatypeCtor ctor,
-      Dictionary<string, List<Expression>> typeToExpressionDict,
-      List<Expression> arguments,
-      int shouldFillIndex) {
+    public static IEnumerable<Expression> ListConstructors(
+        Type ty,
+        DatatypeCtor ctor,
+        Dictionary<string, List<Expression>> typeToExpressionDict,
+        List<Expression> arguments,
+        int shouldFillIndex) {
       if (shouldFillIndex == ctor.Formals.Count) {
         List<ActualBinding> bindings = new List<ActualBinding>();
         foreach (var arg in arguments) {
@@ -433,13 +435,51 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public List<Expression> GetAllPossibleConstructors(Program program,
+    public static List<Expression> GetAllPossibleConstructors(Program program,
       Type ty,
       DatatypeCtor ctor,
       Dictionary<string, List<Expression>> typeToExpressionDict) {
       List<Expression> result = new List<Expression>();
       List<Expression> workingList = new List<Expression>();
       foreach (var expr in ListConstructors(ty, ctor, typeToExpressionDict, workingList, 0)) {
+        result.Add(expr);
+      }
+      return result;
+    }
+
+    public static IEnumerable<Expression> ListInvocations(
+        Function func,
+        Dictionary<string, List<Expression>> typeToExpressionDict,
+        List<Expression> arguments,
+        int shouldFillIndex) {
+      if (shouldFillIndex == func.Formals.Count) {
+        List<ActualBinding> bindings = new List<ActualBinding>();
+        foreach (var arg in arguments) {
+          bindings.Add(new ActualBinding(null, arg));
+        }
+        var funcCallExpr = new FunctionCallExpr(func.tok, func.FullDafnyName, new ImplicitThisExpr(func.tok), func.tok, bindings);
+        funcCallExpr.Type = func.ResultType;
+        yield return funcCallExpr;
+        yield break;
+      }
+      var t = func.Formals[shouldFillIndex].Type;
+      if (typeToExpressionDict.ContainsKey(t.ToString())) {
+        foreach (var expr in typeToExpressionDict[t.ToString()]) {
+          arguments.Add(expr);
+          foreach (var ans in ListInvocations(func, typeToExpressionDict, arguments, shouldFillIndex + 1)) {
+            yield return ans;
+          }
+          arguments.RemoveAt(arguments.Count - 1);
+        }
+      }
+    }
+
+    public static List<Expression> GetAllPossibleFunctionInvocations(Program program,
+        Function func,
+        Dictionary<string, List<Expression>> typeToExpressionDict) {
+      List<Expression> result = new List<Expression>();
+      List<Expression> workingList = new List<Expression>();
+      foreach (var expr in ListInvocations(func, typeToExpressionDict, workingList, 0)) {
         result.Add(expr);
       }
       return result;
@@ -501,6 +541,14 @@ namespace Microsoft.Dafny {
         }
         return false;
       }
+      Function constraintFunc = null;
+      if (DafnyOptions.O.HoleEvaluatorConstraint != null) {
+        constraintFunc = GetFunction(program, DafnyOptions.O.HoleEvaluatorConstraint);
+        if (constraintFunc == null) {
+          Console.WriteLine($"constraint function {DafnyOptions.O.HoleEvaluatorConstraint} not found!");
+          return false;
+        }
+      }
       CG = GetCallGraph(baseFunc);
       Function func = GetFunction(program, funcName);
       CurrentPath.Add(new Tuple<Function, FunctionCallExpr, Expression>(baseFunc, null, null));
@@ -521,6 +569,30 @@ namespace Microsoft.Dafny {
       Function topLevelDeclCopy = null;
       desiredFunction = GetFunction(program, funcName);
       if (desiredFunction != null) {
+        // calculate holeEvaluatorConstraint Invocation
+        if (constraintFunc != null) {
+          Dictionary<string, List<Expression>> typeToExpressionDictForInputs = new Dictionary<string, List<Expression>>();
+          foreach (var formal in baseFunc.Formals) {
+            var identExpr = Expression.CreateIdentExpr(formal);
+            var typeString = formal.Type.ToString();
+            if (typeToExpressionDictForInputs.ContainsKey(typeString)) {
+              typeToExpressionDictForInputs[typeString].Add(identExpr);
+            } else {
+              var lst = new List<Expression>();
+              lst.Add(identExpr);
+              typeToExpressionDictForInputs.Add(typeString, lst);
+            }
+          }
+          var funcCalls = GetAllPossibleFunctionInvocations(program, constraintFunc, typeToExpressionDictForInputs);
+          foreach (var funcCall in funcCalls) {
+            if (constraintExpr == null) {
+              constraintExpr = funcCall;
+            } else {
+              constraintExpr = Expression.CreateAnd(constraintExpr, funcCall);
+            }
+          }
+          Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr)}");
+        }
         var expressions = ListArguments(program, desiredFunction);
         var c = 0;
         Dictionary<string, List<Expression>> typeToExpressionDict = new Dictionary<string, List<Expression>>();
@@ -923,7 +995,7 @@ namespace Microsoft.Dafny {
     public void PrintExprAndCreateProcess(Program program, Function func, Expression expr, int cnt) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
-      string lemmaForExprValidityString = GetValidityLemma(Paths[0], null);
+      string lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr);
 
       var funcName = func.FullDafnyName;
       int lemmaForExprValidityPosition = 0;

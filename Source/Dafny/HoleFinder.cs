@@ -29,10 +29,11 @@ namespace Microsoft.Dafny {
     }
 
     private HoleFinderExecutor holeFinderExecutor = new HoleFinderExecutor();
+    private Expression constraintExpr = null;
 
     public HoleFinder() { }
 
-    public void PrintWithFuncFalse(Program program, Function rootFunc, Function func) {
+    public void PrintWithFuncFalse(Program program, Function rootFunc, Function func, Expression constraintExpr) {
       string funcName;
       if (func.Name == "nullFunc")
         funcName = "NULL";
@@ -46,7 +47,7 @@ namespace Microsoft.Dafny {
             func.Attributes, func.SignatureEllipsis);
       List<Tuple<Function, FunctionCallExpr, Expression>> p = new List<Tuple<Function, FunctionCallExpr, Expression>>();
       p.Add(new Tuple<Function, FunctionCallExpr, Expression>(rootFunc, null, null));
-      string lemmaForExprValidityString = HoleEvaluator.GetValidityLemma(p, null);
+      string lemmaForExprValidityString = HoleEvaluator.GetValidityLemma(p, null, constraintExpr);
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
 
@@ -189,6 +190,38 @@ namespace Microsoft.Dafny {
         }
         return null;
       }
+      // calculate holeEvaluatorConstraint Invocation
+      Function constraintFunc = null;
+      if (DafnyOptions.O.HoleEvaluatorConstraint != null) {
+        constraintFunc = HoleEvaluator.GetFunction(program, DafnyOptions.O.HoleEvaluatorConstraint);
+        if (constraintFunc == null) {
+          Console.WriteLine($"constraint function {DafnyOptions.O.HoleEvaluatorConstraint} not found!");
+          return null;
+        }
+      }
+      if (constraintFunc != null) {
+        Dictionary<string, List<Expression>> typeToExpressionDictForInputs = new Dictionary<string, List<Expression>>();
+        foreach (var formal in func.Formals) {
+          var identExpr = Expression.CreateIdentExpr(formal);
+          var typeString = formal.Type.ToString();
+          if (typeToExpressionDictForInputs.ContainsKey(typeString)) {
+            typeToExpressionDictForInputs[typeString].Add(identExpr);
+          } else {
+            var lst = new List<Expression>();
+            lst.Add(identExpr);
+            typeToExpressionDictForInputs.Add(typeString, lst);
+          }
+        }
+        var funcCalls = HoleEvaluator.GetAllPossibleFunctionInvocations(program, constraintFunc, typeToExpressionDictForInputs);
+        foreach (var funcCall in funcCalls) {
+          if (constraintExpr == null) {
+            constraintExpr = funcCall;
+          } else {
+            constraintExpr = Expression.CreateAnd(constraintExpr, funcCall);
+          }
+        }
+        Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr)}");
+      }
       var CG = HoleEvaluator.GetCallGraph(func);
       Function nullFunc = new Function(
         func.tok, "nullFunc", func.HasStaticKeyword, func.IsGhost,
@@ -196,12 +229,12 @@ namespace Microsoft.Dafny {
         func.Req, func.Reads, func.Ens, func.Decreases,
         func.Body, func.ByMethodTok, func.ByMethodBody,
         func.Attributes, func.SignatureEllipsis);
-      PrintWithFuncFalse(program, func, nullFunc);
+      PrintWithFuncFalse(program, func, nullFunc, constraintExpr);
       foreach (var kvp in program.ModuleSigs) {
         foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
           if (topLevelDecl.Body != null && CG.AdjacencyWeightList.ContainsKey(topLevelDecl)) {
             Console.WriteLine(topLevelDecl.FullDafnyName);
-            PrintWithFuncFalse(program, func, topLevelDecl);
+            PrintWithFuncFalse(program, func, topLevelDecl, constraintExpr);
           }
         }
       }
