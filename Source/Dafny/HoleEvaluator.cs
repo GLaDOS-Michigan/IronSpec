@@ -18,7 +18,7 @@ using Microsoft.Boogie;
 using System.Threading.Tasks;
 
 namespace Microsoft.Dafny {
-  enum Result {
+  public enum Result {
     Unknown = 0,
     CorrectProof = 1,
     CorrectProofByTimeout = 2,
