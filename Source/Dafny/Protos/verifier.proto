@@ -1,22 +1,25 @@
 syntax = "proto3";
 
-package dafnyserver;
+option csharp_namespace = "Microsoft.Dafny";
+
+package DafnyExecutorServer;
 
 // Interface exported by the server.
-service DafnyServer {
+service DafnyVerifierService {
   // Run Dafny on the given code and returns the output
   rpc Verify(VerificationRequest) returns (VerificationResponse) {}
 }
 
 message VerificationRequest {
   // Dafny code that needs to be verified
-  optional string code = 1;
+  string code = 1;
   // List of arguments to be passed to Dafny
   repeated string arguments = 2;
 }
 
 message VerificationResponse {
   // Output of Dafny
-  optional string response = 1;
+  string response = 1;
+  string fileName = 2;
 }
 

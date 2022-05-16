@@ -2,10 +2,10 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import message_pb2 as message__pb2
+import verifier_pb2 as verifier__pb2
 
 
-class DafnyServerStub(object):
+class DafnyVerifierServiceStub(object):
     """Interface exported by the server.
     """
 
@@ -16,13 +16,13 @@ class DafnyServerStub(object):
             channel: A grpc.Channel.
         """
         self.Verify = channel.unary_unary(
-                '/dafnyserver.DafnyServer/Verify',
-                request_serializer=message__pb2.VerificationRequest.SerializeToString,
-                response_deserializer=message__pb2.VerificationResponse.FromString,
+                '/DafnyExecutorServer.DafnyVerifierService/Verify',
+                request_serializer=verifier__pb2.VerificationRequest.SerializeToString,
+                response_deserializer=verifier__pb2.VerificationResponse.FromString,
                 )
 
 
-class DafnyServerServicer(object):
+class DafnyVerifierServiceServicer(object):
     """Interface exported by the server.
     """
 
@@ -34,21 +34,21 @@ class DafnyServerServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_DafnyServerServicer_to_server(servicer, server):
+def add_DafnyVerifierServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Verify': grpc.unary_unary_rpc_method_handler(
                     servicer.Verify,
-                    request_deserializer=message__pb2.VerificationRequest.FromString,
-                    response_serializer=message__pb2.VerificationResponse.SerializeToString,
+                    request_deserializer=verifier__pb2.VerificationRequest.FromString,
+                    response_serializer=verifier__pb2.VerificationResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'dafnyserver.DafnyServer', rpc_method_handlers)
+            'DafnyExecutorServer.DafnyVerifierService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
 
  # This class is part of an EXPERIMENTAL API.
-class DafnyServer(object):
+class DafnyVerifierService(object):
     """Interface exported by the server.
     """
 
@@ -63,8 +63,8 @@ class DafnyServer(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/dafnyserver.DafnyServer/Verify',
-            message__pb2.VerificationRequest.SerializeToString,
-            message__pb2.VerificationResponse.FromString,
+        return grpc.experimental.unary_unary(request, target, '/DafnyExecutorServer.DafnyVerifierService/Verify',
+            verifier__pb2.VerificationRequest.SerializeToString,
+            verifier__pb2.VerificationResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

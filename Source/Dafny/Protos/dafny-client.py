@@ -7,12 +7,12 @@ import random
 import sys
 
 import grpc
-import message_pb2
-import message_pb2_grpc
+import verifier_pb2
+import verifier_pb2_grpc
 
 
 def verify(stub):
-    verification_request = message_pb2.VerificationRequest()
+    verification_request = verifier_pb2.VerificationRequest()
     with open(sys.argv[2], 'r') as f:
         verification_request.code = f.read()
     verification_request.arguments.append('/compile:0')
@@ -27,7 +27,7 @@ def verify(stub):
 
 def run():
     with grpc.insecure_channel(sys.argv[1]) as channel:
-        stub = message_pb2_grpc.DafnyServerStub(channel)
+        stub = verifier_pb2_grpc.DafnyServerServiceStub(channel)
         verify(stub)
 
 

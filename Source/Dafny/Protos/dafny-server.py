@@ -1,4 +1,4 @@
-"""The Python implementation of the gRPC dafny server."""
+"""The Python implementation of the gRPC dafny verifier server."""
 
 from concurrent import futures
 import logging
@@ -7,14 +7,14 @@ import time
 import subprocess
 
 import grpc
-import message_pb2
-import message_pb2_grpc
+import verifier_pb2
+import verifier_pb2_grpc
 
-dafnyBinary='/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
-# dafnyBinary='/Users/arminvak/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
+# dafnyBinary='/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
+dafnyBinary='/Users/arminvak/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
 
 
-class DafnyServerServicer(message_pb2_grpc.DafnyServerServicer):
+class DafnyVerifierServiceServicer(verifier_pb2_grpc.DafnyVerifierServiceServicer):
     """Provides methods that implement functionality of dafny server."""
 
     def Verify(self, request, context):
@@ -30,14 +30,14 @@ class DafnyServerServicer(message_pb2_grpc.DafnyServerServicer):
                     #  stderr=subprocess.PIPE
                      )
             stdout, stderr = process.communicate()
-            response = message_pb2.VerificationResponse()
+            response = verifier_pb2.VerificationResponse()
             response.response = stdout
         return response
 
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    message_pb2_grpc.add_DafnyServerServicer_to_server(
-        DafnyServerServicer(), server)
+    verifier_pb2_grpc.add_DafnyVerifierServiceServicer_to_server(
+        DafnyVerifierServiceServicer(), server)
     server.add_insecure_port('[::]:50051')
     server.start()
     server.wait_for_termination()

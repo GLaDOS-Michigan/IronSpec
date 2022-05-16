@@ -72,7 +72,7 @@ namespace Microsoft.Dafny {
       var lemmaStartPosition = dafnyMainExecutor.processToLemmaStartPosition[p];
       var expectedOutput =
         $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
-      var expectedInconclusiveOutputStart = 
+      var expectedInconclusiveOutputStart =
         $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({lemmaStartPosition},{validityLemmaNameStartCol}): Verification inconclusive";
       var output = dafnyMainExecutor.dafnyOutput[p];
       // Console.WriteLine($"{index} => {output}");
@@ -1014,12 +1014,14 @@ namespace Microsoft.Dafny {
         lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForExprValidityString + "\n";
         lemmaForExprValidityPosition = code.Count(f => f == '\n');
-        File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
+        if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
+          File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
         // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
         // Console.WriteLine("");
       }
-      string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
-      dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
+      // string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
+      // dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
+      Console.WriteLine(CommandLineOptions.Clo.Environment);
       string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
       var argList = env.Split(' ');
       string args = "";
@@ -1029,9 +1031,11 @@ namespace Microsoft.Dafny {
         }
       }
       // Console.WriteLine($"Creating process : ");
-      dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
-          $"{args} {DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
+      dafnyServerExecutor.runDafny(code, args, 
           expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, $"{funcName}_{cnt}");
+      // dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
+      //     $"{args} {DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
+      //     expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, $"{funcName}_{cnt}");
       // Printer.PrintFunction(transformedFunction, 0, false);
     }
 

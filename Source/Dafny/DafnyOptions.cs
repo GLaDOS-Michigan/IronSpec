@@ -145,6 +145,7 @@ namespace Microsoft.Dafny {
     public string HoleEvaluatorBaseFunctionName = null;
     public int HoleEvaluatorDepth = 1;
     public bool HoleEvaluatorRunOnce = false;
+    public bool HoleEvaluatorCreateAuxFiles = true;
     public string HoleEvaluatorWorkingDirectory = "/tmp/";
     public string HoleEvaluatorInvariant = null;
     public string HoleEvaluatorConstraint = null;
@@ -518,6 +519,10 @@ namespace Microsoft.Dafny {
           if (ps.ConfirmArgumentCount(1)) {
             HoleEvaluatorConstraint = args[ps.i];
           }
+          return true;
+        
+        case "holeEvalNoAux":
+          HoleEvaluatorCreateAuxFiles = false;
           return true;
 
         case "holeEvalDepth":

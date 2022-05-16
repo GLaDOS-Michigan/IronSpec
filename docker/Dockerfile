@@ -16,18 +16,20 @@ RUN apt-get update \
 
 # install customized boogie
 RUN mkdir BASE-DIRECTORY
-COPY boogie/ BASE-DIRECTORY/boogie/
+RUN git clone https://github.com/arminvakil/boogie-1.git /BASE-DIRECTORY/boogie/
+#COPY boogie/ BASE-DIRECTORY/boogie/
 
 RUN cd BASE-DIRECTORY/boogie \
   && dotnet build Source/Boogie.sln\
   && cd ../../
 
-COPY dafny-holeEval/ BASE-DIRECTORY/dafny-holeEval/
+ARG CLONE_DAFNY=false
+RUN git clone https://github.com/GLaDOS-Michigan/dafny-holeEval.git /BASE-DIRECTORY/dafny-holeEval/
+# COPY dafny-holeEval/ BASE-DIRECTORY/dafny-holeEval/
 
 RUN cd BASE-DIRECTORY/dafny-holeEval \
   && dotnet build Source/Dafny.sln \
   && make z3-ubuntu \
   && cd ../../
 
-COPY dafny-server/ BASE-DIRECTORY/dafny-server/
-CMD ["python3", "/BASE-DIRECTORY/dafny-server/dafny-server.py"]
+CMD ["python3", "/BASE-DIRECTORY/dafny-holeEval/dafny-server/dafny-server.py"]
