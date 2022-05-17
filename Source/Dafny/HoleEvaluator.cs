@@ -487,7 +487,7 @@ namespace Microsoft.Dafny {
       return result;
     }
 
-    public bool EvaluateAfterRemoveFileLine(Program program, string removeFileLine, string baseFuncName, int depth) {
+    public async Task<bool> EvaluateAfterRemoveFileLine(Program program, string removeFileLine, string baseFuncName, int depth) {
       var fileLineArray = removeFileLine.Split(':');
       var file = fileLineArray[0];
       var line = Int32.Parse(fileLineArray[1]);
@@ -510,7 +510,7 @@ namespace Microsoft.Dafny {
                 body = Expression.CreateAnd(body, exprList[j]);
               }
               topLevelDecl.Body = body;
-              return Evaluate(program, topLevelDecl.FullDafnyName, baseFuncName, depth);
+              return await Evaluate(program, topLevelDecl.FullDafnyName, baseFuncName, depth);
             }
           }
         }
@@ -518,7 +518,7 @@ namespace Microsoft.Dafny {
       return false;
     }
 
-    public bool Evaluate(Program program, string funcName, string baseFuncName, int depth) {
+    public async Task<bool> Evaluate(Program program, string funcName, string baseFuncName, int depth) {
       dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPort, $"output_{funcName}");
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       int timeLimitMultiplier = 2;
@@ -776,7 +776,7 @@ namespace Microsoft.Dafny {
         }
         combinationResults[i] = Result.Unknown;
       }
-      dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
 
       // bool foundCorrectExpr = false;
       for (int i = 0; i < availableExpressions.Count; i++) {
@@ -823,7 +823,7 @@ namespace Microsoft.Dafny {
             }
           }
         }
-        dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+        await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
         for (int i = tmp; i < availableExpressions.Count; i++) {
           UpdateCombinationResult(i);
         }
@@ -1026,16 +1026,17 @@ namespace Microsoft.Dafny {
       }
       // string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
       // dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
-      Console.WriteLine(CommandLineOptions.Clo.Environment);
+      // The first 22 characters are: "Command Line Options: "
       string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
       var argList = env.Split(' ');
-      string args = "";
+      List<string> args = new List<string>();
       foreach (var arg in argList) {
         if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")) {
-          args += arg + " ";
+          args.Add(arg);
         }
       }
       // Console.WriteLine($"Creating process : ");
+      args.Add("/exitAfterFirstError");
       dafnyVerifier.runDafny(code, args,
           expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition);
       // dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,

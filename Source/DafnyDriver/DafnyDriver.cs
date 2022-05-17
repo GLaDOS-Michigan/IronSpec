@@ -306,7 +306,7 @@ namespace Microsoft.Dafny {
             DafnyOptions.O.HoleEvaluatorFunctionName,
             DafnyOptions.O.HoleEvaluatorBaseFunctionName,
             DafnyOptions.O.HoleEvaluatorDepth);
-        return foundDesiredFunction ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
+        return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
       }
       if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
         var holeEvaluator = new HoleEvaluator();
@@ -314,7 +314,7 @@ namespace Microsoft.Dafny {
             DafnyOptions.O.HoleEvaluatorRemoveFileLine,
             DafnyOptions.O.HoleEvaluatorBaseFunctionName,
             DafnyOptions.O.HoleEvaluatorDepth);
-        return foundDesiredFunction ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
+        return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
       }
       if (err != null) {
         exitValue = ExitValue.DAFNY_ERROR;

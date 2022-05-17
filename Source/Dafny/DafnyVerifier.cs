@@ -74,7 +74,7 @@ namespace Microsoft.Dafny {
     //   return results;
     // }
 
-    public async void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
+    public async Task<bool> startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
       foreach (var call in readyTasks) {
         VerificationResponse response = await call;
         var output = response.Response;
@@ -91,13 +91,16 @@ namespace Microsoft.Dafny {
           (taskToExpr.ContainsKey(call) ? "// " + Printer.ExprToString(taskToExpr[call]) + "\n" : "") + output + "\n");
         // Console.WriteLine($"finish executing {i}");
       }
+      return true;
     }
 
-    public void runDafny(string code, string args, Expression expr,
+    public void runDafny(string code, List<string> args, Expression expr,
         int cnt, int postConditionPos, int lemmaStartPos) {
       VerificationRequest request = new VerificationRequest();
       request.Code = code;
-      request.Arguments.Add(args);
+      foreach (var arg in args) {
+        request.Arguments.Add(arg);
+      }
       AsyncUnaryCall<VerificationResponse> task = client.VerifyAsync(request);
       readyTasks.Add(task);
       dafnyTasks.Add(task);
@@ -105,6 +108,7 @@ namespace Microsoft.Dafny {
       taskToCnt[task] = cnt;
       taskToPostConditionPosition[task] = postConditionPos;
       taskToLemmaStartPosition[task] = lemmaStartPos;
+      dafnyOutput[task] = new VerificationResponse();
     }
 
     public void runDafny(string code, string args,
@@ -120,6 +124,7 @@ namespace Microsoft.Dafny {
       taskToAvailableExprBIndex[task] = availableExprBIndex;
       taskToPostConditionPosition[task] = postConditionPos;
       taskToLemmaStartPosition[task] = lemmaStartPos;
+      dafnyOutput[task] = new VerificationResponse();
     }
   }
 }
