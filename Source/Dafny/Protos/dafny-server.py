@@ -10,8 +10,8 @@ import grpc
 import verifier_pb2
 import verifier_pb2_grpc
 
-# dafnyBinary='/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
-dafnyBinary='/Users/arminvak/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
+dafnyBinary='/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
+# dafnyBinary='/Users/arminvak/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
 
 
 class DafnyVerifierServiceServicer(verifier_pb2_grpc.DafnyVerifierServiceServicer):
