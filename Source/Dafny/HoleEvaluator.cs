@@ -49,8 +49,9 @@ namespace Microsoft.Dafny {
     private Dictionary<int, int> negateOfExpressionIndex = new Dictionary<int, int>();
     private HashSet<string> currCombinations = new HashSet<string>();
     private Dictionary<string, int> bitArrayStringToIndex = new Dictionary<string, int>();
-    private DafnyExecutor dafnyMainExecutor = new DafnyExecutor();
+    // private DafnyExecutor dafnyMainExecutor = new DafnyExecutor();
     private DafnyExecutor dafnyImpliesExecutor = new DafnyExecutor();
+    private DafnyVerifierClient dafnyVerifier;
 
     private string ToBitString(BitArray bits, bool skipZero) {
       var sb = new StringBuilder();
@@ -66,28 +67,29 @@ namespace Microsoft.Dafny {
     public static int validityLemmaNameStartCol = 0;
 
     private void UpdateCombinationResult(int index) {
-      var p = dafnyMainExecutor.dafnyProcesses[index];
-      var fileName = dafnyMainExecutor.inputFileName[p];
-      var position = dafnyMainExecutor.processToPostConditionPosition[p];
-      var lemmaStartPosition = dafnyMainExecutor.processToLemmaStartPosition[p];
+      var task = dafnyVerifier.dafnyTasks[index];
+      var position = dafnyVerifier.taskToPostConditionPosition[task];
+      var lemmaStartPosition = dafnyVerifier.taskToLemmaStartPosition[task];
+      var output = dafnyVerifier.dafnyOutput[task];
+      var response = output.Response;
+      var filePath = output.FileName;
       var expectedOutput =
-        $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
+        $"{filePath}({position},0): Error: A postcondition might not hold on this return path.";
       var expectedInconclusiveOutputStart =
-        $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({lemmaStartPosition},{validityLemmaNameStartCol}): Verification inconclusive";
-      var output = dafnyMainExecutor.dafnyOutput[p];
+        $"{filePath}({lemmaStartPosition},{validityLemmaNameStartCol}): Verification inconclusive";
       // Console.WriteLine($"{index} => {output}");
       // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
       // Console.WriteLine($"----------------------------------------------------------------");
-      var res = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
+      var res = DafnyVerifierClient.IsCorrectOutput(response, expectedOutput, expectedInconclusiveOutputStart);
       if (res != Result.IncorrectProof) {
         // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
         // Console.WriteLine(output);
         combinationResults[index] = res;
         // Console.WriteLine(p.StartInfo.Arguments);
-        Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
-      } else if (output.EndsWith("0 errors\n")) {
+        Console.WriteLine(Printer.ExprToString(dafnyVerifier.taskToExpr[task]));
+      } else if (response.EndsWith("0 errors\n")) {
         combinationResults[index] = Result.FalsePredicate;
-      } else if (output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")) {
+      } else if (response.EndsWith($"resolution/type errors detected in {Path.GetFileName(filePath)}\n")) {
         combinationResults[index] = Result.InvalidExpr;
       } else {
         combinationResults[index] = Result.IncorrectProof;
@@ -517,6 +519,7 @@ namespace Microsoft.Dafny {
     }
 
     public bool Evaluate(Program program, string funcName, string baseFuncName, int depth) {
+      dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPort, $"output_{funcName}");
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       int timeLimitMultiplier = 2;
       int timeLimitMultiplierLength = 0;
@@ -562,7 +565,7 @@ namespace Microsoft.Dafny {
       // return true;
 
       UnderscoreStr = RandomString(8);
-      dafnyMainExecutor.sw = Stopwatch.StartNew();
+      dafnyVerifier.sw = Stopwatch.StartNew();
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
       Function desiredFunction = null;
       var cnt = 0;
@@ -773,7 +776,7 @@ namespace Microsoft.Dafny {
         }
         combinationResults[i] = Result.Unknown;
       }
-      dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(runOnce);
+      dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
 
       // bool foundCorrectExpr = false;
       for (int i = 0; i < availableExpressions.Count; i++) {
@@ -820,13 +823,13 @@ namespace Microsoft.Dafny {
             }
           }
         }
-        dafnyMainExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(runOnce);
+        dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
         for (int i = tmp; i < availableExpressions.Count; i++) {
           UpdateCombinationResult(i);
         }
         prevDepthExprStartIndex = tmp;
       }
-      Console.WriteLine($"{dafnyMainExecutor.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
       int correctProofCount = 0;
       int correctProofByTimeoutCount = 0;
       int incorrectProofCount = 0;
@@ -876,6 +879,7 @@ namespace Microsoft.Dafny {
         Console.WriteLine("proof already goes through and no additional conjunction is needed!");
         return true;
       }
+      return true;
       List<int> correctExpressionsIndex = new List<int>();
       for (int i = 0; i < availableExpressions.Count; i++) {
         if (combinationResults[i] == Result.CorrectProof || combinationResults[i] == Result.CorrectProofByTimeout)
@@ -893,7 +897,7 @@ namespace Microsoft.Dafny {
         }
       }
       dafnyImpliesExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(true);
-      Console.WriteLine($"{dafnyMainExecutor.sw.ElapsedMilliseconds / 1000}:: finish calculating implies, printing the dot graph");
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish calculating implies, printing the dot graph");
       string graphVizOutput = $"digraph \"{funcName}_implies_graph\" {{\n";
       graphVizOutput += "  // The list of correct expressions\n";
       for (int i = 0; i < correctExpressionsIndex.Count; i++) {
@@ -915,7 +919,7 @@ namespace Microsoft.Dafny {
       }
       graphVizOutput += "}\n";
       File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}graph_{funcName}_implies.dot", graphVizOutput);
-      Console.WriteLine($"{dafnyMainExecutor.sw.ElapsedMilliseconds / 1000}:: end");
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: end");
       return true;
     }
 
@@ -1001,6 +1005,7 @@ namespace Microsoft.Dafny {
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
 
+      string code = "";
       using (var wr = new System.IO.StringWriter()) {
         var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
         pr.UniqueStringBeforeUnderscore = UnderscoreStr;
@@ -1010,7 +1015,7 @@ namespace Microsoft.Dafny {
           func.Body = Expression.CreateAnd(func.Body, expr);
         }
         pr.PrintProgram(program, true);
-        var code = $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+        code = $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
         lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForExprValidityString + "\n";
         lemmaForExprValidityPosition = code.Count(f => f == '\n');
@@ -1031,8 +1036,8 @@ namespace Microsoft.Dafny {
         }
       }
       // Console.WriteLine($"Creating process : ");
-      dafnyServerExecutor.runDafny(code, args, 
-          expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, $"{funcName}_{cnt}");
+      dafnyVerifier.runDafny(code, args,
+          expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition);
       // dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
       //     $"{args} {DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
       //     expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, $"{funcName}_{cnt}");

@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Linq;
 using Microsoft.Boogie;
+using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
 
@@ -22,21 +23,22 @@ namespace Microsoft.Dafny {
 
     private Channel channel;
     private DafnyVerifierService.DafnyVerifierServiceClient client;
-    DafnyVerifierClient(string serverIpPort) {
+    private string OutputPrefix;
+    public DafnyVerifierClient(string serverIpPort, string outputPrefix) {
       channel = new Channel(serverIpPort, ChannelCredentials.Insecure);
       client = new DafnyVerifierService.DafnyVerifierServiceClient(channel);
+      OutputPrefix = outputPrefix;
     }
     public Stopwatch sw;
-    public Dictionary<Task, string> dafnyOutput = new Dictionary<Task, string>();
-    public Dictionary<Task, string> inputFileName = new Dictionary<Task, string>();
-    public List<Task> dafnyTasks = new List<Task>();
-    private List<Task> readyTasks = new List<Task>();
-    public Dictionary<Task, Expression> taskToExpr = new Dictionary<Task, Expression>();
-    public Dictionary<Task, int> taskToCnt = new Dictionary<Task, int>();
-    public Dictionary<Task, int> taskToAvailableExprAIndex = new Dictionary<Task, int>();
-    public Dictionary<Task, int> taskToAvailableExprBIndex = new Dictionary<Task, int>();
-    public Dictionary<Task, int> taskToPostConditionPosition = new Dictionary<Task, int>();
-    public Dictionary<Task, int> taskToLemmaStartPosition = new Dictionary<Task, int>();
+    public Dictionary<AsyncUnaryCall<VerificationResponse>, VerificationResponse> dafnyOutput = new Dictionary<AsyncUnaryCall<VerificationResponse>, VerificationResponse>();
+    public List<AsyncUnaryCall<VerificationResponse>> dafnyTasks = new List<AsyncUnaryCall<VerificationResponse>>();
+    private List<AsyncUnaryCall<VerificationResponse>> readyTasks = new List<AsyncUnaryCall<VerificationResponse>>();
+    public Dictionary<AsyncUnaryCall<VerificationResponse>, Expression> taskToExpr = new Dictionary<AsyncUnaryCall<VerificationResponse>, Expression>();
+    public Dictionary<AsyncUnaryCall<VerificationResponse>, int> taskToCnt = new Dictionary<AsyncUnaryCall<VerificationResponse>, int>();
+    public Dictionary<AsyncUnaryCall<VerificationResponse>, int> taskToAvailableExprAIndex = new Dictionary<AsyncUnaryCall<VerificationResponse>, int>();
+    public Dictionary<AsyncUnaryCall<VerificationResponse>, int> taskToAvailableExprBIndex = new Dictionary<AsyncUnaryCall<VerificationResponse>, int>();
+    public Dictionary<AsyncUnaryCall<VerificationResponse>, int> taskToPostConditionPosition = new Dictionary<AsyncUnaryCall<VerificationResponse>, int>();
+    public Dictionary<AsyncUnaryCall<VerificationResponse>, int> taskToLemmaStartPosition = new Dictionary<AsyncUnaryCall<VerificationResponse>, int>();
 
     public static Result IsCorrectOutput(string output, string expectedOutput, string expectedInconclusiveOutputStart) {
       if (output.EndsWith("1 error\n")) {
@@ -50,46 +52,43 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public static Task<Task<T>>[] Interleaved<T>(IEnumerable<Task<T>> tasks) {
-      var inputTasks = tasks.ToList();
+    // public static Task<Task<T>>[] Interleaved<T>(IEnumerable<Task<T>> tasks) {
+    //   var inputTasks = tasks.ToList();
 
-      var buckets = new TaskCompletionSource<Task<T>>[inputTasks.Count];
-      var results = new Task<Task<T>>[buckets.Length];
-      for (int i = 0; i < buckets.Length; i++) {
-        buckets[i] = new TaskCompletionSource<Task<T>>();
-        results[i] = buckets[i].Task;
-      }
+    //   var buckets = new TaskCompletionSource<Task<T>>[inputTasks.Count];
+    //   var results = new Task<Task<T>>[buckets.Length];
+    //   for (int i = 0; i < buckets.Length; i++) {
+    //     buckets[i] = new TaskCompletionSource<Task<T>>();
+    //     results[i] = buckets[i].Task;
+    //   }
 
-      int nextTaskIndex = -1;
-      Action<Task<T>> continuation = completed => {
-        var bucket = buckets[Interlocked.Increment(ref nextTaskIndex)];
-        bucket.TrySetResult(completed);
-      };
+    //   int nextTaskIndex = -1;
+    //   Action<Task<T>> continuation = completed => {
+    //     var bucket = buckets[Interlocked.Increment(ref nextTaskIndex)];
+    //     bucket.TrySetResult(completed);
+    //   };
 
-      foreach (var inputTask in inputTasks)
-        inputTask.ContinueWith(continuation, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    //   foreach (var inputTask in inputTasks)
+    //     inputTask.ContinueWith(continuation, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
-      return results;
-    }
+    //   return results;
+    // }
 
-    public void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
-      foreach (var bucket in Interleaved(readyTasks)) {
-        var t = await bucket;
-        VerificationResponse response = await t;
-        var output = response.response;
+    public async void startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
+      foreach (var call in readyTasks) {
+        VerificationResponse response = await call;
+        var output = response.Response;
         var expectedOutput =
-          $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
+          $"{response.FileName}({taskToPostConditionPosition[call]},0): Error: A postcondition might not hold on this return path.";
         var expectedInconclusiveOutputStart =
-          $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+          $"{response.FileName}({taskToLemmaStartPosition[call]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
         var result = IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
         if (result != Result.IncorrectProof) {
-          Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer {result.ToString()} #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
+          Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer {result.ToString()} #{taskToCnt[call]}: {Printer.ExprToString(taskToExpr[call])}");
         }
-        dafnyOutput[p] = output;
-        var args = p.StartInfo.Arguments;
-        File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}output_{inputFileName[p]}_0.txt",
-          (processToExpr.ContainsKey(p) ? "// " + Printer.ExprToString(processToExpr[p]) + "\n" : "") +
-          "// " + args + "\n" + output + "\n");
+        dafnyOutput[call] = response;
+        File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{taskToCnt[call]}_0.txt",
+          (taskToExpr.ContainsKey(call) ? "// " + Printer.ExprToString(taskToExpr[call]) + "\n" : "") + output + "\n");
         // Console.WriteLine($"finish executing {i}");
       }
     }
@@ -99,15 +98,13 @@ namespace Microsoft.Dafny {
       VerificationRequest request = new VerificationRequest();
       request.Code = code;
       request.Arguments.Add(args);
-      Task task = client.VerifyAsync(request);
+      AsyncUnaryCall<VerificationResponse> task = client.VerifyAsync(request);
       readyTasks.Add(task);
       dafnyTasks.Add(task);
       taskToExpr[task] = expr;
       taskToCnt[task] = cnt;
       taskToPostConditionPosition[task] = postConditionPos;
       taskToLemmaStartPosition[task] = lemmaStartPos;
-      dafnyOutput[task] = "";
-      inputFileName[task] = inputFile;
     }
 
     public void runDafny(string code, string args,
@@ -116,15 +113,13 @@ namespace Microsoft.Dafny {
       VerificationRequest request = new VerificationRequest();
       request.Code = code;
       request.Arguments.Add(args);
-      Task task = client.VerifyAsync(request);
+      AsyncUnaryCall<VerificationResponse> task = client.VerifyAsync(request);
       readyTasks.Add(task);
       dafnyTasks.Add(task);
       taskToAvailableExprAIndex[task] = availableExprAIndex;
       taskToAvailableExprBIndex[task] = availableExprBIndex;
       taskToPostConditionPosition[task] = postConditionPos;
       taskToLemmaStartPosition[task] = lemmaStartPos;
-      inputFileName[task] = inputFile;
-      dafnyOutput[task] = "";
     }
   }
 }

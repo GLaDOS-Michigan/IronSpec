@@ -147,6 +147,7 @@ namespace Microsoft.Dafny {
     public bool HoleEvaluatorRunOnce = false;
     public bool HoleEvaluatorCreateAuxFiles = true;
     public string HoleEvaluatorWorkingDirectory = "/tmp/";
+    public string HoleEvaluatorServerIpPort = "127.0.0.1:50051";
     public string HoleEvaluatorInvariant = null;
     public string HoleEvaluatorConstraint = null;
     public string HoleEvaluatorRemoveFileLine = null;
@@ -531,6 +532,12 @@ namespace Microsoft.Dafny {
 
         case "holeEvalRunOnce":
           HoleEvaluatorRunOnce = true;
+          return true;
+        
+        case "holeEvalServerIpPort":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorServerIpPort = args[ps.i];
+          }
           return true;
 
         case "holeEvalRemoveFileLine":
