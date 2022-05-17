@@ -32,7 +32,7 @@ class DafnyVerifierServiceServicer(verifier_pb2_grpc.DafnyVerifierServiceService
             stdout, stderr = process.communicate()
             response = verifier_pb2.VerificationResponse()
             response.response = stdout
-            response.filename = tmp.name
+            response.fileName = tmp.name
         return response
 
 def serve():

@@ -27,7 +27,7 @@ def verify(stub):
 
 def run():
     with grpc.insecure_channel(sys.argv[1]) as channel:
-        stub = verifier_pb2_grpc.DafnyServerServiceStub(channel)
+        stub = verifier_pb2_grpc.DafnyVerifierServiceStub(channel)
         verify(stub)
 
 
