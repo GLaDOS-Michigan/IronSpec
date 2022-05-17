@@ -32,4 +32,4 @@ RUN cd BASE-DIRECTORY/dafny-holeEval \
   && make z3-ubuntu \
   && cd ../../
 
-CMD ["python3", "/BASE-DIRECTORY/dafny-holeEval/dafny-server/dafny-server.py"]
+CMD ["python3", "/BASE-DIRECTORY/dafny-holeEval/Source/Dafny/Protos/dafny-server.py"]
