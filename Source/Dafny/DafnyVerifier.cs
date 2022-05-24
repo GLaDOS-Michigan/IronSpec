@@ -16,16 +16,33 @@ using Microsoft.Boogie;
 using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
+using Grpc.Net.Client;
+using Grpc.Net.Client.Configuration;
+using Grpc.Net.Client.Internal;
+using Grpc.Net.Client.Internal.Retry;
 
 namespace Microsoft.Dafny {
 
   public class DafnyVerifierClient {
 
-    private Channel channel;
+    private Grpc.Net.Client.GrpcChannel channel;
     private DafnyVerifierService.DafnyVerifierServiceClient client;
     private string OutputPrefix;
     public DafnyVerifierClient(string serverIpPort, string outputPrefix) {
-      channel = new Channel(serverIpPort, ChannelCredentials.Insecure);
+      var defaultMethodConfig = new MethodConfig {
+        Names = { MethodName.Default },
+        RetryPolicy = new RetryPolicy {
+          MaxAttempts = 5,
+          InitialBackoff = TimeSpan.FromMinutes(20),
+          MaxBackoff = TimeSpan.FromMinutes(20),
+          BackoffMultiplier = 1.5,
+          RetryableStatusCodes = { StatusCode.DeadlineExceeded }
+        }
+      };
+
+      channel = GrpcChannel.ForAddress($"http://{serverIpPort}", new GrpcChannelOptions {
+        ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } }
+      });
       client = new DafnyVerifierService.DafnyVerifierServiceClient(channel);
       OutputPrefix = outputPrefix;
     }
@@ -101,7 +118,8 @@ namespace Microsoft.Dafny {
       foreach (var arg in args) {
         request.Arguments.Add(arg);
       }
-      AsyncUnaryCall<VerificationResponse> task = client.VerifyAsync(request);
+      AsyncUnaryCall<VerificationResponse> task = client.VerifyAsync(request,
+        deadline: DateTime.UtcNow.AddMinutes(20));
       readyTasks.Add(task);
       dafnyTasks.Add(task);
       taskToExpr[task] = expr;

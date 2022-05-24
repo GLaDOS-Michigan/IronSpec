@@ -36,7 +36,7 @@ class DafnyVerifierServiceServicer(verifier_pb2_grpc.DafnyVerifierServiceService
         return response
 
 def serve():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
     verifier_pb2_grpc.add_DafnyVerifierServiceServicer_to_server(
         DafnyVerifierServiceServicer(), server)
     server.add_insecure_port('[::]:50051')
