@@ -25,14 +25,17 @@ class DafnyVerifierServiceServicer(verifier_pb2_grpc.DafnyVerifierServiceService
             cmdList = [dafnyBinary, tmp.name]
             cmdList.extend(request.arguments)
             print(f"Executing {cmdList}")
+            req_start_time = time.time()
             process = subprocess.Popen(cmdList,
                      stdout=subprocess.PIPE, 
                     #  stderr=subprocess.PIPE
                      )
             stdout, stderr = process.communicate()
+            req_finish_time = time.time()
             response = verifier_pb2.VerificationResponse()
             response.response = stdout
             response.fileName = tmp.name
+            response.executionTime = req_finish_time - req_start_time
         return response
 
 def serve():

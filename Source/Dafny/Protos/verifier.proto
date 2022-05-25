@@ -21,5 +21,6 @@ message VerificationResponse {
   // Output of Dafny
   string response = 1;
   string fileName = 2;
+  float executionTime = 3;
 }
 
