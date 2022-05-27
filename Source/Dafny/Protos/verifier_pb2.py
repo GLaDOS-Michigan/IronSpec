@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0everifier.proto\x12\x13\x44\x61\x66nyExecutorServer\"6\n\x13VerificationRequest\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x11\n\targuments\x18\x02 \x03(\t\"d\n\x14VerificationResponse\x12\x10\n\x08response\x18\x01 \x01(\t\x12\x10\n\x08\x66ileName\x18\x02 \x01(\t\x12\x11\n\tstartTime\x18\x03 \x01(\t\x12\x15\n\rexecutionTime\x18\x04 \x01(\x02\x32w\n\x14\x44\x61\x66nyVerifierService\x12_\n\x06Verify\x12(.DafnyExecutorServer.VerificationRequest\x1a).DafnyExecutorServer.VerificationResponse\"\x00\x42\x12\xaa\x02\x0fMicrosoft.Dafnyb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0everifier.proto\x12\x13\x44\x61\x66nyExecutorServer\"6\n\x13VerificationRequest\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x11\n\targuments\x18\x02 \x03(\t\"d\n\x14VerificationResponse\x12\x10\n\x08response\x18\x01 \x01(\t\x12\x10\n\x08\x66ileName\x18\x02 \x01(\t\x12\x11\n\tstartTime\x18\x03 \x01(\x02\x12\x15\n\rexecutionTime\x18\x04 \x01(\x02\x32w\n\x14\x44\x61\x66nyVerifierService\x12_\n\x06Verify\x12(.DafnyExecutorServer.VerificationRequest\x1a).DafnyExecutorServer.VerificationResponse\"\x00\x42\x12\xaa\x02\x0fMicrosoft.Dafnyb\x06proto3')
 
 
 
