@@ -16,35 +16,61 @@ using Microsoft.Boogie;
 using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
-using Grpc.Net.Client;
-using Grpc.Net.Client.Configuration;
-using Grpc.Net.Client.Internal;
-using Grpc.Net.Client.Internal.Retry;
 
 namespace Microsoft.Dafny {
 
   public class DafnyVerifierClient {
 
-    private Grpc.Net.Client.GrpcChannel channel;
+    private Channel channel;
+    private int sentRequests;
+    private string ServerIpPort;
     private DafnyVerifierService.DafnyVerifierServiceClient client;
     private string OutputPrefix;
+    private Random rand = new Random();
     public DafnyVerifierClient(string serverIpPort, string outputPrefix) {
-      var defaultMethodConfig = new MethodConfig {
-        Names = { MethodName.Default },
-        RetryPolicy = new RetryPolicy {
-          MaxAttempts = 5,
-          InitialBackoff = TimeSpan.FromMinutes(20),
-          MaxBackoff = TimeSpan.FromMinutes(20),
-          BackoffMultiplier = 1.5,
-          RetryableStatusCodes = { StatusCode.DeadlineExceeded }
-        }
-      };
-
-      channel = GrpcChannel.ForAddress($"http://{serverIpPort}", new GrpcChannelOptions {
-        ServiceConfig = new ServiceConfig { MethodConfigs = { defaultMethodConfig } }
-      });
-      client = new DafnyVerifierService.DafnyVerifierServiceClient(channel);
+      // var defaultMethodConfig = new MethodConfig {
+      //   Names = { MethodName.Default },
+      //   RetryPolicy = new RetryPolicy {
+      //     MaxAttempts = 5,
+      //     InitialBackoff = TimeSpan.FromMinutes(20),
+      //     MaxBackoff = TimeSpan.FromMinutes(20),
+      //     BackoffMultiplier = 1.5,
+      //     RetryableStatusCodes = { StatusCode.DeadlineExceeded }
+      //   }
+      // };
+      // var defaultMethodConfig = new MethodConfig {
+      //   Names = { MethodName.Default },
+      //   RetryPolicy = new RetryPolicy {
+      //     MaxAttempts = 3,
+      //     InitialBackoff = TimeSpan.FromMinutes(20),
+      //     MaxBackoff = TimeSpan.FromMinutes(20),
+      //     BackoffMultiplier = 1.5,
+      //     RetryableStatusCodes =
+      //     {
+      //       // Whatever status codes you want to look for
+      //       StatusCode.Unavailable, StatusCode.DeadlineExceeded
+      //     }
+      //   }
+      // };
+      this.ServerIpPort = serverIpPort;
+      ResetChannel();
+      sentRequests = 0;
       OutputPrefix = outputPrefix;
+    }
+
+    private void ResetChannel() {
+      List<ChannelOption> options = new List<ChannelOption>();
+      options.Add(new ChannelOption("grpc.enable_retries", 1));
+      double r = 1 + rand.NextDouble() / 2;
+      r = Math.Round(r, 3, MidpointRounding.ToEven);
+      var channelOption = "{\"retryPolicy\": { \"maxAttempts\": 4, \"initialBackoff\": \"1200000s\", " +
+        "\"maxBackoff\": \"1200000s\", \"backoffMultiplier\": " + r.ToString() + ", \"retryableStatusCodes\": " +
+        "[\"UNAVAILABLE\", \"DEADLINE_EXCEEDED\"]} }";
+      Console.WriteLine("Creating channel with option:");
+      Console.WriteLine(channelOption);
+      options.Add(new ChannelOption("grpc.service_config", channelOption));
+      channel = new Channel(ServerIpPort, ChannelCredentials.Insecure, options);
+      client = new DafnyVerifierService.DafnyVerifierServiceClient(channel);
     }
     public Stopwatch sw;
     public Dictionary<AsyncUnaryCall<VerificationResponse>, VerificationResponse> dafnyOutput = new Dictionary<AsyncUnaryCall<VerificationResponse>, VerificationResponse>();
@@ -92,34 +118,50 @@ namespace Microsoft.Dafny {
     // }
 
     public async Task<bool> startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
-      foreach (var call in readyTasks) {
-        VerificationResponse response = await call;
-        var output = response.Response;
-        var expectedOutput =
-          $"{response.FileName}({taskToPostConditionPosition[call]},0): Error: A postcondition might not hold on this return path.";
-        var expectedInconclusiveOutputStart =
-          $"{response.FileName}({taskToLemmaStartPosition[call]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
-        var result = IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
-        if (result != Result.IncorrectProof) {
-          Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer {result.ToString()} #{taskToCnt[call]}: {Printer.ExprToString(taskToExpr[call])}");
+      for (int i = 0; i < readyTasks.Count; i++) {
+        var call = readyTasks[i];
+        try {
+          VerificationResponse response = await call;
+          var output = response.Response;
+          var expectedOutput =
+            $"{response.FileName}({taskToPostConditionPosition[call]},0): Error: A postcondition might not hold on this return path.";
+          var expectedInconclusiveOutputStart =
+            $"{response.FileName}({taskToLemmaStartPosition[call]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+          var result = IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
+          if (result != Result.IncorrectProof) {
+            Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer {result.ToString()} #{taskToCnt[call]}: {Printer.ExprToString(taskToExpr[call])}");
+          }
+          dafnyOutput[call] = response;
+          File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{taskToCnt[call]}_0.txt",
+            (taskToExpr.ContainsKey(call) ? "// " + Printer.ExprToString(taskToExpr[call]) + "\n" : "") + output + "\n");
+          // Console.WriteLine($"finish executing {i}");
+        } catch (RpcException ex) {
+          Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: {taskToCnt[call]} {ex.Message}");
+          // restart(i);
+          dafnyOutput[call] = new VerificationResponse();
+          dafnyOutput[call].Response = ex.Message;
+          dafnyOutput[call].FileName = "exception";
+          File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{taskToCnt[call]}_0.txt",
+            (taskToExpr.ContainsKey(call) ? "// " + Printer.ExprToString(taskToExpr[call]) + "\n" : "") + ex.Message + "\n");
         }
-        dafnyOutput[call] = response;
-        File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{taskToCnt[call]}_0.txt",
-          (taskToExpr.ContainsKey(call) ? "// " + Printer.ExprToString(taskToExpr[call]) + "\n" : "") + output + "\n");
-        // Console.WriteLine($"finish executing {i}");
       }
       return true;
     }
 
     public void runDafny(string code, List<string> args, Expression expr,
         int cnt, int postConditionPos, int lemmaStartPos) {
+      sentRequests++;
+      // if (sentRequests == 500) {
+      //   sentRequests = 0;
+      //   ResetChannel();
+      // }
       VerificationRequest request = new VerificationRequest();
       request.Code = code;
       foreach (var arg in args) {
         request.Arguments.Add(arg);
       }
       AsyncUnaryCall<VerificationResponse> task = client.VerifyAsync(request,
-        deadline: DateTime.UtcNow.AddMinutes(20));
+        deadline: DateTime.UtcNow.AddMinutes(20000));
       readyTasks.Add(task);
       dafnyTasks.Add(task);
       taskToExpr[task] = expr;

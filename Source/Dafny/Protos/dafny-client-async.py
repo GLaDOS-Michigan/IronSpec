@@ -8,6 +8,7 @@ import threading
 import time
 import sys
 import numpy as np
+from google.protobuf import text_format
 
 import grpc
 import verifier_pb2
@@ -27,13 +28,15 @@ def verify(stub, iter):
     verification_request.arguments.append('/verifyAllModules')
     verification_request.arguments.append('/exitAfterFirstError')
     print(f"{int(time.time() - start_time)}: Send request #{iter}")
-    response = stub.Verify(verification_request, timeout=1200)
-    print(f"{int(time.time() - start_time)}: Received response #{iter}")
+    response = stub.Verify(verification_request, timeout=1000000000)
+    print(f"{int(time.time() - start_time)}: Received response #{iter} with executionTime {response.executionTime}")
     with open(f"{sys.argv[4]}/output_{iter}.txt", "w") as f:
-        f.write(response.response)
+        f.write(text_format.MessageToString(response))
 
 def run():
-    with grpc.insecure_channel(sys.argv[1]) as channel:
+    with grpc.insecure_channel(sys.argv[1], 
+    #   options=[('grpc.max_concurrent_streams', 10)]
+    ) as channel:
         stub = verifier_pb2_grpc.DafnyVerifierServiceStub(channel)
         threads = []
         for i in np.arange(int(sys.argv[2])):

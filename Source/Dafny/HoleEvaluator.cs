@@ -37,6 +37,8 @@ namespace Microsoft.Dafny {
     }
     private List<Expression> availableExpressions = new List<Expression>();
     private List<BitArray> bitArrayList = new List<BitArray>();
+    private List<float> executionTimes = new List<float>();
+    private List<float> startTimes = new List<float>();
     private Expression constraintExpr = null;
 
     private bool IsGoodResult(Result result) {
@@ -73,6 +75,10 @@ namespace Microsoft.Dafny {
       var output = dafnyVerifier.dafnyOutput[task];
       var response = output.Response;
       var filePath = output.FileName;
+      var startTime = output.StartTime;
+      var execTime = output.ExecutionTime;
+      executionTimes.Add(execTime);
+      startTimes.Add(startTime);
       var expectedOutput =
         $"{filePath}({position},0): Error: A postcondition might not hold on this return path.";
       var expectedInconclusiveOutputStart =
@@ -646,28 +652,28 @@ namespace Microsoft.Dafny {
             }
           }
         }
-        Dictionary<string, List<Expression>> constructorPerTypeDict = new Dictionary<string, List<Expression>>();
-        foreach (var k in typeToExpressionDict.Keys) {
-          var t = typeToExpressionDict[k][0].Type;
-          if (t is UserDefinedType) {
-            var udt = t as UserDefinedType;
-            var cl = udt.ResolvedClass;
-            if (cl is DatatypeDecl) {
-              var dt = (DatatypeDecl)cl;
-              var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
-              constructorPerTypeDict[k] = new List<Expression>();
-              // Console.WriteLine($"{variable.Name} is DatatypeDecl");
-              foreach (var ctor in dt.Ctors) {
-                var cons = GetAllPossibleConstructors(program, t, ctor, typeToExpressionDict);
-                constructorPerTypeDict[k].AddRange(cons);
-              }
-            }
-          }
-        }
-        foreach (var k in constructorPerTypeDict.Keys) {
-          typeToExpressionDict[k].AddRange(constructorPerTypeDict[k]);
-        }
-        Console.WriteLine("--------------------------------");
+        // Dictionary<string, List<Expression>> constructorPerTypeDict = new Dictionary<string, List<Expression>>();
+        // foreach (var k in typeToExpressionDict.Keys) {
+        //   var t = typeToExpressionDict[k][0].Type;
+        //   if (t is UserDefinedType) {
+        //     var udt = t as UserDefinedType;
+        //     var cl = udt.ResolvedClass;
+        //     if (cl is DatatypeDecl) {
+        //       var dt = (DatatypeDecl)cl;
+        //       var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
+        //       constructorPerTypeDict[k] = new List<Expression>();
+        //       // Console.WriteLine($"{variable.Name} is DatatypeDecl");
+        //       foreach (var ctor in dt.Ctors) {
+        //         var cons = GetAllPossibleConstructors(program, t, ctor, typeToExpressionDict);
+        //         constructorPerTypeDict[k].AddRange(cons);
+        //       }
+        //     }
+        //   }
+        // }
+        // foreach (var k in constructorPerTypeDict.Keys) {
+        //   typeToExpressionDict[k].AddRange(constructorPerTypeDict[k]);
+        // }
+        // Console.WriteLine("--------------------------------");
         var counter = 0;
         foreach (var k in typeToExpressionDict.Keys) {
           foreach (var v in typeToExpressionDict[k]) {
@@ -849,6 +855,21 @@ namespace Microsoft.Dafny {
         "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "Total");
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
         invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount, availableExpressions.Count);
+      string executionTimesSummary = "";
+      executionTimes.Sort();
+      foreach (var x in executionTimes) {
+        executionTimesSummary += x.ToString() + "\n";
+      }
+      File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
+            executionTimesSummary);
+
+      string startTimesSummary = "";
+      startTimes.Sort();
+      foreach (var x in startTimes) {
+        startTimesSummary += x.ToString() + "\n";
+      }
+      File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummary.txt",
+            startTimesSummary);
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   var ba = bitArrayList[i];
       //   Console.WriteLine("------------------------------");

@@ -35,6 +35,7 @@ class DafnyVerifierServiceServicer(verifier_pb2_grpc.DafnyVerifierServiceService
             response = verifier_pb2.VerificationResponse()
             response.response = stdout
             response.fileName = tmp.name
+            response.startTime = req_start_time
             response.executionTime = req_finish_time - req_start_time
         return response
 
