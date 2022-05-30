@@ -856,17 +856,17 @@ namespace Microsoft.Dafny {
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
         invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount, availableExpressions.Count);
       string executionTimesSummary = "";
-      executionTimes.Sort();
-      foreach (var x in executionTimes) {
-        executionTimesSummary += x.ToString() + "\n";
+      // executionTimes.Sort();
+      for (int i = 0; i < executionTimes.Count; i++) {
+        executionTimesSummary += $"{i}, {executionTimes[i].ToString()}\n";
       }
       File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
             executionTimesSummary);
 
       string startTimesSummary = "";
-      startTimes.Sort();
-      foreach (var x in startTimes) {
-        startTimesSummary += x.ToString() + "\n";
+      // startTimes.Sort();
+      for (int i = 0; i < startTimes.Count; i++) {
+        startTimesSummary += $"{i}, {(startTimes[i] - startTimes[0]).ToString()}\n";
       }
       File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummary.txt",
             startTimesSummary);
