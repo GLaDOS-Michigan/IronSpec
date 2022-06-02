@@ -27,9 +27,8 @@ def verify(stub, iter):
     verification_request.arguments.append('/autoTriggers:1')
     verification_request.arguments.append('/verifyAllModules')
     verification_request.arguments.append('/exitAfterFirstError')
-    print(f"{int(time.time() - start_time)}: Send request #{iter}")
     response = stub.Verify(verification_request, timeout=1000000000)
-    print(f"{int(time.time() - start_time)}: Received response #{iter} with executionTime {response.executionTime}")
+    print(f"{int(time.time() - start_time)}: Received response #{iter} with startTime={response.startTime} executionTime={response.executionTime}")
     with open(f"{sys.argv[4]}/output_{iter}.txt", "w") as f:
         f.write(text_format.MessageToString(response))
 

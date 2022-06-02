@@ -783,6 +783,7 @@ namespace Microsoft.Dafny {
         combinationResults[i] = Result.Unknown;
       }
       await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      Console.WriteLine("finish");
 
       // bool foundCorrectExpr = false;
       for (int i = 0; i < availableExpressions.Count; i++) {

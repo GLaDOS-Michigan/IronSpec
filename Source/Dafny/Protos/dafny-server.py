@@ -10,6 +10,8 @@ import grpc
 import verifier_pb2
 import verifier_pb2_grpc
 
+import multiprocessing
+
 dafnyBinary='/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
 # dafnyBinary='/Users/arminvak/BASE-DIRECTORY/dafny-holeEval/Binaries/Dafny'
 
@@ -40,7 +42,7 @@ class DafnyVerifierServiceServicer(verifier_pb2_grpc.DafnyVerifierServiceService
         return response
 
 def serve():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()))
     verifier_pb2_grpc.add_DafnyVerifierServiceServicer_to_server(
         DafnyVerifierServiceServicer(), server)
     server.add_insecure_port('[::]:50051')
