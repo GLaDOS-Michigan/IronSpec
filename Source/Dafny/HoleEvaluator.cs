@@ -69,10 +69,10 @@ namespace Microsoft.Dafny {
     public static int validityLemmaNameStartCol = 0;
 
     private void UpdateCombinationResult(int index) {
-      var task = dafnyVerifier.dafnyTasks[index];
-      var position = dafnyVerifier.taskToPostConditionPosition[task];
-      var lemmaStartPosition = dafnyVerifier.taskToLemmaStartPosition[task];
-      var output = dafnyVerifier.dafnyOutput[task];
+      var request = dafnyVerifier.requestsList[index];
+      var position = dafnyVerifier.requestToPostConditionPosition[request];
+      var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
+      var output = dafnyVerifier.dafnyOutput[request];
       var response = output.Response;
       var filePath = output.FileName;
       var startTime = output.StartTime;
@@ -92,7 +92,7 @@ namespace Microsoft.Dafny {
         // Console.WriteLine(output);
         combinationResults[index] = res;
         // Console.WriteLine(p.StartInfo.Arguments);
-        Console.WriteLine(Printer.ExprToString(dafnyVerifier.taskToExpr[task]));
+        Console.WriteLine(Printer.ExprToString(dafnyVerifier.requestToExpr[request]));
       } else if (response.EndsWith("0 errors\n")) {
         combinationResults[index] = Result.FalsePredicate;
       } else if (response.EndsWith($"resolution/type errors detected in {Path.GetFileName(filePath)}\n")) {
@@ -525,7 +525,11 @@ namespace Microsoft.Dafny {
     }
 
     public async Task<bool> Evaluate(Program program, string funcName, string baseFuncName, int depth) {
-      dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPort, $"output_{funcName}");
+      if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
+        Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
+        return false;
+      }
+      dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPortList, $"output_{funcName}");
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       int timeLimitMultiplier = 2;
       int timeLimitMultiplierLength = 0;
@@ -652,27 +656,27 @@ namespace Microsoft.Dafny {
             }
           }
         }
-        // Dictionary<string, List<Expression>> constructorPerTypeDict = new Dictionary<string, List<Expression>>();
-        // foreach (var k in typeToExpressionDict.Keys) {
-        //   var t = typeToExpressionDict[k][0].Type;
-        //   if (t is UserDefinedType) {
-        //     var udt = t as UserDefinedType;
-        //     var cl = udt.ResolvedClass;
-        //     if (cl is DatatypeDecl) {
-        //       var dt = (DatatypeDecl)cl;
-        //       var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
-        //       constructorPerTypeDict[k] = new List<Expression>();
-        //       // Console.WriteLine($"{variable.Name} is DatatypeDecl");
-        //       foreach (var ctor in dt.Ctors) {
-        //         var cons = GetAllPossibleConstructors(program, t, ctor, typeToExpressionDict);
-        //         constructorPerTypeDict[k].AddRange(cons);
-        //       }
-        //     }
-        //   }
-        // }
-        // foreach (var k in constructorPerTypeDict.Keys) {
-        //   typeToExpressionDict[k].AddRange(constructorPerTypeDict[k]);
-        // }
+        Dictionary<string, List<Expression>> constructorPerTypeDict = new Dictionary<string, List<Expression>>();
+        foreach (var k in typeToExpressionDict.Keys) {
+          var t = typeToExpressionDict[k][0].Type;
+          if (t is UserDefinedType) {
+            var udt = t as UserDefinedType;
+            var cl = udt.ResolvedClass;
+            if (cl is DatatypeDecl) {
+              var dt = (DatatypeDecl)cl;
+              var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
+              constructorPerTypeDict[k] = new List<Expression>();
+              // Console.WriteLine($"{variable.Name} is DatatypeDecl");
+              foreach (var ctor in dt.Ctors) {
+                var cons = GetAllPossibleConstructors(program, t, ctor, typeToExpressionDict);
+                constructorPerTypeDict[k].AddRange(cons);
+              }
+            }
+          }
+        }
+        foreach (var k in constructorPerTypeDict.Keys) {
+          typeToExpressionDict[k].AddRange(constructorPerTypeDict[k]);
+        }
         // Console.WriteLine("--------------------------------");
         var counter = 0;
         foreach (var k in typeToExpressionDict.Keys) {
@@ -861,7 +865,7 @@ namespace Microsoft.Dafny {
       for (int i = 0; i < executionTimes.Count; i++) {
         executionTimesSummary += $"{i}, {executionTimes[i].ToString()}\n";
       }
-      File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
             executionTimesSummary);
 
       string startTimesSummary = "";
@@ -869,7 +873,7 @@ namespace Microsoft.Dafny {
       for (int i = 0; i < startTimes.Count; i++) {
         startTimesSummary += $"{i}, {(startTimes[i] - startTimes[0]).ToString()}\n";
       }
-      File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummary.txt",
             startTimesSummary);
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   var ba = bitArrayList[i];
@@ -940,7 +944,7 @@ namespace Microsoft.Dafny {
         }
       }
       graphVizOutput += "}\n";
-      File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}graph_{funcName}_implies.dot", graphVizOutput);
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}graph_{funcName}_implies.dot", graphVizOutput);
       Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: end");
       return true;
     }
@@ -1037,7 +1041,8 @@ namespace Microsoft.Dafny {
           func.Body = Expression.CreateAnd(func.Body, expr);
         }
         pr.PrintProgram(program, true);
-        code = $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+        code = $"// #{cnt}\n";
+        code += $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
         lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
         code += lemmaForExprValidityString + "\n";
         lemmaForExprValidityPosition = code.Count(f => f == '\n');

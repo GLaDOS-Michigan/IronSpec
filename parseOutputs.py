@@ -24,7 +24,7 @@ for id in holes:
                     firstCorrectAnswerLineNo = i
                 sp = line.split(':')
                 correctAnswer.append(''.join(sp[3:])[1:-1])
-            match = re.search('finish exploring', line)
+            match = re.search(' finish exploring', line)
             if match is not None:
                 finishExploringLineNo = i
             match = re.search('IncorrectProof', line)
@@ -33,13 +33,36 @@ for id in holes:
         if firstCorrectAnswerLineNo != -1:
             numberOfExpressions = int((str(lines[firstCorrectAnswerLineNo - 1]).split(" "))[0]) + 1
             firstCorrectAnswerFoundAt = (str(lines[firstCorrectAnswerLineNo]).split(" "))[0]
+            firstAnswerAt = (str(lines[firstCorrectAnswerLineNo]).split(" "))[0][:-2]
         else:
-            numberOfExpressions = int((str(lines[finishExploringLineNo - 1]).split(" "))[0]) + 1
+            numberOfExpressions = int((str(lines[finishExploringLineNo - 2]).split(" "))[0]) + 1
+            firstAnswerAt = 0
         execTime = (str(lines[finishExploringLineNo]).split(" "))[0][:-2]
-        firstAnswerAt = (str(lines[firstCorrectAnswerLineNo]).split(" "))[0][:-2]
-        print (id, ',', numberOfExpressions, ',', int(int(execTime)/60), ',', int(int(firstAnswerAt)/60), ',', len(correctAnswer), ', already true' if 'true' in correctAnswer else '')
-        print (resultSummary)
+        print (id, numberOfExpressions, round(float(float(execTime)/60), 2), round(float(float(firstAnswerAt)/60), 2), len(correctAnswer), 'TRUE' if 'true' in correctAnswer else '', sep = ',')
+        print (*resultSummary, sep=',')
         if 'true' in correctAnswer:
             print ('***true***')
         else:
-            print(correctAnswer)
+            print(*correctAnswer, sep = '\n')
+    with open(input_path + '/output_' + filename + '_' + id + '/executionTimeSummary.txt') as f:
+        lines = f.readlines()
+        lessThanOneSec = 0
+        lessThanOneMin = 0
+        lessThanTenMin = 0
+        other = 0
+        sum = 0
+        for i, line in enumerate(lines):
+            sp = line.split(' ')
+            t = float(sp[1])
+            if t < 1:
+                lessThanOneSec = lessThanOneSec + 1
+            elif t < 60:
+                lessThanOneMin = lessThanOneMin + 1
+            elif t < 600:
+                lessThanTenMin = lessThanTenMin + 1
+            else:
+                other = other + 1
+            sum = sum + t
+        print('', lessThanOneSec, lessThanOneMin, lessThanTenMin, other, round(sum / len(lines), 2), sep=',')
+
+
