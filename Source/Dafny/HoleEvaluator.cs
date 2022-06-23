@@ -35,13 +35,13 @@ namespace Microsoft.Dafny {
       return new string(Enumerable.Repeat(chars, length)
           .Select(s => s[random.Next(s.Length)]).ToArray());
     }
-    private List<Expression> availableExpressions = new List<Expression>();
+    public ExpressionFinder expressionFinder = null;
     private List<BitArray> bitArrayList = new List<BitArray>();
     private List<float> executionTimes = new List<float>();
     private List<float> startTimes = new List<float>();
     private Expression constraintExpr = null;
 
-    private bool IsGoodResult(Result result) {
+    public static bool IsGoodResult(Result result) {
       return (result == Result.CorrectProof ||
               result == Result.CorrectProofByTimeout ||
               result == Result.IncorrectProof ||
@@ -49,22 +49,9 @@ namespace Microsoft.Dafny {
     }
     private Dictionary<int, Result> combinationResults = new Dictionary<int, Result>();
     private Dictionary<int, int> negateOfExpressionIndex = new Dictionary<int, int>();
-    private HashSet<string> currCombinations = new HashSet<string>();
-    private Dictionary<string, int> bitArrayStringToIndex = new Dictionary<string, int>();
     // private DafnyExecutor dafnyMainExecutor = new DafnyExecutor();
     private DafnyExecutor dafnyImpliesExecutor = new DafnyExecutor();
     private DafnyVerifierClient dafnyVerifier;
-
-    private string ToBitString(BitArray bits, bool skipZero) {
-      var sb = new StringBuilder();
-
-      for (int i = skipZero ? 1 : 0; i < bits.Count; i++) {
-        char c = bits[i] ? '1' : '0';
-        sb.Append(c);
-      }
-
-      return sb.ToString();
-    }
 
     public static int validityLemmaNameStartCol = 0;
 
@@ -100,68 +87,7 @@ namespace Microsoft.Dafny {
       } else {
         combinationResults[index] = Result.IncorrectProof;
       }
-    }
-
-    public void Increment(ref BitArray bArray) {
-      for (int i = 0; i < bArray.Count; i++) {
-        bool previous = bArray[i];
-        bArray[i] = !previous;
-        if (!previous) {
-          // Found a clear bit - now that we've set it, we're done
-          return;
-        }
-      }
-    }
-
-    public bool IsGoodExprCombinationToExecute(int indexI, int indexJ) {
-      Contract.Requires(indexI >= 0 && indexI < availableExpressions.Count);
-      Contract.Requires(indexJ >= 0 && indexJ < availableExpressions.Count);
-      if ((!IsGoodResult(combinationResults[indexI])) ||
-          (!IsGoodResult(combinationResults[indexJ]))) {
-        return false;
-      }
-      BitArray combinedBitArray = new BitArray(bitArrayList[indexI]);
-      combinedBitArray.Or(bitArrayList[indexJ]);
-
-      // Check if the combination is same as input combinations or not
-      if (combinedBitArray.Equals(bitArrayList[indexI]) || combinedBitArray.Equals(bitArrayList[indexJ])) {
-        return false;
-      }
-      // Check if this combination has been already executed or not
-      if (currCombinations.Contains(ToBitString(combinedBitArray, true))) {
-        return false;
-      }
-      // Check if negate of an expression also exists in this expr combination or not.
-      List<int> enabledExprIndexes = new List<int>();
-      for (int i = 0; i < combinedBitArray.Count; i++) {
-        if (combinedBitArray[i]) {
-          enabledExprIndexes.Add(i);
-          if (negateOfExpressionIndex.ContainsKey(i)) {
-            var negateIndex = negateOfExpressionIndex[i];
-            if (combinedBitArray[negateIndex])
-              return false;
-          }
-        }
-      }
-      BitArray countBitArray = new BitArray(enabledExprIndexes.Count, false);
-      countBitArray[0] = true;
-      BitArray zeroBitArray = new BitArray(enabledExprIndexes.Count, false);
-      while (ToBitString(countBitArray, false) != ToBitString(zeroBitArray, false)) {
-        BitArray subsetBitArray = new BitArray(combinedBitArray.Count, false);
-        for (int i = 0; i < enabledExprIndexes.Count; i++) {
-          subsetBitArray[enabledExprIndexes[i]] = countBitArray[i];
-        }
-        string subsetString = ToBitString(subsetBitArray, true);
-        // Console.WriteLine($"{indexI} {indexJ} {subsetString}");
-        // Console.WriteLine($"{ToBitString(countBitArray)} {ToBitString(zeroBitArray)} {countBitArray.Equals(zeroBitArray)}");
-        if (bitArrayStringToIndex.ContainsKey(subsetString)) {
-          int index = bitArrayStringToIndex[subsetString];
-          if (!IsGoodResult(combinationResults[index]))
-            return false;
-        }
-        Increment(ref countBitArray);
-      }
-      return true;
+      expressionFinder.combinationResults[index] = combinationResults[index];
     }
 
     public Dictionary<string, List<string>> GetEqualExpressionList(Expression expr) {
@@ -530,6 +456,7 @@ namespace Microsoft.Dafny {
         return false;
       }
       dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPortList, $"output_{funcName}");
+      expressionFinder = new ExpressionFinder(this);
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       int timeLimitMultiplier = 2;
       int timeLimitMultiplierLength = 0;
@@ -578,7 +505,6 @@ namespace Microsoft.Dafny {
       dafnyVerifier.sw = Stopwatch.StartNew();
       // Console.WriteLine($"hole evaluation begins for func {funcName}");
       Function desiredFunction = null;
-      var cnt = 0;
       Function topLevelDeclCopy = null;
       desiredFunction = GetFunction(program, funcName);
       if (desiredFunction != null) {
@@ -606,85 +532,7 @@ namespace Microsoft.Dafny {
           }
           Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr)}");
         }
-        var expressions = ListArguments(program, desiredFunction);
-        var c = 0;
-        Dictionary<string, List<Expression>> typeToExpressionDict = new Dictionary<string, List<Expression>>();
-        foreach (var expr in expressions) {
-          c++;
-          var exprString = Printer.ExprToString(expr);
-          var typeString = expr.Type.ToString();
-          Console.WriteLine($"{c,2} {exprString,-20} {typeString}");
-          if (expr.Type == Type.Bool && exprString[exprString.Length - 1] == '?') {
-            typeString = "_questionMark_";
-          }
-          if (typeToExpressionDict.ContainsKey(typeString)) {
-            bool containsItem = typeToExpressionDict[typeString].Any(
-                 item => Printer.ExprToString(item) == Printer.ExprToString(expr));
-            if (!containsItem) {
-              typeToExpressionDict[typeString].Add(expr);
-            }
-          } else {
-            var lst = new List<Expression>();
-            lst.Add(expr);
-            typeToExpressionDict.Add(typeString, lst);
-          }
-          // AddExpression(program, topLevelDecl, expr);
-        }
-        Console.WriteLine("");
-        foreach (var k in typeToExpressionDict.Keys) {
-          foreach (var v in typeToExpressionDict[k]) {
-            Console.WriteLine($"{Printer.ExprToString(v),-20} {k}");
-          }
-        }
-        Console.WriteLine("--------------------------------");
-        var equalExprToCheck = desiredFunction.Body;
-        foreach (var e in desiredFunction.Req) {
-          equalExprToCheck = Expression.CreateAnd(equalExprToCheck, e.E);
-        }
-        Dictionary<string, List<string>> equalExprList = GetEqualExpressionList(equalExprToCheck);
-        foreach (var k in equalExprList.Keys) {
-          var t = equalExprList[k][0];
-          for (int i = 1; i < equalExprList[k].Count; i++) {
-            Console.WriteLine(t + " -> " + k + " = " + equalExprList[k][i]);
-          }
-          for (int i = 1; i < equalExprList[k].Count; i++) {
-            for (int j = 0; j < typeToExpressionDict[t].Count; j++) {
-              if (Printer.ExprToString(typeToExpressionDict[t][j]) == equalExprList[k][i]) {
-                typeToExpressionDict[t].RemoveAt(j);
-                break;
-              }
-            }
-          }
-        }
-        Dictionary<string, List<Expression>> constructorPerTypeDict = new Dictionary<string, List<Expression>>();
-        foreach (var k in typeToExpressionDict.Keys) {
-          var t = typeToExpressionDict[k][0].Type;
-          if (t is UserDefinedType) {
-            var udt = t as UserDefinedType;
-            var cl = udt.ResolvedClass;
-            if (cl is DatatypeDecl) {
-              var dt = (DatatypeDecl)cl;
-              var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
-              constructorPerTypeDict[k] = new List<Expression>();
-              // Console.WriteLine($"{variable.Name} is DatatypeDecl");
-              foreach (var ctor in dt.Ctors) {
-                var cons = GetAllPossibleConstructors(program, t, ctor, typeToExpressionDict);
-                constructorPerTypeDict[k].AddRange(cons);
-              }
-            }
-          }
-        }
-        foreach (var k in constructorPerTypeDict.Keys) {
-          typeToExpressionDict[k].AddRange(constructorPerTypeDict[k]);
-        }
-        // Console.WriteLine("--------------------------------");
-        var counter = 0;
-        foreach (var k in typeToExpressionDict.Keys) {
-          foreach (var v in typeToExpressionDict[k]) {
-            Console.WriteLine($"{counter} {Printer.ExprToString(v),-60} {k}");
-            counter++;
-          }
-        }
+        expressionFinder.CalcDepthOneAvailableExpresssions(program, desiredFunction);
         topLevelDeclCopy = new Function(
           desiredFunction.tok, desiredFunction.Name, desiredFunction.HasStaticKeyword,
           desiredFunction.IsGhost, desiredFunction.TypeArgs, desiredFunction.Formals,
@@ -692,153 +540,38 @@ namespace Microsoft.Dafny {
           desiredFunction.Reads, desiredFunction.Ens, desiredFunction.Decreases,
           desiredFunction.Body, desiredFunction.ByMethodTok, desiredFunction.ByMethodBody,
           desiredFunction.Attributes, desiredFunction.SignatureEllipsis);
-        // check equality of each pair of same type expressions
-        var trueExpr = Expression.CreateBoolLiteral(desiredFunction.Body.tok, true);
-        availableExpressions.Add(trueExpr);
-        foreach (var k in typeToExpressionDict.Keys) {
-          var values = typeToExpressionDict[k];
-          if (k == "_questionMark_") {
-            for (int i = 0; i < values.Count; i++) {
-              {
-                // No change to the type, add as is
-                var expr = values[i];
-                availableExpressions.Add(expr);
-              }
-            }
-          } else {
-            for (int i = 0; i < values.Count; i++) {
-              for (int j = i + 1; j < values.Count; j++) {
-                if (values[i] is LiteralExpr && values[j] is LiteralExpr) {
-                  continue;
-                }
-                if (values[i] is ApplySuffix && values[j] is ApplySuffix) {
-                  continue;
-                }
-                // Equality
-                {
-                  var equalityExpr = Expression.CreateEq(values[i], values[j], values[i].Type);
-                  equalityExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                  availableExpressions.Add(equalityExpr);
-                }
-                if (values[i] is ApplySuffix || values[j] is ApplySuffix) {
-                  continue;
-                }
-                // Non-Equality
-                {
-                  var neqExpr = Expression.CreateNot(values[i].tok, Expression.CreateEq(values[i], values[j], values[i].Type));
-                  neqExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                  availableExpressions.Add(neqExpr);
-                  negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
-                  negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
-                }
-                if (k == "bool") {
-                  continue;
-                }
-
-                // Lower than
-                {
-                  var lowerThanExpr = Expression.CreateLess(values[i], values[j]);
-                  lowerThanExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                  availableExpressions.Add(lowerThanExpr);
-                }
-                // Greater Equal = !(Lower than)
-                {
-                  var geExpr = Expression.CreateNot(values[i].tok, Expression.CreateLess(values[i], values[j]));
-                  geExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                  availableExpressions.Add(geExpr);
-                  negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
-                  negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
-                }
-                // Lower Equal
-                {
-                  var leExpr = Expression.CreateAtMost(values[i], values[j]);
-                  leExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                  availableExpressions.Add(leExpr);
-                }
-                // Greater Than = !(Lower equal)
-                {
-                  var gtExpr = Expression.CreateNot(values[i].tok, Expression.CreateAtMost(values[i], values[j]));
-                  gtExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                  availableExpressions.Add(gtExpr);
-                  negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
-                  negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
-                }
-              }
-            }
-          }
-        }
       } else {
         Console.WriteLine($"{funcName} was not found!");
         return false;
       }
-      for (int i = 0; i < availableExpressions.Count; i++) {
-        PrintExprAndCreateProcess(program, desiredFunction, availableExpressions[i], i);
+      for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
+        PrintExprAndCreateProcess(program, desiredFunction, expressionFinder.availableExpressions[i], i);
         desiredFunction.Body = topLevelDeclCopy.Body;
-        BitArray bitArray = new BitArray(availableExpressions.Count, false);
-        bitArray[i] = true;
-        bitArrayList.Add(bitArray);
-        if (i == 0) {
-          currCombinations.Add(ToBitString(bitArray, false));
-          bitArrayStringToIndex[ToBitString(bitArray, false)] = i;
-        } else {
-          currCombinations.Add(ToBitString(bitArray, true));
-          bitArrayStringToIndex[ToBitString(bitArray, true)] = i;
-        }
-        combinationResults[i] = Result.Unknown;
       }
       await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
       Console.WriteLine("finish");
 
       // bool foundCorrectExpr = false;
-      for (int i = 0; i < availableExpressions.Count; i++) {
+      for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         UpdateCombinationResult(i);
         // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
       }
 
-      // for (int i = 0; i < bitArrayList.Count; i++) {
-      //   Console.WriteLine(i + " : " +
-      //                     Printer.ExprToString(availableExpressions[i]) + " : " +
-      //                     combinationResults[i].ToString());
-      // }
-
-      // If no correct expression has found, try to look at depth 2
-      // TODO: make this configurable
-      // if (foundCorrectExpr == false && depth == 1) {
-      //   depth = 2;
-      // }
-
       // Until here, we only check depth 1 of expressions.
       // Now we try to check next depths
-      int numberOfSingleExpr = availableExpressions.Count;
-      int prevDepthExprStartIndex = 0;
-      cnt = availableExpressions.Count;
+      int numberOfSingleExpr = expressionFinder.availableExpressions.Count;
       for (int dd = 2; dd <= depth; dd++) {
-        var tmp = availableExpressions.Count;
-        for (int i = prevDepthExprStartIndex; i < tmp; i++) {
-          for (int j = 0; j < numberOfSingleExpr; j++) {
-            if (IsGoodExprCombinationToExecute(i, j)) {
-              var exprA = availableExpressions[i];
-              var exprB = availableExpressions[j];
-              var conjunctExpr = Expression.CreateAnd(exprA, exprB);
-              conjunctExpr.HasCardinality = exprA.HasCardinality | exprB.HasCardinality;
-              availableExpressions.Add(conjunctExpr);
-              BitArray bitArray = new BitArray(bitArrayList[i]);
-              bitArray.Or(bitArrayList[j]);
-              bitArrayList.Add(bitArray);
-              currCombinations.Add(ToBitString(bitArray, true));
-              bitArrayStringToIndex[ToBitString(bitArray, true)] = bitArrayList.Count - 1;
-              combinationResults[bitArrayList.Count - 1] = Result.Unknown;
-              PrintExprAndCreateProcess(program, desiredFunction, conjunctExpr, cnt);
-              cnt++;
-              desiredFunction.Body = topLevelDeclCopy.Body;
-            }
-          }
+        var prevDepthExprStartIndex = expressionFinder.availableExpressions.Count;
+        expressionFinder.CalcNextDepthAvailableExpressions();
+        for (int i = prevDepthExprStartIndex; i < expressionFinder.availableExpressions.Count; i++) {
+          var expr = expressionFinder.availableExpressions[i];
+          PrintExprAndCreateProcess(program, desiredFunction, expr, i);
+          desiredFunction.Body = topLevelDeclCopy.Body;
         }
         await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
-        for (int i = tmp; i < availableExpressions.Count; i++) {
+        for (int i = prevDepthExprStartIndex; i < expressionFinder.availableExpressions.Count; i++) {
           UpdateCombinationResult(i);
         }
-        prevDepthExprStartIndex = tmp;
       }
       Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
       int correctProofCount = 0;
@@ -846,7 +579,7 @@ namespace Microsoft.Dafny {
       int incorrectProofCount = 0;
       int invalidExprCount = 0;
       int falsePredicateCount = 0;
-      for (int i = 0; i < availableExpressions.Count; i++) {
+      for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         switch (combinationResults[i]) {
           case Result.InvalidExpr: invalidExprCount++; break;
           case Result.FalsePredicate: falsePredicateCount++; break;
@@ -859,7 +592,8 @@ namespace Microsoft.Dafny {
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
         "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "Total");
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
-        invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount, availableExpressions.Count);
+        invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount, 
+        expressionFinder.availableExpressions.Count);
       string executionTimesSummary = "";
       // executionTimes.Sort();
       for (int i = 0; i < executionTimes.Count; i++) {
@@ -907,7 +641,7 @@ namespace Microsoft.Dafny {
       }
       return true;
       List<int> correctExpressionsIndex = new List<int>();
-      for (int i = 0; i < availableExpressions.Count; i++) {
+      for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         if (combinationResults[i] == Result.CorrectProof || combinationResults[i] == Result.CorrectProofByTimeout)
           correctExpressionsIndex.Add(i);
       }
@@ -927,15 +661,15 @@ namespace Microsoft.Dafny {
       string graphVizOutput = $"digraph \"{funcName}_implies_graph\" {{\n";
       graphVizOutput += "  // The list of correct expressions\n";
       for (int i = 0; i < correctExpressionsIndex.Count; i++) {
-        graphVizOutput += $"  {correctExpressionsIndex[i]} [label=\"{Printer.ExprToString(availableExpressions[correctExpressionsIndex[i]])}\"];\n";
+        graphVizOutput += $"  {correctExpressionsIndex[i]} [label=\"{Printer.ExprToString(expressionFinder.availableExpressions[correctExpressionsIndex[i]])}\"];\n";
       }
       graphVizOutput += "\n  // The list of edges:\n";
       foreach (var p in dafnyImpliesExecutor.dafnyProcesses) {
         var availableExprAIndex = dafnyImpliesExecutor.processToAvailableExprAIndex[p];
         var availableExprBIndex = dafnyImpliesExecutor.processToAvailableExprBIndex[p];
         // skip connecting all nodes to true
-        if (Printer.ExprToString(availableExpressions[availableExprAIndex]) == "true" ||
-            Printer.ExprToString(availableExpressions[availableExprBIndex]) == "true")
+        if (Printer.ExprToString(expressionFinder.availableExpressions[availableExprAIndex]) == "true" ||
+            Printer.ExprToString(expressionFinder.availableExpressions[availableExprBIndex]) == "true")
           continue;
         var output = dafnyImpliesExecutor.dafnyOutput[p];
         if (output.EndsWith("0 errors\n")) {
@@ -1079,8 +813,8 @@ namespace Microsoft.Dafny {
       var parameterNameTypes = paramList.Item2;
       string lemmaForCheckingImpliesString = "lemma checkIfExprAImpliesExprB(";
       lemmaForCheckingImpliesString += parameterNameTypes + ")\n";
-      Expression A = availableExpressions[availableExprAIndex];
-      Expression B = availableExpressions[availableExprBIndex];
+      Expression A = expressionFinder.availableExpressions[availableExprAIndex];
+      Expression B = expressionFinder.availableExpressions[availableExprBIndex];
       lemmaForCheckingImpliesString += "  requires " + Printer.ExprToString(A) + "\n";
       lemmaForCheckingImpliesString += "  ensures " + Printer.ExprToString(B) + "\n";
       lemmaForCheckingImpliesString += "{}";
@@ -1112,224 +846,6 @@ namespace Microsoft.Dafny {
         availableExprAIndex, availableExprBIndex, -1, lemmaForCheckingImpliesPosition,
         $"{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy");
     }
-
-    // public static Function AddExpression(Function func, Expression expr)
-    // {
-    //   Function result = new Function(func.tok, func.Name, func.HasStaticKeyword, func.IsGhost,
-    //   func.TypeArgs, func.Formals, func.Result, func.ResultType,
-    //   func.Req, func.Reads, func.Ens, func.Decreases,
-    //   Expression.CreateAnd(func.Body, expr), func.ByMethodTok, func.ByMethodBody,
-    //   func.Attributes, func.SignatureEllipsis);
-    //   return result;
-    // }
-
-    public IEnumerable<Expression> ListArguments(Program program, Function func) {
-      foreach (var formal in func.Formals) {
-        // Console.WriteLine($"\n{formal.Name}\t{formal.Type.ToString()}");
-        // Console.WriteLine(formal.Type.NormalizeExpand().IsTopLevelTypeWithMembers);
-        // var c = 0;
-        var identExpr = Expression.CreateIdentExpr(formal);
-        foreach (var expr in TraverseFormal(program, identExpr)) {
-          // Console.WriteLine($"{c} {variable.Name,-20}:\t{variable.Type}");
-          // c++;
-          yield return expr;
-        }
-
-      }
-    }
-
-    public IEnumerable<Expression> TraverseFormal(Program program, Expression expr) {
-      Contract.Requires(expr != null);
-      yield return expr;
-      var t = expr.Type;
-      if (t is BoolType || t is CharType || t is IntType || t is BigOrdinalType ||
-          t is RealType || t is BitvectorType || t is CollectionType) {
-        if (t is BoolType) {
-          var trueLiteralExpr = Expression.CreateBoolLiteral(expr.tok, true);
-          yield return trueLiteralExpr;
-          // NOTE: No need to add false literal since we also check for non-equality.
-        } else if (t is IntType) {
-          var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
-          yield return zeroLiteralExpr;
-          var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
-          yield return oneLiteralExpr;
-        } else if (t is CollectionType) {
-          // create cardinality
-          var cardinalityExpr = Expression.CreateCardinality(expr, program.BuiltIns);
-          yield return cardinalityExpr;
-          if (t is SeqType) {
-            var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
-            var zerothElement = new SeqSelectExpr(expr.tok, true, expr, zeroLiteralExpr, null);
-            var st = t as SeqType;
-            zerothElement.Type = st.Arg;
-            foreach (var e in TraverseFormal(program, zerothElement)) {
-              yield return e;
-            }
-            // create 0th element of the sequence
-          }
-        }
-        // Console.WriteLine("pre-defined variable type");
-        yield break;
-      }
-      var udt = (UserDefinedType)t;
-      var cl = udt.ResolvedClass;
-      if (cl is OpaqueTypeDecl) {
-        var otd = (OpaqueTypeDecl)cl;
-        // Console.WriteLine($"{variable.Name} is OpaqueTypeDecl");
-        // TODO traverse underlying definition as well.
-        throw new NotImplementedException();
-      } else if (cl is TypeParameter) {
-        var tp = (TypeParameter)cl;
-        // Console.WriteLine($"{variable.Name} is TypeParameter");
-        // TODO traverse underlying definition as well.
-        throw new NotImplementedException();
-      } else if (cl is InternalTypeSynonymDecl) {
-        var isyn = (InternalTypeSynonymDecl)cl;
-        // Console.WriteLine($"{variable.Name} is InternalTypeSynonymDecl");
-        // TODO traverse underlying definition as well.
-        throw new NotImplementedException();
-      } else if (cl is NewtypeDecl) {
-        var td = (NewtypeDecl)cl;
-        Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.BaseType} {td.BaseType is IntType}");
-        // TODO possibly figure out other expressions from td.Constraint
-        if (td.BaseType is IntType) {
-          var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
-          zeroLiteralExpr.Type = t;
-          // TODO Add the literal for maximum value of this newtype decl.
-          yield return zeroLiteralExpr;
-          var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
-          oneLiteralExpr.Type = t;
-          yield return oneLiteralExpr;
-        } else {
-          throw new NotImplementedException();
-        }
-        // foreach (var v in TraverseType(program, td.BaseType)) {
-        //   // var ngv = (Formal)variable;
-        //   // var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
-        //   Console.WriteLine($"!!!! {v.val}");
-        //   var e = new ExprDotName(v, expr, v.val, null);
-        //   e.Type = expr.Type;
-        //   // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
-        //   yield return e;
-        // }
-      } else if (cl is SubsetTypeDecl) {
-        Console.WriteLine($"{Printer.ExprToString(expr)}");
-        var td = (SubsetTypeDecl)cl;
-        Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.Rhs}");
-        if (td.Rhs is IntType) {
-          var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
-          zeroLiteralExpr.Type = t;
-          yield return zeroLiteralExpr;
-          var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
-          oneLiteralExpr.Type = t;
-          yield return oneLiteralExpr;
-
-        }
-        // Console.WriteLine($"{variable.Name} is SubsetTypeDecl");
-      } else if (cl is ClassDecl) {
-        // Console.WriteLine($"{variable.Name} is ClassDecl");
-        // TODO traverse underlying definition as well.
-        throw new NotImplementedException();
-      } else if (cl is DatatypeDecl) {
-        var dt = (DatatypeDecl)cl;
-        var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
-        // Console.WriteLine($"{variable.Name} is DatatypeDecl");
-        foreach (var ctor in dt.Ctors) {
-          if (dt.Ctors.Count > 1) {
-            var exprDot = new ExprDotName(ctor.tok, expr, ctor.tok.val + "?", null);
-            exprDot.Type = Type.Bool;
-            yield return exprDot;
-          }
-          foreach (var formal in ctor.Formals) {
-            // Console.WriteLine($"type={formal.Type} => {Resolver.SubstType(formal.Type, subst)}");
-            // var convertedFormal = new Formal(formal.tok, formal.Name, 
-            //     Resolver.SubstType(formal.Type, subst), formal.InParam, formal.IsGhost,
-            //     formal.DefaultValue, formal.IsOld, formal.IsNameOnly, formal.NameForCompilation);
-            // var identExpr = Expression.CreateIdentExpr(convertedFormal);
-            var exprDot = new ExprDotName(formal.tok, expr, formal.tok.val, null);
-            exprDot.Type = Resolver.SubstType(formal.Type, subst);
-            foreach (var v in TraverseFormal(program, exprDot)) {
-              // Console.WriteLine($"aaa {v.tok.val}");
-              // // var ngv = (Formal)variable;
-              // // var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
-              // // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
-              // var e = new ExprDotName(v.tok, expr, v.tok.val, null);
-              // e.Type = v.Type;
-              yield return v;
-            }
-            // Console.WriteLine($"aaaa {formal.Name}");
-          }
-        }
-      }
-      // var members = expr.Type.NormalizeExpand().AsTopLevelTypeWithMembers;
-      // foreach(var mem in members.Members)
-      // {
-      //   Console.WriteLine(mem);
-      // }
-      // if (expr.SubExpressions != null)
-      // {
-      // foreach (var subexpr in expr.SubExpressions)
-      // {
-      //   TraverseFormal(subexpr);
-      // }
-      // }
-    }
-
-    public IEnumerable<IToken> TraverseType(Program program, Type t) {
-      Console.WriteLine(t.ToString());
-      if (t is BoolType || t is CharType || t is IntType || t is BigOrdinalType ||
-          t is RealType || t is BitvectorType || t is CollectionType) {
-        Console.WriteLine("pre-defined type");
-        yield break;
-      }
-      var udt = (UserDefinedType)t;
-      var cl = udt.ResolvedClass;
-      if (cl is OpaqueTypeDecl) {
-        var otd = (OpaqueTypeDecl)cl;
-        // Console.WriteLine($"{t.ToString()} is OpaqueTypeDecl");
-        // TODO traverse underlying definition as well.
-      } else if (cl is TypeParameter) {
-        var tp = (TypeParameter)cl;
-        // Console.WriteLine($"{t.ToString()} is TypeParameter");
-        // TODO traverse underlying definition as well.
-      } else if (cl is InternalTypeSynonymDecl) {
-        var isyn = (InternalTypeSynonymDecl)cl;
-        // Console.WriteLine($"{t.ToString()} is InternalTypeSynonymDecl");
-        // TODO traverse underlying definition as well.
-      } else if (cl is NewtypeDecl) {
-        var td = (NewtypeDecl)cl;
-        Console.WriteLine($"{t.ToString()} is NewtypeDecl");
-        foreach (var v in TraverseType(program, td.BaseType)) {
-          yield return v;
-        }
-      } else if (cl is SubsetTypeDecl) {
-        var td = (SubsetTypeDecl)cl;
-        // Console.WriteLine($"{t.ToString()} is SubsetTypeDecl");
-        // TODO traverse underlying definition as well.
-      } else if (cl is ClassDecl) {
-        // Console.WriteLine($"{t.ToString()} is ClassDecl");
-        // TODO traverse underlying definition as well.
-      } else if (cl is DatatypeDecl) {
-        var dt = (DatatypeDecl)cl;
-        // Console.WriteLine($"{t.ToString()} is DatatypeDecl");
-        // TODO traverse underlying definition as well.
-      } else {
-        // Console.WriteLine($"{t.ToString()} is unknown");
-      }
-      // var members = expr.Type.NormalizeExpand().AsTopLevelTypeWithMembers;
-      // foreach(var mem in members.Members)
-      // {
-      //   Console.WriteLine(mem);
-      // }
-      // if (expr.SubExpressions != null)
-      // {
-      // foreach (var subexpr in expr.SubExpressions)
-      // {
-      //   TraverseFormal(subexpr);
-      // }
-      // }
-    }
-
 
   }
 }
