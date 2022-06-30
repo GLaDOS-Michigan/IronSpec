@@ -341,84 +341,6 @@ namespace Microsoft.Dafny {
       return res;
     }
 
-    public static IEnumerable<Expression> ListConstructors(
-        Type ty,
-        DatatypeCtor ctor,
-        Dictionary<string, List<Expression>> typeToExpressionDict,
-        List<Expression> arguments,
-        int shouldFillIndex) {
-      if (shouldFillIndex == ctor.Formals.Count) {
-        List<ActualBinding> bindings = new List<ActualBinding>();
-        foreach (var arg in arguments) {
-          bindings.Add(new ActualBinding(null, arg));
-        }
-        var applySuffixExpr = new ApplySuffix(ctor.tok, null, new NameSegment(ctor.tok, ctor.Name, null), bindings);
-        applySuffixExpr.Type = ty;
-        yield return applySuffixExpr;
-        yield break;
-      }
-      var t = ctor.Formals[shouldFillIndex].Type;
-      if (typeToExpressionDict.ContainsKey(t.ToString())) {
-        foreach (var expr in typeToExpressionDict[t.ToString()]) {
-          arguments.Add(expr);
-          foreach (var ans in ListConstructors(ty, ctor, typeToExpressionDict, arguments, shouldFillIndex + 1)) {
-            yield return ans;
-          }
-          arguments.RemoveAt(arguments.Count - 1);
-        }
-      }
-    }
-
-    public static List<Expression> GetAllPossibleConstructors(Program program,
-      Type ty,
-      DatatypeCtor ctor,
-      Dictionary<string, List<Expression>> typeToExpressionDict) {
-      List<Expression> result = new List<Expression>();
-      List<Expression> workingList = new List<Expression>();
-      foreach (var expr in ListConstructors(ty, ctor, typeToExpressionDict, workingList, 0)) {
-        result.Add(expr);
-      }
-      return result;
-    }
-
-    public static IEnumerable<Expression> ListInvocations(
-        Function func,
-        Dictionary<string, List<Expression>> typeToExpressionDict,
-        List<Expression> arguments,
-        int shouldFillIndex) {
-      if (shouldFillIndex == func.Formals.Count) {
-        List<ActualBinding> bindings = new List<ActualBinding>();
-        foreach (var arg in arguments) {
-          bindings.Add(new ActualBinding(null, arg));
-        }
-        var funcCallExpr = new FunctionCallExpr(func.tok, func.FullDafnyName, new ImplicitThisExpr(func.tok), func.tok, bindings);
-        funcCallExpr.Type = func.ResultType;
-        yield return funcCallExpr;
-        yield break;
-      }
-      var t = func.Formals[shouldFillIndex].Type;
-      if (typeToExpressionDict.ContainsKey(t.ToString())) {
-        foreach (var expr in typeToExpressionDict[t.ToString()]) {
-          arguments.Add(expr);
-          foreach (var ans in ListInvocations(func, typeToExpressionDict, arguments, shouldFillIndex + 1)) {
-            yield return ans;
-          }
-          arguments.RemoveAt(arguments.Count - 1);
-        }
-      }
-    }
-
-    public static List<Expression> GetAllPossibleFunctionInvocations(Program program,
-        Function func,
-        Dictionary<string, List<Expression>> typeToExpressionDict) {
-      List<Expression> result = new List<Expression>();
-      List<Expression> workingList = new List<Expression>();
-      foreach (var expr in ListInvocations(func, typeToExpressionDict, workingList, 0)) {
-        result.Add(expr);
-      }
-      return result;
-    }
-
     public async Task<bool> EvaluateAfterRemoveFileLine(Program program, string removeFileLine, string baseFuncName, int depth) {
       var fileLineArray = removeFileLine.Split(':');
       var file = fileLineArray[0];
@@ -522,7 +444,7 @@ namespace Microsoft.Dafny {
               typeToExpressionDictForInputs.Add(typeString, lst);
             }
           }
-          var funcCalls = GetAllPossibleFunctionInvocations(program, constraintFunc, typeToExpressionDictForInputs);
+          var funcCalls = ExpressionFinder.GetAllPossibleFunctionInvocations(program, constraintFunc, typeToExpressionDictForInputs);
           foreach (var funcCall in funcCalls) {
             if (constraintExpr == null) {
               constraintExpr = funcCall;

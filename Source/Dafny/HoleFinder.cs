@@ -212,7 +212,7 @@ namespace Microsoft.Dafny {
             typeToExpressionDictForInputs.Add(typeString, lst);
           }
         }
-        var funcCalls = HoleEvaluator.GetAllPossibleFunctionInvocations(program, constraintFunc, typeToExpressionDictForInputs);
+        var funcCalls = ExpressionFinder.GetAllPossibleFunctionInvocations(program, constraintFunc, typeToExpressionDictForInputs);
         foreach (var funcCall in funcCalls) {
           if (constraintExpr == null) {
             constraintExpr = funcCall;
