@@ -300,6 +300,13 @@ namespace Microsoft.Dafny {
         }
         return ExitValue.SUCCESS;
       }
+      if (DafnyOptions.O.ProofEvaluatorLemmaName != null) {
+        var proofEvaluator = new ProofEvaluator();
+        var foundDesiredLemma = proofEvaluator.Evaluate(dafnyProgram,
+            DafnyOptions.O.ProofEvaluatorLemmaName,
+            DafnyOptions.O.HoleEvaluatorDepth);
+        return foundDesiredLemma.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
+      }
       if (DafnyOptions.O.HoleEvaluatorFunctionName != null) {
         var holeEvaluator = new HoleEvaluator();
         var foundDesiredFunction = holeEvaluator.Evaluate(dafnyProgram,

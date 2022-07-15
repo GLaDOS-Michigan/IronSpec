@@ -454,7 +454,7 @@ namespace Microsoft.Dafny {
           }
           Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr)}");
         }
-        expressionFinder.CalcDepthOneAvailableExpresssions(program, desiredFunction);
+        expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         topLevelDeclCopy = new Function(
           desiredFunction.tok, desiredFunction.Name, desiredFunction.HasStaticKeyword,
           desiredFunction.IsGhost, desiredFunction.TypeArgs, desiredFunction.Formals,

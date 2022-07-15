@@ -141,6 +141,7 @@ namespace Microsoft.Dafny {
       testGenOptions ??= new TestGenerationOptions();
 
     public string FindHoleFromFunctionName = null;
+    public string ProofEvaluatorLemmaName = null;
     public string HoleEvaluatorFunctionName = null;
     public string HoleEvaluatorBaseFunctionName = null;
     public int HoleEvaluatorDepth = 1;
@@ -495,6 +496,12 @@ namespace Microsoft.Dafny {
         case "holeFinder":
           if (ps.ConfirmArgumentCount(1)) {
             FindHoleFromFunctionName = args[ps.i];
+          }
+          return true;
+
+        case "proofEval":
+          if (ps.ConfirmArgumentCount(1)) {
+            ProofEvaluatorLemmaName = args[ps.i];
           }
           return true;
 

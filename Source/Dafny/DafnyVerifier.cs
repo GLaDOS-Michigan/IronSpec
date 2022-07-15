@@ -43,6 +43,7 @@ namespace Microsoft.Dafny {
     public Dictionary<VerificationRequest, VerificationResponse> dafnyOutput = new Dictionary<VerificationRequest, VerificationResponse>();
     public List<VerificationRequest> requestsList = new List<VerificationRequest>();
     public Dictionary<VerificationRequest, Expression> requestToExpr = new Dictionary<VerificationRequest, Expression>();
+    public Dictionary<VerificationRequest, List<Expression>> requestToExprList = new Dictionary<VerificationRequest, List<Expression>>();
     public Dictionary<VerificationRequest, AsyncUnaryCall<VerificationResponse>> requestToCall =
       new Dictionary<VerificationRequest, AsyncUnaryCall<VerificationResponse>>();
     public Dictionary<VerificationRequest, int> requestToCnt = new Dictionary<VerificationRequest, int>();
@@ -62,28 +63,6 @@ namespace Microsoft.Dafny {
         return Result.IncorrectProof;
       }
     }
-
-    // public static Task<Task<T>>[] Interleaved<T>(IEnumerable<Task<T>> tasks) {
-    //   var inputTasks = tasks.ToList();
-
-    //   var buckets = new TaskCompletionSource<Task<T>>[inputTasks.Count];
-    //   var results = new Task<Task<T>>[buckets.Length];
-    //   for (int i = 0; i < buckets.Length; i++) {
-    //     buckets[i] = new TaskCompletionSource<Task<T>>();
-    //     results[i] = buckets[i].Task;
-    //   }
-
-    //   int nextTaskIndex = -1;
-    //   Action<Task<T>> continuation = completed => {
-    //     var bucket = buckets[Interlocked.Increment(ref nextTaskIndex)];
-    //     bucket.TrySetResult(completed);
-    //   };
-
-    //   foreach (var inputTask in inputTasks)
-    //     inputTask.ContinueWith(continuation, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-
-    //   return results;
-    // }
 
     public async Task<bool> startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
       await Parallel.ForEachAsync(requestsList,
@@ -112,6 +91,30 @@ namespace Microsoft.Dafny {
         });
       return true;
     }
+    public async Task<bool> startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
+      await Parallel.ForEachAsync(requestsList,
+        async (request, tmp) => {
+        start:
+          try {
+            VerificationResponse response = await requestToCall[request];
+            var output = response.Response;
+            if (output.EndsWith("0 errors\n")) {
+              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{requestToCnt[request]}: {Printer.ExprToString(requestToExpr[request])}");
+            }
+            dafnyOutput[request] = response;
+            await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{requestToCnt[request]}_0.txt",
+              (requestToExpr.ContainsKey(request) ? "// " + Printer.ExprToString(requestToExpr[request]) + "\n" : "") + 
+              (requestToCnt.ContainsKey(request) ? "// " + requestToCnt[request] + "\n" : "") + output + "\n");
+            // Console.WriteLine($"finish executing {requestToCnt[request]}");
+          } catch (RpcException ex) {
+            Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: Restarting task #{requestToCnt[request]} {ex.Message}");
+            RestartTask(requestToCnt[request]);
+            goto start;
+          }
+        });
+      return true;
+    }
+
     private void RestartTask(int index) {
       var request = requestsList[index];
       var prevTask = requestToCall[request];
@@ -158,6 +161,27 @@ namespace Microsoft.Dafny {
       requestToAvailableExprBIndex[request] = availableExprBIndex;
       requestToPostConditionPosition[request] = postConditionPos;
       requestToLemmaStartPosition[request] = lemmaStartPos;
+      dafnyOutput[request] = new VerificationResponse();
+    }
+
+    public void runDafnyProofCheck(string code, List<string> args, List<Expression> exprList, int cnt) {
+      sentRequests++;
+      // if (sentRequests == 500) {
+      //   sentRequests = 0;
+      //   ResetChannel();
+      // }
+      VerificationRequest request = new VerificationRequest();
+      request.Code = code;
+      foreach (var arg in args) {
+        request.Arguments.Add(arg);
+      }
+      requestsList.Add(request);
+      var serverId = cnt % serversList.Count;
+      AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
+        deadline: DateTime.UtcNow.AddMinutes(30000));
+      requestToCall[request] = task;
+      requestToExprList[request] = exprList;
+      requestToCnt[request] = cnt;
       dafnyOutput[request] = new VerificationResponse();
     }
   }

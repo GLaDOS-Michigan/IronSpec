@@ -23,6 +23,7 @@ namespace Microsoft.Dafny {
     private int prevDepthExprStartIndex = 1;
     private int numberOfSingleExpr = 0;
     private HoleEvaluator holeEval = null;
+    private ProofEvaluator proofEval = null;
     public List<Expression> availableExpressions = new List<Expression>();
     private List<BitArray> bitArrayList = new List<BitArray>();
     private HashSet<string> currCombinations = new HashSet<string>();
@@ -32,6 +33,9 @@ namespace Microsoft.Dafny {
 
     public ExpressionFinder(HoleEvaluator holeEval) {
       this.holeEval = holeEval;
+    }
+    public ExpressionFinder(ProofEvaluator proofEval) {
+      this.proofEval = proofEval;
     }
 
     private string ToBitString(BitArray bits, bool skipZero) {
@@ -107,10 +111,22 @@ namespace Microsoft.Dafny {
       return true;
     }
 
-    public void CalcDepthOneAvailableExpresssions(Program program, Function desiredFunction) {
+    public void CalcDepthOneAvailableExpresssionsFromFunction(Program program, Function desiredFunction) {
       Contract.Requires(desiredFunction != null);
       Contract.Requires(availableExpressions.Count == 0);
       var expressions = ListArguments(program, desiredFunction);
+      CalcDepthOneAvailableExpresssions(program, desiredFunction, expressions);
+    }
+
+    public void CalcDepthOneAvailableExpresssionsFromLemma(Program program, Lemma desiredLemma) {
+      Contract.Requires(desiredLemma != null);
+      Contract.Requires(availableExpressions.Count == 0);
+      var expressions = ListArguments(program, desiredLemma);
+      CalcDepthOneAvailableExpresssions(program, desiredLemma, expressions);
+    }
+
+    public Dictionary<string, List<Expression>> GetRawExpressions(Program program, MemberDecl decl,
+        IEnumerable<Expression> expressions, bool addToAvailableExpressions) {
       var c = 0;
       Dictionary<string, List<Expression>> typeToExpressionDict = new Dictionary<string, List<Expression>>();
       foreach (var expr in expressions) {
@@ -134,53 +150,40 @@ namespace Microsoft.Dafny {
         }
         // AddExpression(program, topLevelDecl, expr);
       }
-      var equalExprToCheck = desiredFunction.Body;
-      foreach (var e in desiredFunction.Req) {
-        equalExprToCheck = Expression.CreateAnd(equalExprToCheck, e.E);
-      }
-      Dictionary<string, List<string>> equalExprList = GetEqualExpressionList(equalExprToCheck);
-      foreach (var k in equalExprList.Keys) {
-        var t = equalExprList[k][0];
-        for (int i = 1; i < equalExprList[k].Count; i++) {
-          for (int j = 0; j < typeToExpressionDict[t].Count; j++) {
-            if (Printer.ExprToString(typeToExpressionDict[t][j]) == equalExprList[k][i]) {
-              typeToExpressionDict[t].RemoveAt(j);
-              break;
+      if (decl is Function) {
+        var desiredFunction = decl as Function;
+        var equalExprToCheck = desiredFunction.Body;
+        foreach (var e in desiredFunction.Req) {
+          equalExprToCheck = Expression.CreateAnd(equalExprToCheck, e.E);
+        }
+        Dictionary<string, List<string>> equalExprList = GetEqualExpressionList(equalExprToCheck);
+        foreach (var k in equalExprList.Keys) {
+          var t = equalExprList[k][0];
+          for (int i = 1; i < equalExprList[k].Count; i++) {
+            for (int j = 0; j < typeToExpressionDict[t].Count; j++) {
+              if (Printer.ExprToString(typeToExpressionDict[t][j]) == equalExprList[k][i]) {
+                typeToExpressionDict[t].RemoveAt(j);
+                break;
+              }
             }
           }
         }
       }
-      Dictionary<string, List<Expression>> constructorPerTypeDict = new Dictionary<string, List<Expression>>();
-      foreach (var k in typeToExpressionDict.Keys) {
-        var t = typeToExpressionDict[k][0].Type;
-        if (t is UserDefinedType) {
-          var udt = t as UserDefinedType;
-          var cl = udt.ResolvedClass;
-          if (cl is DatatypeDecl) {
-            var dt = (DatatypeDecl)cl;
-            var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
-            constructorPerTypeDict[k] = new List<Expression>();
-            // Console.WriteLine($"{variable.Name} is DatatypeDecl");
-            foreach (var ctor in dt.Ctors) {
-              var cons = GetAllPossibleConstructors(program, t, ctor, typeToExpressionDict);
-              constructorPerTypeDict[k].AddRange(cons);
-            }
+      if (addToAvailableExpressions) {
+        foreach (var t in typeToExpressionDict) {
+          for (int i = 0; i < t.Value.Count; i++) {
+            availableExpressions.Add(t.Value[i]);
           }
         }
       }
-      foreach (var k in constructorPerTypeDict.Keys) {
-        typeToExpressionDict[k].AddRange(constructorPerTypeDict[k]);
-      }
-      // Console.WriteLine("--------------------------------");
-      var counter = 0;
-      foreach (var k in typeToExpressionDict.Keys) {
-        foreach (var v in typeToExpressionDict[k]) {
-          Console.WriteLine($"{counter} {Printer.ExprToString(v),-60} {k}");
-          counter++;
-        }
-      }
-      // check equality of each pair of same type expressions
-      var trueExpr = Expression.CreateBoolLiteral(desiredFunction.Body.tok, true);
+      return typeToExpressionDict;
+    }
+
+    public void CalcDepthOneAvailableExpresssions(Program program, MemberDecl decl, IEnumerable<Expression> expressions) {
+      Contract.Requires(availableExpressions.Count == 0);
+      Dictionary<string, List<Expression>> typeToExpressionDict = GetRawExpressions(program, decl, expressions, false);
+
+      var trueExpr = Expression.CreateBoolLiteral(decl.tok, true);
       availableExpressions.Add(trueExpr);
       foreach (var k in typeToExpressionDict.Keys) {
         var values = typeToExpressionDict[k];
@@ -255,16 +258,18 @@ namespace Microsoft.Dafny {
         }
       }
       numberOfSingleExpr = availableExpressions.Count;
-      for (int i = 0; i < numberOfSingleExpr; i++) {
-        BitArray bitArray = new BitArray(availableExpressions.Count, false);
-        bitArray[i] = true;
-        bitArrayList.Add(bitArray);
-        if (i == 0) {
-          currCombinations.Add(ToBitString(bitArray, false));
-          bitArrayStringToIndex[ToBitString(bitArray, false)] = i;
-        } else {
-          currCombinations.Add(ToBitString(bitArray, true));
-          bitArrayStringToIndex[ToBitString(bitArray, true)] = i;
+      if (DafnyOptions.O.HoleEvaluatorDepth > 1) {
+        for (int i = 0; i < numberOfSingleExpr; i++) {
+          BitArray bitArray = new BitArray(availableExpressions.Count, false);
+          bitArray[i] = true;
+          bitArrayList.Add(bitArray);
+          if (i == 0) {
+            currCombinations.Add(ToBitString(bitArray, false));
+            bitArrayStringToIndex[ToBitString(bitArray, false)] = i;
+          } else {
+            currCombinations.Add(ToBitString(bitArray, true));
+            bitArrayStringToIndex[ToBitString(bitArray, true)] = i;
+          }
         }
       }
     }
@@ -432,6 +437,21 @@ namespace Microsoft.Dafny {
           yield return expr;
         }
 
+      }
+    }
+
+    public IEnumerable<Expression> ListArguments(Program program, Lemma lemma) {
+      foreach (var formal in lemma.Ins) {
+        var identExpr = Expression.CreateIdentExpr(formal);
+        foreach (var expr in TraverseFormal(program, identExpr)) {
+          yield return expr;
+        }
+      }
+      foreach (var formal in lemma.Outs) {
+        var identExpr = Expression.CreateIdentExpr(formal);
+        foreach (var expr in TraverseFormal(program, identExpr)) {
+          yield return expr;
+        }
       }
     }
 
