@@ -615,6 +615,28 @@ namespace Microsoft.Dafny {
       }
     }
 
+    public static string GetFullLemmaNameString(ModuleDefinition moduleDef, string name) {
+      if (moduleDef is null) {
+        return name;
+      }
+      foreach (var decl in ModuleDefinition.AllFunctions(moduleDef.TopLevelDecls)) {
+        if (decl.ToString() == name) {
+          var moduleName = GetFullModuleName(moduleDef);
+          return (moduleName == "") ? name : (moduleName + "." + name);
+        }
+      }
+      foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
+          if (imp is ModuleDecl) {
+            var result = GetFullLemmaNameString((imp as ModuleDecl).Signature.ModuleDef, name);
+            if (result != "") {
+              return result;
+            }
+          }
+        }
+      // couldn't find the type definition here, so we should search the parent
+      return "";
+    }
+
     public static string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
       if (moduleDef is null) {
         return type.ToString();

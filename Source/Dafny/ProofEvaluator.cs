@@ -158,6 +158,152 @@ namespace Microsoft.Dafny {
       }
     }
 
+    public IEnumerable<Expression> GetAllForallExists(Program program) {
+      foreach (var kvp in program.ModuleSigs) {
+        foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
+          foreach (var e in Expression.Conjuncts(topLevelDecl.Body)) {
+            if (e is ForallExpr) {
+              yield return e;
+            }
+            if (e is ExistsExpr) {
+              yield return e;
+            }
+          }
+        }
+      }
+      yield break;
+    }
+
+    public IEnumerable<Lemma> GetSubLemmas(Program program, Lemma lemma) {
+      List<AttributedExpression> soFarEnsuresExprList = new List<AttributedExpression>();
+      foreach (var ens in lemma.Ens) {
+        if (ens.E is ApplySuffix) {
+          var appSuf = ens.E as ApplySuffix;
+          if (!(appSuf.Lhs is NameSegment)) {
+            Console.WriteLine($"don't support traversing {Printer.ExprToString(appSuf.Lhs)}");
+            continue;
+          }
+          var ensuresPredicateName = HoleEvaluator.GetFullLemmaNameString(lemma.EnclosingClass.EnclosingModuleDefinition, Printer.ExprToString(appSuf.Lhs));
+          var ensuresPredicate = HoleEvaluator.GetFunction(program, ensuresPredicateName);
+          if (ensuresPredicate == null) {
+            throw new NotSupportedException($"{ensuresPredicateName} not found");
+          }
+
+          var argsSubstMap = new Dictionary<IVariable, Expression>();  // maps formal arguments to actuals
+          for (int i = 0; i < ensuresPredicate.Formals.Count; i++) {
+            argsSubstMap.Add(ensuresPredicate.Formals[i], appSuf.Args[i]);
+          }
+          var substituter = new AlphaConvertingSubstituter(ensuresPredicate.Body, argsSubstMap, new Dictionary<TypeParameter, Type>());
+          var subtitutedNamesExpr = substituter.Substitute(ensuresPredicate.Body);
+          Console.WriteLine($"convert \n    {Printer.ExprToString(ensuresPredicate.Body)}\nto\n    {Printer.ExprToString(subtitutedNamesExpr)}");
+          foreach (var expr in Expression.Conjuncts(subtitutedNamesExpr)) {
+            Lemma subLemma = new Lemma(lemma.tok, lemma.Name, lemma.HasStaticKeyword, lemma.TypeArgs,
+                lemma.Ins, lemma.Outs, lemma.Req.ToList(), lemma.Mod, lemma.Ens.ToList(), lemma.Decreases, lemma.Body,
+                lemma.Attributes, lemma.SignatureEllipsis);
+            subLemma.Req.AddRange(soFarEnsuresExprList);
+            subLemma.Ens.Clear();
+            subLemma.Ens.Add(new AttributedExpression(expr));
+            soFarEnsuresExprList.Add(new AttributedExpression(expr));
+            if (expr is ApplySuffix) {
+              foreach (var s in GetSubLemmas(program, subLemma)) {
+                yield return s;
+              }
+            }
+            yield return subLemma;
+            // Console.WriteLine(Printer.ExprToString(expr));
+          }
+        }
+      }
+      yield break;
+    }
+
+    // public List<Expression> GetTriggers(Expression expr) {
+    //   Contract.Requires(expr != null);
+    //   Contract.Requires(expr is ForallExpr || expr is ExistsExpr);
+    //   var result = new List<Expression>();
+    //   if (expr is ForallExpr) {
+    //     var forallExpr = expr as ForallExpr;
+    //     result.AddRange(forallExppr.Triggers);
+    //   }
+    //   return result;
+    // }
+
+    public bool IsCompatibleTrigger(Expression expr, Expression trigger) {
+      // Console.WriteLine($"  {Printer.ExprToString(expr)} {Printer.ExprToString(trigger)}");
+      // Console.WriteLine($"  {expr.Type.ToString()} {trigger.Type.ToString()}");
+      // Console.WriteLine($"  {expr} {trigger}");
+      if (expr.Type.ToString() != trigger.Type.ToString() && trigger.Type.ToString() != "T") {
+        return false;
+      }
+      if (expr is IdentifierExpr && trigger is IdentifierExpr) {
+        return true;
+      } else if (trigger is NameSegment) {
+        return true;
+      } else if (expr is ApplySuffix && trigger is ApplySuffix) {
+        var exprSuffix = expr as ApplySuffix;
+        var triggerSuffix = trigger as ApplySuffix;
+        if (exprSuffix.Args.Count != triggerSuffix.Args.Count) {
+          return false;
+        }
+        for (int i = 0; i < triggerSuffix.Args.Count; i++) {
+          if (!IsCompatibleTrigger(exprSuffix.Args[i], triggerSuffix.Args[i])) {
+            return false;
+          }
+        }
+        if (!IsCompatibleTrigger(exprSuffix.Lhs, triggerSuffix.Lhs)) {
+          return false;
+        }
+        return true;
+      } else if (expr is ExprDotName && trigger is MemberSelectExpr) {
+        var exprDotName = expr as ExprDotName;
+        var triggerMemberSelectExpr = trigger as MemberSelectExpr;
+        if (!IsCompatibleTrigger(exprDotName.Lhs, triggerMemberSelectExpr.Obj)) {
+          return false;
+        }
+        if (exprDotName.SuffixName != triggerMemberSelectExpr.MemberName) {
+          return false;
+        }
+        return true;
+      } else if (expr is SeqSelectExpr && trigger is SeqSelectExpr) {
+        var exprSeqSelect = expr as SeqSelectExpr;
+        var triggerSeqSelect = trigger as SeqSelectExpr;
+        if (exprSeqSelect.SelectOne && triggerSeqSelect.SelectOne) {
+          if (!IsCompatibleTrigger(exprSeqSelect.Seq, triggerSeqSelect.Seq)) {
+            return false;
+          }
+          if (!IsCompatibleTrigger(exprSeqSelect.E0, triggerSeqSelect.E0)) {
+            return false;
+          }
+          return true;
+        }
+        else if (!exprSeqSelect.SelectOne && !triggerSeqSelect.SelectOne) {
+          throw new NotSupportedException();
+          return false;
+        }
+        else {
+          return false;
+        }
+      }
+      return false;
+    }
+    public Expression DoesMatchWithAnyTrigger(Expression expr, Dictionary<string, List<Expression>> typeToTriggerDict) {
+      if (!typeToTriggerDict.ContainsKey(expr.Type.ToString())) {
+        return null;
+      }
+      var triggerList = typeToTriggerDict[expr.Type.ToString()];
+      // Console.WriteLine($"DoesMatchWithAny for {Printer.ExprToString(expr)} ---- start");
+      foreach (var trigger in triggerList) {
+        // if (expr.Type.ToString() == "nat") {
+        //   var tmp = IsCompatibleTrigger(expr, trigger);
+        // }
+        if (IsCompatibleTrigger(expr, trigger)) {
+          return trigger;
+        }
+      }
+      // Console.WriteLine($"DoesMatchWithAny for {Printer.ExprToString(expr)} ---- end");
+      return null;
+    }
+
     public async Task<bool> EvaluateAfterRemoveFileLine(Program program, string removeFileLine, int depth) {
       var fileLineArray = removeFileLine.Split(':');
       var file = fileLineArray[0];
@@ -231,6 +377,60 @@ namespace Microsoft.Dafny {
       Lemma desiredLemma = null;
       // List<Statement> lemmaBodyBackup = null;
       desiredLemma = ProofEvaluator.GetLemma(program, lemmaName);
+      var allForallExists = GetAllForallExists(program);
+      Dictionary<string, List<Expression>> typeToTriggerDict = new Dictionary<string, List<Expression>>();
+      Dictionary<string, HashSet<string>> typeToTriggerDictHashSet = new Dictionary<string, HashSet<string>>();
+      foreach (var x in allForallExists) {
+        var trigList = (x as QuantifierExpr).SplitQuantifier;
+        // Console.WriteLine(Printer.ExprToString(x));
+        foreach (var t in trigList) {
+          // Console.WriteLine($"---- {Printer.ExprToString(t)} ----");
+          var attributes = (t as ComprehensionExpr).Attributes;
+          while (attributes != null) {
+            if (attributes.Name == "trigger") {
+              foreach (var arg in attributes.Args) {
+                if (!typeToTriggerDict.ContainsKey(arg.Type.ToString())) {
+                  typeToTriggerDict[arg.Type.ToString()] = new List<Expression>();
+                  typeToTriggerDictHashSet[arg.Type.ToString()] = new HashSet<string>();
+                }
+                if (!typeToTriggerDictHashSet[arg.Type.ToString()].Contains(Printer.ExprToString(arg))) {
+                  typeToTriggerDict[arg.Type.ToString()].Add(arg);
+                  typeToTriggerDictHashSet[arg.Type.ToString()].Add(Printer.ExprToString(arg));
+                }
+              }
+            }
+            attributes = attributes.Prev;
+          }
+        }
+      }
+      foreach (var t in typeToTriggerDict.Keys) {
+        Console.WriteLine("--------------------------------");
+        Console.WriteLine($"{t} {typeToTriggerDict[t].Count}");
+        foreach (var trigger in typeToTriggerDict[t]) {
+          Console.WriteLine(Printer.ExprToString(trigger));
+        }
+        Console.WriteLine("--------------------------------");
+      }
+      // var subLemmas = GetSubLemmas(program, desiredLemma);
+      // foreach (var subLemma in subLemmas) {
+      //   Console.WriteLine("-------");
+      //   using (var wr = new System.IO.StringWriter()) {
+      //     var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
+      //     pr.PrintMethod(subLemma, 0, false);
+      //     Console.WriteLine(Printer.ToStringWithoutNewline(wr));
+      //   }
+      //   Console.WriteLine("-------");
+      // }
+
+      // foreach (var ens in desiredLemma.Ens) {
+      //   if (ens.E is ApplySuffix) {
+      //     var appSuf = ens.E as ApplySuffix;
+      //     var ensuresPredicateName = HoleEvaluator.GetFullLemmaNameString(desiredLemma.EnclosingClass.EnclosingModuleDefinition, Printer.ExprToString(appSuf.Lhs));
+      //     var ensuresPredicate = HoleEvaluator.GetFunction(program, ensuresPredicateName);
+      //     Console.WriteLine(ensuresPredicate.FullDafnyName);
+      //   }
+      // }
+      // return true;
       Dictionary<string, List<Expression>> typeToExpressionDict = null;
       if (desiredLemma != null) {
         var expressions = expressionFinder.ListArguments(program, desiredLemma);
@@ -239,11 +439,17 @@ namespace Microsoft.Dafny {
         Console.WriteLine($"{lemmaName} was not found!");
         return false;
       }
-      // for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
-      //   PrintExprAndCreateProcess(program, desiredLemma, expressionFinder.availableExpressions[i], i);
-      //   var desiredLemmaBody = desiredLemma.Body.Body;
-      //   desiredLemmaBody.RemoveAt(0);
-      // }
+      for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
+        var matchingTrigger = DoesMatchWithAnyTrigger(expressionFinder.availableExpressions[i], typeToTriggerDict);
+        Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} " +
+          $"{expressionFinder.availableExpressions[i].Type.ToString()} " +
+          $"{expressionFinder.availableExpressions[i]} " +
+          (matchingTrigger == null ? "NaN" : ("\t\t" + Printer.ExprToString(matchingTrigger))));
+        //   PrintExprAndCreateProcess(program, desiredLemma, expressionFinder.availableExpressions[i], i);
+        //   var desiredLemmaBody = desiredLemma.Body.Body;
+        //   desiredLemmaBody.RemoveAt(0);
+      }
+      return true;
       // await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
       // Console.WriteLine("finish");
 
@@ -256,7 +462,7 @@ namespace Microsoft.Dafny {
       // Until here, we only check depth 1 of expressions.
       // Now we try to check next depths
       // int numberOfSingleExpr = expressionFinder.availableExpressions.Count;
-      
+
       // empty expression list should represent the original code without any additions
       PrintExprAndCreateProcess(program, desiredLemma, new List<Expression>(), 0);
       int cnt = 1;

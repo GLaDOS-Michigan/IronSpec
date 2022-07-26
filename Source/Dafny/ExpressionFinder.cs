@@ -133,7 +133,7 @@ namespace Microsoft.Dafny {
         c++;
         var exprString = Printer.ExprToString(expr);
         var typeString = expr.Type.ToString();
-        Console.WriteLine($"{c,2} {exprString,-20} {typeString}");
+        // Console.WriteLine($"{c,2} {exprString,-20} {typeString}");
         if (expr.Type == Type.Bool && exprString[exprString.Length - 1] == '?') {
           typeString = "_questionMark_";
         }
@@ -507,7 +507,7 @@ namespace Microsoft.Dafny {
         throw new NotImplementedException();
       } else if (cl is NewtypeDecl) {
         var td = (NewtypeDecl)cl;
-        Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.BaseType} {td.BaseType is IntType}");
+        // Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.BaseType} {td.BaseType is IntType}");
         // TODO possibly figure out other expressions from td.Constraint
         if (td.BaseType is IntType) {
           var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
@@ -530,9 +530,9 @@ namespace Microsoft.Dafny {
         //   yield return e;
         // }
       } else if (cl is SubsetTypeDecl) {
-        Console.WriteLine($"{Printer.ExprToString(expr)}");
+        // Console.WriteLine($"{Printer.ExprToString(expr)}");
         var td = (SubsetTypeDecl)cl;
-        Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.Rhs}");
+        // Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.Rhs}");
         if (td.Rhs is IntType) {
           var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
           zeroLiteralExpr.Type = t;
@@ -593,10 +593,10 @@ namespace Microsoft.Dafny {
     }
 
     public IEnumerable<IToken> TraverseType(Program program, Type t) {
-      Console.WriteLine(t.ToString());
+      // Console.WriteLine(t.ToString());
       if (t is BoolType || t is CharType || t is IntType || t is BigOrdinalType ||
           t is RealType || t is BitvectorType || t is CollectionType) {
-        Console.WriteLine("pre-defined type");
+        // Console.WriteLine("pre-defined type");
         yield break;
       }
       var udt = (UserDefinedType)t;
@@ -615,7 +615,7 @@ namespace Microsoft.Dafny {
         // TODO traverse underlying definition as well.
       } else if (cl is NewtypeDecl) {
         var td = (NewtypeDecl)cl;
-        Console.WriteLine($"{t.ToString()} is NewtypeDecl");
+        // Console.WriteLine($"{t.ToString()} is NewtypeDecl");
         foreach (var v in TraverseType(program, td.BaseType)) {
           yield return v;
         }
