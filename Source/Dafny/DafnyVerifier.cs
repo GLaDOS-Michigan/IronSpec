@@ -41,7 +41,7 @@ namespace Microsoft.Dafny {
     }
     public Stopwatch sw;
     public Dictionary<VerificationRequest, VerificationResponse> dafnyOutput = new Dictionary<VerificationRequest, VerificationResponse>();
-    public List<VerificationRequest> requestsList = new List<VerificationRequest>();
+    public Dictionary<int, VerificationRequest> requestsList = new Dictionary<int, VerificationRequest>();
     public Dictionary<VerificationRequest, Expression> requestToExpr = new Dictionary<VerificationRequest, Expression>();
     public Dictionary<VerificationRequest, List<Expression>> requestToExprList = new Dictionary<VerificationRequest, List<Expression>>();
     public Dictionary<VerificationRequest, AsyncUnaryCall<VerificationResponse>> requestToCall =
@@ -66,8 +66,9 @@ namespace Microsoft.Dafny {
 
     public async Task<bool> startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
       await Parallel.ForEachAsync(requestsList,
-        async (request, tmp) => {
+        async (kv, tmp) => {
         start:
+          var request = kv.Value;
           try {
             VerificationResponse response = await requestToCall[request];
             var output = response.Response;
@@ -93,17 +94,24 @@ namespace Microsoft.Dafny {
     }
     public async Task<bool> startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
       await Parallel.ForEachAsync(requestsList,
-        async (request, tmp) => {
+        async (kv, tmp) => {
         start:
+          var request = kv.Value;
           try {
             VerificationResponse response = await requestToCall[request];
             var output = response.Response;
             if (output.EndsWith("0 errors\n")) {
-              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer #{requestToCnt[request]}: {Printer.ExprToString(requestToExpr[request])}");
+              var str = $"{sw.ElapsedMilliseconds / 1000}:: correct answer #{requestToCnt[request]}: ";
+              var sep = "";
+              foreach (var expr in requestToExprList[request]) {
+                str += ($"{sep}{Printer.ExprToString(expr)}");
+                sep = ", ";
+              }
+              Console.WriteLine(str);
             }
             dafnyOutput[request] = response;
             await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{requestToCnt[request]}_0.txt",
-              (requestToExpr.ContainsKey(request) ? "// " + Printer.ExprToString(requestToExpr[request]) + "\n" : "") + 
+              (requestToExpr.ContainsKey(request) ? "// " + Printer.ExprToString(requestToExpr[request]) + "\n" : "") +
               (requestToCnt.ContainsKey(request) ? "// " + requestToCnt[request] + "\n" : "") + output + "\n");
             // Console.WriteLine($"finish executing {requestToCnt[request]}");
           } catch (RpcException ex) {
@@ -135,7 +143,7 @@ namespace Microsoft.Dafny {
       foreach (var arg in args) {
         request.Arguments.Add(arg);
       }
-      requestsList.Add(request);
+      requestsList.Add(cnt, request);
       var serverId = cnt % serversList.Count;
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
         deadline: DateTime.UtcNow.AddMinutes(30000));
@@ -156,7 +164,7 @@ namespace Microsoft.Dafny {
       var serverId = (availableExprAIndex * availableExprBIndex) % serversList.Count;
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request);
       requestToCall[request] = task;
-      requestsList.Add(request);
+      requestsList.Add(requestsList.Count, request);
       requestToAvailableExprAIndex[request] = availableExprAIndex;
       requestToAvailableExprBIndex[request] = availableExprBIndex;
       requestToPostConditionPosition[request] = postConditionPos;
@@ -175,7 +183,7 @@ namespace Microsoft.Dafny {
       foreach (var arg in args) {
         request.Arguments.Add(arg);
       }
-      requestsList.Add(request);
+      requestsList.Add(cnt, request);
       var serverId = cnt % serversList.Count;
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
         deadline: DateTime.UtcNow.AddMinutes(30000));

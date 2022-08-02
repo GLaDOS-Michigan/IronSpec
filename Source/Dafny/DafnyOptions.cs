@@ -147,6 +147,7 @@ namespace Microsoft.Dafny {
     public int HoleEvaluatorDepth = 1;
     public bool HoleEvaluatorRunOnce = false;
     public bool HoleEvaluatorCreateAuxFiles = true;
+    public bool ProofEvaluatorCollectAllTriggerMatches = false;
     public string HoleEvaluatorWorkingDirectory = "/tmp/";
     public string HoleEvaluatorServerIpPortList = null;
     public string HoleEvaluatorInvariant = null;
@@ -547,6 +548,10 @@ namespace Microsoft.Dafny {
           }
           return true;
 
+        case "proofEvalCollectAllTriggerMatches":
+          ProofEvaluatorCollectAllTriggerMatches = true;
+          return true;
+        
         case "holeEvalRemoveFileLine":
           if (ps.ConfirmArgumentCount(1)) {
             HoleEvaluatorRemoveFileLine = args[ps.i];

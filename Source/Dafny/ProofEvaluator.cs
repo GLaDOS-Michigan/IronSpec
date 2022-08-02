@@ -54,6 +54,10 @@ namespace Microsoft.Dafny {
     }
 
     private void UpdateCombinationResult(int index) {
+      if (!dafnyVerifier.requestsList.ContainsKey(index)) {
+        combinationResults[index] = Result.NoMatchingTrigger;
+        return;
+      }
       var request = dafnyVerifier.requestsList[index];
       var output = dafnyVerifier.dafnyOutput[request];
       var response = output.Response;
@@ -70,7 +74,13 @@ namespace Microsoft.Dafny {
         // Console.WriteLine(output);
         combinationResults[index] = Result.CorrectProof;
         // Console.WriteLine(p.StartInfo.Arguments);
-        Console.WriteLine(Printer.ExprToString(dafnyVerifier.requestToExpr[request]));
+        var str = "";
+        var sep = "";
+        foreach (var expr in dafnyVerifier.requestToExprList[request]) {
+          str += sep + Printer.ExprToString(expr);
+          sep = ", ";
+        }
+        Console.WriteLine(str);
       } else {
         combinationResults[index] = Result.IncorrectProof;
       }
@@ -228,10 +238,21 @@ namespace Microsoft.Dafny {
     //   return result;
     // }
 
-    public bool IsCompatibleTrigger(Expression expr, Expression trigger) {
-      // Console.WriteLine($"  {Printer.ExprToString(expr)} {Printer.ExprToString(trigger)}");
-      // Console.WriteLine($"  {expr.Type.ToString()} {trigger.Type.ToString()}");
-      // Console.WriteLine($"  {expr} {trigger}");
+    public bool IsCompatibleTrigger(Expression expr, Expression trigger, bool isPredicateName = false) {
+      // Console.WriteLine($"  1 {Printer.ExprToString(expr)} {Printer.ExprToString(trigger)}");
+      // Console.WriteLine($"  2 {expr} {trigger}");
+      // if (checkType) {
+      //   Console.WriteLine($"  3 {expr.Type.ToString()}");
+      //   Console.WriteLine($"  4 {trigger.Type.ToString()}");
+      // } else {
+      //   Console.WriteLine($"  3 checkType = false");
+      // }
+      if (isPredicateName) {
+        var exprStrList = Printer.ExprToString(expr).Split('.');
+        var exprStr = exprStrList[exprStrList.Length - 1];
+        var triggerStr = Printer.ExprToString(trigger);
+        return exprStr == triggerStr;
+      }
       if (expr.Type.ToString() != trigger.Type.ToString() && trigger.Type.ToString() != "T") {
         return false;
       }
@@ -242,15 +263,16 @@ namespace Microsoft.Dafny {
       } else if (expr is ApplySuffix && trigger is ApplySuffix) {
         var exprSuffix = expr as ApplySuffix;
         var triggerSuffix = trigger as ApplySuffix;
-        if (exprSuffix.Args.Count != triggerSuffix.Args.Count) {
+        // Console.WriteLine($"{exprSuffix.Bindings.ArgumentBindings} {triggerSuffix.Bindings.ArgumentBindings}");
+        if (exprSuffix.Bindings.ArgumentBindings.Count != triggerSuffix.Bindings.ArgumentBindings.Count) {
           return false;
         }
-        for (int i = 0; i < triggerSuffix.Args.Count; i++) {
-          if (!IsCompatibleTrigger(exprSuffix.Args[i], triggerSuffix.Args[i])) {
+        for (int i = 0; i < triggerSuffix.Bindings.ArgumentBindings.Count; i++) {
+          if (!IsCompatibleTrigger(exprSuffix.Bindings.ArgumentBindings[i].Actual, triggerSuffix.Bindings.ArgumentBindings[i].Actual)) {
             return false;
           }
         }
-        if (!IsCompatibleTrigger(exprSuffix.Lhs, triggerSuffix.Lhs)) {
+        if (!IsCompatibleTrigger(exprSuffix.Lhs, triggerSuffix.Lhs, true)) {
           return false;
         }
         return true;
@@ -275,33 +297,41 @@ namespace Microsoft.Dafny {
             return false;
           }
           return true;
-        }
-        else if (!exprSeqSelect.SelectOne && !triggerSeqSelect.SelectOne) {
+        } else if (!exprSeqSelect.SelectOne && !triggerSeqSelect.SelectOne) {
           throw new NotSupportedException();
           return false;
-        }
-        else {
+        } else {
           return false;
         }
       }
       return false;
     }
+
+    public Dictionary<string, int> numberOfMatches = new Dictionary<string, int>();
     public Expression DoesMatchWithAnyTrigger(Expression expr, Dictionary<string, List<Expression>> typeToTriggerDict) {
       if (!typeToTriggerDict.ContainsKey(expr.Type.ToString())) {
         return null;
       }
       var triggerList = typeToTriggerDict[expr.Type.ToString()];
+      Expression result = null;
       // Console.WriteLine($"DoesMatchWithAny for {Printer.ExprToString(expr)} ---- start");
       foreach (var trigger in triggerList) {
         // if (expr.Type.ToString() == "nat") {
         //   var tmp = IsCompatibleTrigger(expr, trigger);
         // }
         if (IsCompatibleTrigger(expr, trigger)) {
-          return trigger;
+          if (result == null) {
+            result = trigger;
+          }
+          if (DafnyOptions.O.ProofEvaluatorCollectAllTriggerMatches) {
+            numberOfMatches[Printer.ExprToString(trigger)]++;
+          } else {
+            return trigger;
+          }
         }
       }
       // Console.WriteLine($"DoesMatchWithAny for {Printer.ExprToString(expr)} ---- end");
-      return null;
+      return result;
     }
 
     public async Task<bool> EvaluateAfterRemoveFileLine(Program program, string removeFileLine, int depth) {
@@ -407,7 +437,11 @@ namespace Microsoft.Dafny {
         Console.WriteLine("--------------------------------");
         Console.WriteLine($"{t} {typeToTriggerDict[t].Count}");
         foreach (var trigger in typeToTriggerDict[t]) {
-          Console.WriteLine(Printer.ExprToString(trigger));
+          var triggerStr = Printer.ExprToString(trigger);
+          if (DafnyOptions.O.ProofEvaluatorCollectAllTriggerMatches) {
+            numberOfMatches.Add(triggerStr, 0);
+          }
+          Console.WriteLine(triggerStr);
         }
         Console.WriteLine("--------------------------------");
       }
@@ -439,67 +473,82 @@ namespace Microsoft.Dafny {
         Console.WriteLine($"{lemmaName} was not found!");
         return false;
       }
+      var numberOfMatchedExpressions = 0;
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
+        // Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} start");
         var matchingTrigger = DoesMatchWithAnyTrigger(expressionFinder.availableExpressions[i], typeToTriggerDict);
-        Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} " +
-          $"{expressionFinder.availableExpressions[i].Type.ToString()} " +
-          $"{expressionFinder.availableExpressions[i]} " +
-          (matchingTrigger == null ? "NaN" : ("\t\t" + Printer.ExprToString(matchingTrigger))));
-        //   PrintExprAndCreateProcess(program, desiredLemma, expressionFinder.availableExpressions[i], i);
-        //   var desiredLemmaBody = desiredLemma.Body.Body;
-        //   desiredLemmaBody.RemoveAt(0);
+        if (matchingTrigger != null) {
+          Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} " +
+            $"{expressionFinder.availableExpressions[i].Type.ToString()} " +
+            $"{expressionFinder.availableExpressions[i]} " + "\t\t" + Printer.ExprToString(matchingTrigger));
+          numberOfMatchedExpressions++;
+          var l = new List<Expression>();
+          l.Add(expressionFinder.availableExpressions[i]);
+          PrintExprAndCreateProcess(program, desiredLemma, l, i);
+          var desiredLemmaBody = desiredLemma.Body.Body;
+          desiredLemmaBody.RemoveAt(0);
+        }
       }
-      return true;
-      // await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
-      // Console.WriteLine("finish");
+      if (DafnyOptions.O.ProofEvaluatorCollectAllTriggerMatches) {
+        foreach (var trigger in numberOfMatches) {
+          Console.WriteLine($"{trigger.Key}\t{trigger.Value}");
+        }
+      }
+      Console.WriteLine($"totalExpressions: {expressionFinder.availableExpressions.Count}");
+      Console.WriteLine($"numberOfMatchedExpressions: {numberOfMatchedExpressions}");
+      // return true;
+      await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      Console.WriteLine("finish");
 
-      // // bool foundCorrectExpr = false;
-      // for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
-      //   UpdateCombinationResult(i);
-      //   // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
-      // }
+      // bool foundCorrectExpr = false;
+      for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
+        UpdateCombinationResult(i);
+        // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
+      }
 
       // Until here, we only check depth 1 of expressions.
       // Now we try to check next depths
       // int numberOfSingleExpr = expressionFinder.availableExpressions.Count;
 
       // empty expression list should represent the original code without any additions
-      PrintExprAndCreateProcess(program, desiredLemma, new List<Expression>(), 0);
-      int cnt = 1;
-      var exprTuples = GetExpressionTuples(expressionFinder.availableExpressions, depth);
-      foreach (var e in exprTuples) {
-        PrintExprAndCreateProcess(program, desiredLemma, e, cnt);
-        var desiredLemmaBody = desiredLemma.Body.Body;
-        for (int i = 0; i < e.Count; i++) {
-          desiredLemmaBody.RemoveAt(0);
-        }
-        cnt++;
-      }
-      await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
-      for (int i = 0; i < cnt; i++) {
-        UpdateCombinationResult(i);
-      }
+      // PrintExprAndCreateProcess(program, desiredLemma, new List<Expression>(), 0);
+      // int cnt = 1;
+      // var exprTuples = GetExpressionTuples(expressionFinder.availableExpressions, depth);
+      // foreach (var e in exprTuples) {
+      //   PrintExprAndCreateProcess(program, desiredLemma, e, cnt);
+      //   var desiredLemmaBody = desiredLemma.Body.Body;
+      //   for (int i = 0; i < e.Count; i++) {
+      //     desiredLemmaBody.RemoveAt(0);
+      //   }
+      //   cnt++;
+      // }
+      // await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      // for (int i = 0; i < cnt; i++) {
+      //   UpdateCombinationResult(i);
+      // }
       Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
       int correctProofCount = 0;
       int correctProofByTimeoutCount = 0;
       int incorrectProofCount = 0;
       int invalidExprCount = 0;
       int falsePredicateCount = 0;
-      for (int i = 0; i < cnt; i++) {
+      int noMatchingTriggerCount = 0;
+      for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         switch (combinationResults[i]) {
           case Result.InvalidExpr: invalidExprCount++; break;
           case Result.FalsePredicate: falsePredicateCount++; break;
           case Result.CorrectProof: correctProofCount++; break;
           case Result.CorrectProofByTimeout: correctProofByTimeoutCount++; break;
           case Result.IncorrectProof: incorrectProofCount++; break;
+          case Result.NoMatchingTrigger: noMatchingTriggerCount++; break;
           case Result.Unknown: throw new NotSupportedException();
         }
       }
-      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
-        "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "Total");
-      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
+        "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "NoMatchingTrigger", "Total");
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
         invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount,
-        expressionFinder.availableExpressions.Count);
+        noMatchingTriggerCount, expressionFinder.availableExpressions.Count);
       string executionTimesSummary = "";
       // executionTimes.Sort();
       for (int i = 0; i < executionTimes.Count; i++) {

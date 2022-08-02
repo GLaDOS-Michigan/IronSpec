@@ -24,7 +24,8 @@ namespace Microsoft.Dafny {
     CorrectProofByTimeout = 2,
     IncorrectProof = 3,
     FalsePredicate = 4,
-    InvalidExpr = 5
+    InvalidExpr = 5,
+    NoMatchingTrigger = 6
   }
   public class HoleEvaluator {
     private string UnderscoreStr = "";
@@ -501,6 +502,7 @@ namespace Microsoft.Dafny {
       int incorrectProofCount = 0;
       int invalidExprCount = 0;
       int falsePredicateCount = 0;
+      int noMatchingTriggerCount = 0;
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         switch (combinationResults[i]) {
           case Result.InvalidExpr: invalidExprCount++; break;
@@ -508,14 +510,15 @@ namespace Microsoft.Dafny {
           case Result.CorrectProof: correctProofCount++; break;
           case Result.CorrectProofByTimeout: correctProofByTimeoutCount++; break;
           case Result.IncorrectProof: incorrectProofCount++; break;
+          case Result.NoMatchingTrigger: noMatchingTriggerCount++; break;
           case Result.Unknown: throw new NotSupportedException();
         }
       }
-      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
-        "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "Total");
-      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
-        invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount, 
-        expressionFinder.availableExpressions.Count);
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
+        "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "NoMatchingTrigger", "Total");
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
+        invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount,
+        noMatchingTriggerCount, expressionFinder.availableExpressions.Count);
       string executionTimesSummary = "";
       // executionTimes.Sort();
       for (int i = 0; i < executionTimes.Count; i++) {

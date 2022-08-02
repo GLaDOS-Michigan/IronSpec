@@ -150,6 +150,22 @@ namespace Microsoft.Dafny {
         }
         // AddExpression(program, topLevelDecl, expr);
       }
+      foreach (var kvp in program.ModuleSigs) {
+        foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
+          var cl = d as TopLevelDeclWithMembers;
+          if (cl != null) {
+            foreach (var member in cl.Members) {
+              if (member is Predicate) {
+                var predicateInvocations = GetAllPossiblePredicateInvocations(program, member as Predicate, typeToExpressionDict);
+                if (!typeToExpressionDict.ContainsKey("bool")) {
+                  typeToExpressionDict.Add("bool", new List<Expression>());
+                }
+                typeToExpressionDict["bool"].AddRange(predicateInvocations);
+              }
+            }
+          }
+        }
+      }
       if (decl is Function) {
         var desiredFunction = decl as Function;
         var equalExprToCheck = desiredFunction.Body;
@@ -420,6 +436,44 @@ namespace Microsoft.Dafny {
       List<Expression> result = new List<Expression>();
       List<Expression> workingList = new List<Expression>();
       foreach (var expr in ListInvocations(func, typeToExpressionDict, workingList, 0)) {
+        result.Add(expr);
+      }
+      return result;
+    }
+
+    public static IEnumerable<Expression> ListPredicateInvocations(
+        Predicate func,
+        Dictionary<string, List<Expression>> typeToExpressionDict,
+        List<Expression> arguments,
+        int shouldFillIndex) {
+      if (shouldFillIndex == func.Formals.Count) {
+        List<ActualBinding> bindings = new List<ActualBinding>();
+        foreach (var arg in arguments) {
+          bindings.Add(new ActualBinding(null, arg));
+        }
+        var applySuffixExpr = new ApplySuffix(func.tok, null, new IdentifierExpr(func.tok, func.FullDafnyName), bindings);
+        applySuffixExpr.Type = func.ResultType;
+        yield return applySuffixExpr;
+        yield break;
+      }
+      var t = func.Formals[shouldFillIndex].Type;
+      if (typeToExpressionDict.ContainsKey(t.ToString())) {
+        foreach (var expr in typeToExpressionDict[t.ToString()]) {
+          arguments.Add(expr);
+          foreach (var ans in ListPredicateInvocations(func, typeToExpressionDict, arguments, shouldFillIndex + 1)) {
+            yield return ans;
+          }
+          arguments.RemoveAt(arguments.Count - 1);
+        }
+      }
+    }
+
+    public static List<Expression> GetAllPossiblePredicateInvocations(Program program,
+        Predicate func,
+        Dictionary<string, List<Expression>> typeToExpressionDict) {
+      List<Expression> result = new List<Expression>();
+      List<Expression> workingList = new List<Expression>();
+      foreach (var expr in ListPredicateInvocations(func, typeToExpressionDict, workingList, 0)) {
         result.Add(expr);
       }
       return result;
