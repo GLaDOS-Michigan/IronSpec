@@ -477,11 +477,13 @@ namespace Microsoft.Dafny {
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         // Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} start");
         var matchingTrigger = DoesMatchWithAnyTrigger(expressionFinder.availableExpressions[i], typeToTriggerDict);
-        if (matchingTrigger != null) {
-          Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} " +
-            $"{expressionFinder.availableExpressions[i].Type.ToString()} " +
-            $"{expressionFinder.availableExpressions[i]} " + "\t\t" + Printer.ExprToString(matchingTrigger));
-          numberOfMatchedExpressions++;
+        if (i == 0 || matchingTrigger != null) {
+          if (i != 0) {
+            Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} " +
+              $"{expressionFinder.availableExpressions[i].Type.ToString()} " +
+              $"{expressionFinder.availableExpressions[i]} " + "\t\t" + Printer.ExprToString(matchingTrigger));
+            numberOfMatchedExpressions++;
+          }
           var l = new List<Expression>();
           l.Add(expressionFinder.availableExpressions[i]);
           PrintExprAndCreateProcess(program, desiredLemma, l, i);
@@ -648,7 +650,7 @@ namespace Microsoft.Dafny {
       // Console.WriteLine($"Creating process : ");
       args.Add("/exitAfterFirstError");
       args.Add("/trace");
-      args.Add($"/proc:*{lemma.CompileName}*");
+      args.Add($"/proc:*{lemma.CompileName}");
       dafnyVerifier.runDafnyProofCheck(code, args, exprList, cnt);
     }
   }
