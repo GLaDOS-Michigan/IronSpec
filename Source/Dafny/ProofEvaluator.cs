@@ -468,11 +468,13 @@ namespace Microsoft.Dafny {
       Dictionary<string, List<Expression>> typeToExpressionDict = null;
       if (desiredLemma != null) {
         var expressions = expressionFinder.ListArguments(program, desiredLemma);
+        var extendedExpressions = expressionFinder.ExtendSeqSelectExpressions(expressions);
         typeToExpressionDict = expressionFinder.GetRawExpressions(program, desiredLemma, expressions, true);
       } else {
         Console.WriteLine($"{lemmaName} was not found!");
         return false;
       }
+      return true;
       var numberOfMatchedExpressions = 0;
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         // Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} start");

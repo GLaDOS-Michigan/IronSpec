@@ -111,6 +111,17 @@ namespace Microsoft.Dafny {
       return true;
     }
 
+    public IEnumerable<Expression> ExtendSeqSelectExpressions(IEnumerable<Expression> expressionList) {
+      Console.WriteLine("here");
+      var typeToExpressionDict = GetTypeToExpressionDict(expressionList);
+      foreach (var expr in expressionList) {
+        if (expr is SeqSelectExpr) {
+          Console.WriteLine($"ExtendSeqSelect: {Printer.ExprToString(expr)}");
+        }
+      }
+      yield break;
+    }
+
     public void CalcDepthOneAvailableExpresssionsFromFunction(Program program, Function desiredFunction) {
       Contract.Requires(desiredFunction != null);
       Contract.Requires(availableExpressions.Count == 0);
@@ -122,15 +133,13 @@ namespace Microsoft.Dafny {
       Contract.Requires(desiredLemma != null);
       Contract.Requires(availableExpressions.Count == 0);
       var expressions = ListArguments(program, desiredLemma);
-      CalcDepthOneAvailableExpresssions(program, desiredLemma, expressions);
+      var extendedExpressions = ExtendSeqSelectExpressions(expressions);
+      CalcDepthOneAvailableExpresssions(program, desiredLemma, extendedExpressions);
     }
 
-    public Dictionary<string, List<Expression>> GetRawExpressions(Program program, MemberDecl decl,
-        IEnumerable<Expression> expressions, bool addToAvailableExpressions) {
-      var c = 0;
+    public Dictionary<string, List<Expression>> GetTypeToExpressionDict(IEnumerable<Expression> expressionList) {
       Dictionary<string, List<Expression>> typeToExpressionDict = new Dictionary<string, List<Expression>>();
-      foreach (var expr in expressions) {
-        c++;
+      foreach (var expr in expressionList) {
         var exprString = Printer.ExprToString(expr);
         var typeString = expr.Type.ToString();
         // Console.WriteLine($"{c,2} {exprString,-20} {typeString}");
@@ -150,6 +159,12 @@ namespace Microsoft.Dafny {
         }
         // AddExpression(program, topLevelDecl, expr);
       }
+      return typeToExpressionDict;
+    }
+
+    public Dictionary<string, List<Expression>> GetRawExpressions(Program program, MemberDecl decl,
+        IEnumerable<Expression> expressions, bool addToAvailableExpressions) {
+      var typeToExpressionDict = GetTypeToExpressionDict(expressions);
       foreach (var kvp in program.ModuleSigs) {
         foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
           var cl = d as TopLevelDeclWithMembers;

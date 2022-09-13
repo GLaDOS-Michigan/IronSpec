@@ -147,7 +147,7 @@ namespace Microsoft.Dafny {
       Queue<Tuple<Expression, Expression, Function>> queue = new Queue<Tuple<Expression, Expression, Function>>();
       queue.Enqueue(new Tuple<Expression, Expression, Function>(baseFunc.Body, null, baseFunc));
       G.AddVertex(baseFunc);
-      // HashSet<string> keys = new HashSet<string>();
+      HashSet<string> seenFunctionCalls = new HashSet<string>();
       // keys.Add(Printer.ExprToString(baseF.Body) + ":" + baseF.Body);
       // TODO: Check an example in which a function is called in another function with two different pre-conditions
       while (queue.Count > 0) {
@@ -157,26 +157,34 @@ namespace Microsoft.Dafny {
         if (currExprCondParentTuple.Item1 is FunctionCallExpr /*&& (currExpr as FunctionCallExpr).Function.Body != null*/) {
           // if (!keys.Contains(Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body) + ":" + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body)) {
           // Console.WriteLine("Adding " + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body + ": " + Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body));
-          // Console.WriteLine($"function call: {Printer.ExprToString((currExprCondParentTuple.Item1 as FunctionCallExpr))}");
-          // Console.WriteLine($"{currExprCondParentTuple.Item3.Name} -> {(currExprCondParentTuple.Item1 as FunctionCallExpr).Function.Name}");
-          // if (currExprCondParentTuple.Item2 != null) {
-          //   Console.WriteLine($"condition : {Printer.ExprToString(currExprCondParentTuple.Item2)}");
-          // } else {
-          //   Console.WriteLine($"condition : null");
-          // }
-          queue.Enqueue(new Tuple<Expression, Expression, Function>(
-            (currExprCondParentTuple.Item1 as FunctionCallExpr).Function.Body,
-            null,
-            (currExprCondParentTuple.Item1 as FunctionCallExpr).Function));
-          G.AddVertex((currExprCondParentTuple.Item1 as FunctionCallExpr).Function);
-          G.AddEdge(
-            currExprCondParentTuple.Item3,
-            (currExprCondParentTuple.Item1 as FunctionCallExpr).Function,
-            currExprCondParentTuple.Item1 as FunctionCallExpr,
-            currExprCondParentTuple.Item2);
-          // Console.WriteLine("-------------------------------------");
-          // keys.Add(Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body) + ":" + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body);
-          // }
+          var funcCallCondAsString = $"{currExprCondParentTuple.Item3.Name} -> " +
+                                     $"{(currExprCondParentTuple.Item1 as FunctionCallExpr).Function.Name} -> ";
+          if (currExprCondParentTuple.Item2 != null) {
+            funcCallCondAsString += $"{Printer.ExprToString(currExprCondParentTuple.Item2)}";
+          } else {
+            funcCallCondAsString += "NULL";
+          }
+          if (!seenFunctionCalls.Contains(funcCallCondAsString)) {
+            seenFunctionCalls.Add(funcCallCondAsString);
+            // if (currExprCondParentTuple.Item2 != null) {
+            //   Console.WriteLine($"condition : {Printer.ExprToString(currExprCondParentTuple.Item2)}");
+            // } else {
+            //   Console.WriteLine($"condition : null");
+            // }
+            queue.Enqueue(new Tuple<Expression, Expression, Function>(
+              (currExprCondParentTuple.Item1 as FunctionCallExpr).Function.Body,
+              null,
+              (currExprCondParentTuple.Item1 as FunctionCallExpr).Function));
+            G.AddVertex((currExprCondParentTuple.Item1 as FunctionCallExpr).Function);
+            G.AddEdge(
+              currExprCondParentTuple.Item3,
+              (currExprCondParentTuple.Item1 as FunctionCallExpr).Function,
+              currExprCondParentTuple.Item1 as FunctionCallExpr,
+              currExprCondParentTuple.Item2);
+            // Console.WriteLine("-------------------------------------");
+            // keys.Add(Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body) + ":" + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body);
+            // }
+          }
         }
         if (currExprCondParentTuple.Item1 is ITEExpr) {
           // Console.WriteLine($"ite expr here: {Printer.ExprToString(currExprCondParentTuple.Item1)}");
@@ -426,7 +434,7 @@ namespace Microsoft.Dafny {
 
       UnderscoreStr = RandomString(8);
       dafnyVerifier.sw = Stopwatch.StartNew();
-      // Console.WriteLine($"hole evaluation begins for func {funcName}");
+      Console.WriteLine($"hole evaluation begins for func {funcName}");
       Function desiredFunction = null;
       Function topLevelDeclCopy = null;
       desiredFunction = GetFunction(program, funcName);
@@ -467,6 +475,7 @@ namespace Microsoft.Dafny {
         Console.WriteLine($"{funcName} was not found!");
         return false;
       }
+      Console.WriteLine($"expressionFinder.availableExpressions.Count == {expressionFinder.availableExpressions.Count}");
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         PrintExprAndCreateProcess(program, desiredFunction, expressionFinder.availableExpressions[i], i);
         desiredFunction.Body = topLevelDeclCopy.Body;
@@ -629,13 +638,13 @@ namespace Microsoft.Dafny {
         }
       }
       foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
-          if (imp is ModuleDecl) {
-            var result = GetFullLemmaNameString((imp as ModuleDecl).Signature.ModuleDef, name);
-            if (result != "") {
-              return result;
-            }
+        if (imp is ModuleDecl) {
+          var result = GetFullLemmaNameString((imp as ModuleDecl).Signature.ModuleDef, name);
+          if (result != "") {
+            return result;
           }
         }
+      }
       // couldn't find the type definition here, so we should search the parent
       return "";
     }
@@ -654,16 +663,22 @@ namespace Microsoft.Dafny {
             return (moduleName == "") ? type.ToString() : (moduleName + "." + type.ToString());
           }
         }
-        foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
-          if (imp is ModuleDecl) {
-            var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type);
-            if (result != "") {
-              return result;
+        if (moduleDef.Name != "_module") {
+          foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
+            if (imp is ModuleDecl) {
+              var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type);
+              if (result != "") {
+                return result;
+              }
             }
           }
         }
         // couldn't find the type definition here, so we should search the parent
-        return GetFullTypeString(moduleDef.EnclosingModule, type);
+        if (moduleDef.EnclosingModule != moduleDef) {
+          return GetFullTypeString(moduleDef.EnclosingModule, type);
+        } else {
+          return type.ToString();
+        }
       } else if (type is CollectionType) {
         var ct = type as CollectionType;
         var result = ct.CollectionTypeName + "<";
