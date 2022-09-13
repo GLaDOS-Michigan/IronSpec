@@ -1,3 +1,5 @@
+*.svg
+*.dot
 __pycache__
 output*
 *.config
