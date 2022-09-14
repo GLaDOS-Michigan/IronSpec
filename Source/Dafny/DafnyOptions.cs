@@ -182,6 +182,20 @@ namespace Microsoft.Dafny {
     public virtual TestGenerationOptions TestGenOptions =>
       testGenOptions ??= new TestGenerationOptions();
 
+    public string FindHoleFromFunctionName = null;
+    public string ProofEvaluatorLemmaName = null;
+    public string HoleEvaluatorFunctionName = null;
+    public string HoleEvaluatorBaseFunctionName = null;
+    public int HoleEvaluatorDepth = 1;
+    public bool HoleEvaluatorRunOnce = false;
+    public bool HoleEvaluatorCreateAuxFiles = true;
+    public bool ProofEvaluatorCollectAllTriggerMatches = false;
+    public string HoleEvaluatorWorkingDirectory = "/tmp/";
+    public string HoleEvaluatorServerIpPortList = null;
+    public string HoleEvaluatorInvariant = null;
+    public string HoleEvaluatorConstraint = null;
+    public string HoleEvaluatorRemoveFileLine = null;
+
     protected override bool ParseOption(string name, Bpl.CommandLineParseState ps) {
       var args = ps.args; // convenient synonym
       switch (name) {
@@ -622,6 +636,76 @@ namespace Microsoft.Dafny {
 
         case "extractCounterexample":
           ExtractCounterexample = true;
+          return true;
+
+        case "holeFinder":
+          if (ps.ConfirmArgumentCount(1)) {
+            FindHoleFromFunctionName = args[ps.i];
+          }
+          return true;
+
+        case "proofEval":
+          if (ps.ConfirmArgumentCount(1)) {
+            ProofEvaluatorLemmaName = args[ps.i];
+          }
+          return true;
+
+        case "holeEval":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorFunctionName = args[ps.i];
+          }
+          return true;
+
+        case "holeEvalBase":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorBaseFunctionName = args[ps.i];
+          }
+          return true;
+
+        case "holeEvalInv":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorInvariant = args[ps.i];
+          }
+          return true;
+
+        case "holeEvalCons":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorConstraint = args[ps.i];
+          }
+          return true;
+        
+        case "holeEvalNoAux":
+          HoleEvaluatorCreateAuxFiles = false;
+          return true;
+
+        case "holeEvalDepth":
+          ps.GetNumericArgument(ref HoleEvaluatorDepth, 4);
+          return true;
+
+        case "holeEvalRunOnce":
+          HoleEvaluatorRunOnce = true;
+          return true;
+        
+        case "holeEvalServerIpPortList":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorServerIpPortList = args[ps.i];
+          }
+          return true;
+
+        case "proofEvalCollectAllTriggerMatches":
+          ProofEvaluatorCollectAllTriggerMatches = true;
+          return true;
+        
+        case "holeEvalRemoveFileLine":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorRemoveFileLine = args[ps.i];
+          }
+          return true;
+
+        case "holeEvalWorkingDir":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorWorkingDirectory = args[ps.i] + "/";
+          }
           return true;
 
         case "verificationLogger":

@@ -31,7 +31,7 @@
 
   <ItemGroup>
     <DafnyRuntimeJavaInputFile Include="./DafnyRuntimeJava/**/*.*" />
-    <DafnyRuntimeJavaInputFile Remove="./DafnyRuntimeJava/build/**/*.*" />
+    <!-- <DafnyRuntimeJavaInputFile Remove="./DafnyRuntimeJava/build/**/*.*" /> -->
   </ItemGroup>
 
   <ItemGroup>
