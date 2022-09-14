@@ -3,17 +3,25 @@
 
 using System;
 using System.Collections.Generic;
-using System.ComponentModel.Design.Serialization;
 using System.Linq;
 using System.Text;
 using System.Diagnostics.Contracts;
+using System.Reactive.Disposables;
+using System.Reactive.Linq;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Microsoft.Boogie;
-using Microsoft.Dafny.Triggers;
-
 
 namespace Microsoft.Dafny {
   public static class Util {
+
+    public static Task<U> SelectMany<T, U>(this Task<T> task, Func<T, Task<U>> f) {
+      return Select(task, f).Unwrap();
+    }
+
+    public static Task<U> Select<T, U>(this Task<T> task, Func<T, U> f) {
+      return task.ContinueWith(completedTask => f(completedTask.Result), TaskContinuationOptions.OnlyOnRanToCompletion);
+    }
 
     public static string Comma(this IEnumerable<string> l) {
       return Comma(l, s => s);
@@ -61,6 +69,19 @@ namespace Microsoft.Dafny {
       return res;
     }
 
+    public static string Repeat(int count, string s) {
+      Contract.Requires(0 <= count);
+      Contract.Requires(s != null);
+      // special-case trivial cases
+      if (count == 0) {
+        return "";
+      } else if (count == 1) {
+        return s;
+      } else {
+        return Comma("", count, _ => s);
+      }
+    }
+
     public static string Plural(int n) {
       Contract.Requires(0 <= n);
       return n == 1 ? "" : "s";
@@ -80,6 +101,10 @@ namespace Microsoft.Dafny {
 
     public static List<A> Singleton<A>(A x) {
       return new List<A> { x };
+    }
+
+    public static List<A> List<A>(params A[] xs) {
+      return xs.ToList();
     }
 
     public static List<A> Cons<A>(A x, List<A> xs) {
@@ -303,12 +328,20 @@ namespace Microsoft.Dafny {
 
       foreach (var vertex in functionCallGraph.GetVertices()) {
         var func = vertex.N;
-        Console.Write("{0},{1}=", func.CompileName, func.EnclosingClass.EnclosingModuleDefinition.CompileName);
+        Console.Write("{0},{1}=", func.SanitizedName, func.EnclosingClass.EnclosingModuleDefinition.SanitizedName);
         foreach (var callee in vertex.Successors) {
-          Console.Write("{0} ", callee.N.CompileName);
+          Console.Write("{0} ", callee.N.SanitizedName);
         }
         Console.Write("\n");
       }
+    }
+
+    public static V GetOrDefault<K, V>(this IReadOnlyDictionary<K, V> dictionary, K key, Func<V> createValue) {
+      if (dictionary.TryGetValue(key, out var result)) {
+        return result;
+      }
+
+      return createValue();
     }
 
     public static V GetOrCreate<K, V>(this IDictionary<K, V> dictionary, K key, Func<V> createValue) {
@@ -419,12 +452,12 @@ namespace Microsoft.Dafny {
 
     public void AddInclude(Include include) {
       SortedSet<string> existingDependencies = null;
-      string key = include.includerFilename == null ? "roots" : include.includerFilename;
+      string key = include.IncluderFilename ?? "roots";
       bool found = dependencies.TryGetValue(key, out existingDependencies);
       if (found) {
-        existingDependencies.Add(include.canonicalPath);
+        existingDependencies.Add(include.CanonicalPath);
       } else {
-        dependencies[key] = new SortedSet<string>() { include.canonicalPath };
+        dependencies[key] = new SortedSet<string>() { include.CanonicalPath };
       }
     }
 
@@ -731,8 +764,9 @@ namespace Microsoft.Dafny {
         return enterResult == stop;
       }
 
-      return stmt.SubStatements.Any(subStmt => Traverse(subStmt, "SubStatements", stmt)) ||
-             stmt.SubExpressions.Any(subExpr => Traverse(subExpr, "SubExpressions", stmt)) ||
+      return stmt.NonSpecificationSubExpressions.Any(subExpr => Traverse(subExpr, "NonSpecificationSubExpressions", stmt)) ||
+             stmt.SpecificationSubExpressions.Any(subExpr => Traverse(subExpr, "SpecificationSubExpressions", stmt)) ||
+             stmt.SubStatements.Any(subStmt => Traverse(subStmt, "SubStatements", stmt)) ||
              OnExit(stmt, field, parent);
     }
 
@@ -756,13 +790,14 @@ namespace Microsoft.Dafny {
     private ErrorReporter reporter = null;
     private Resolver resolver = null;
 
-    public ExpressionTester(Resolver resolver = null, bool reportErrors = false) {
-      Contract.Requires(reportErrors == false || resolver != null);
-      if (resolver != null) {
-        this.reporter = resolver.Reporter;
-        this.resolver = resolver;
-      }
+    public ExpressionTester(Resolver resolver = null, bool reportErrors = false) :
+      this(resolver, resolver?.Reporter, reportErrors) {
+    }
 
+    public ExpressionTester(Resolver resolver, ErrorReporter reporter, bool reportErrors = false) {
+      Contract.Requires(reportErrors == false || resolver != null);
+      this.resolver = resolver;
+      this.reporter = reporter;
       this.reportErrors = reportErrors;
     }
 
@@ -770,11 +805,16 @@ namespace Microsoft.Dafny {
     public static bool CheckIsCompilable(Resolver resolver, Expression expr, ICodeContext codeContext) {
       return new ExpressionTester(resolver, resolver != null).CheckIsCompilable(expr, codeContext);
     }
+    // Static call to CheckIsCompilable
+    public static bool CheckIsCompilable(Resolver resolver, ErrorReporter reporter, Expression expr, ICodeContext codeContext) {
+      return new ExpressionTester(resolver, reporter, resolver != null).CheckIsCompilable(expr, codeContext);
+    }
 
     /// <summary>
-    /// Try to make "expr" compilable (in particular, mark LHSs of a let-expression as ghosts if
-    /// the corresponding RHS is ghost), and then report errors for every part that would prevent
-    /// compilation.
+    /// Checks that "expr" is compilable and reports an error if it is not.
+    /// Also, updates bookkeeping information for the verifier to record the fact that "expr" is to be compiled.
+    /// For example, this bookkeeping information keeps track of if the constraint of a let-such-that expression
+    /// must determine the value uniquely.
     /// Requires "expr" to have been successfully resolved.
     /// </summary>
     private bool CheckIsCompilable(Expression expr, ICodeContext codeContext) {
@@ -786,13 +826,14 @@ namespace Microsoft.Dafny {
 
       if (expr is IdentifierExpr expression) {
         if (expression.Var != null && expression.Var.IsGhost) {
-          reporter?.Error(MessageSource.Resolver, expression, "ghost variables are allowed only in specification contexts");
+          reporter?.Error(MessageSource.Resolver, expression, "a ghost variable is allowed only in specification contexts");
           return false;
         }
 
       } else if (expr is MemberSelectExpr selectExpr) {
         if (selectExpr.Member != null && selectExpr.Member.IsGhost) {
-          reporter?.Error(MessageSource.Resolver, selectExpr, "ghost fields are allowed only in specification contexts");
+          var what = selectExpr.Member.WhatKindMentionGhost;
+          reporter?.Error(MessageSource.Resolver, selectExpr, $"a {what} is allowed only in specification contexts");
           return false;
         }
 
@@ -806,10 +847,15 @@ namespace Microsoft.Dafny {
             string msg;
             if (callExpr.Function is TwoStateFunction || callExpr.Function is ExtremePredicate || callExpr.Function is PrefixPredicate) {
               msg = $"a call to a {callExpr.Function.WhatKind} is allowed only in specification contexts";
-            } else if (callExpr.Function is Predicate) {
-              msg = "predicate calls are allowed only in specification contexts (consider declaring the predicate a 'predicate method')";
             } else {
-              msg = "function calls are allowed only in specification contexts (consider declaring the function a 'function method')";
+              var what = callExpr.Function.WhatKind;
+              string compiledDeclHint;
+              if (DafnyOptions.O.FunctionSyntax == DafnyOptions.FunctionSyntaxOptions.Version4) {
+                compiledDeclHint = "without the 'ghost' keyword";
+              } else {
+                compiledDeclHint = $"with '{what} method'";
+              }
+              msg = $"a call to a ghost {what} is allowed only in specification contexts (consider declaring the {what} {compiledDeclHint})";
             }
             reporter?.Error(MessageSource.Resolver, callExpr, msg);
             return false;
@@ -823,7 +869,7 @@ namespace Microsoft.Dafny {
           // function is okay, so check all NON-ghost arguments
           isCompilable = CheckIsCompilable(callExpr.Receiver, codeContext);
           for (var i = 0; i < callExpr.Function.Formals.Count; i++) {
-            if (!callExpr.Function.Formals[i].IsGhost) {
+            if (!callExpr.Function.Formals[i].IsGhost && i < callExpr.Args.Count) {
               isCompilable = CheckIsCompilable(callExpr.Args[i], codeContext) && isCompilable;
             }
           }
@@ -1011,6 +1057,14 @@ namespace Microsoft.Dafny {
     /// Returns whether or not 'expr' has any subexpression that uses some feature (like a ghost or quantifier)
     /// that is allowed only in specification contexts.
     /// Requires 'expr' to be a successfully resolved expression.
+    ///
+    /// Note, some expressions have different proof obligations in ghost and compiled contexts. For example,
+    /// a let-such-that expression in a compiled context is required to have a uniquely determined result.
+    /// For such an expression, "UsesSpecFeatures" returns "false", since the feature can be used in either ghost
+    /// or compiled contexts. Whenever "UsesSpecFeatures" returns "false", the caller has a choice about making
+    /// the expression ghost or making it compiled. If the caller chooses to make the expression compiled, the
+    /// caller must then call "CheckIsCompilable" to commit this choice, because "CheckIsCompilable" fills in
+    /// various bookkeeping information that the verifier will need.
     /// </summary>
     public static bool UsesSpecFeatures(Expression expr) {
       Contract.Requires(expr != null);
@@ -1081,7 +1135,7 @@ namespace Microsoft.Dafny {
         return true;
       } else if (expr is UnaryExpr) {
         var e = (UnaryExpr)expr;
-        if (e is UnaryOpExpr unaryOpExpr && (unaryOpExpr.Op == UnaryOpExpr.Opcode.Fresh || unaryOpExpr.Op == UnaryOpExpr.Opcode.Allocated)) {
+        if (e is UnaryOpExpr { Op: UnaryOpExpr.Opcode.Fresh or UnaryOpExpr.Opcode.Allocated }) {
           return true;
         }
         if (expr is TypeTestExpr tte && !IsTypeTestCompilable(tte)) {

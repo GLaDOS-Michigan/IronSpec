@@ -1,4 +1,8 @@
 using System.Reflection;
-// Version 3.3.0, year 2018+3 month 11 day 4
-[assembly: AssemblyVersion("3.3.0.31104")]
-[assembly: AssemblyFileVersion("3.3.0.31104")]
+// Version 3.7.3, year 2018+4, month 7, day 19
+// When changing this, also be sure to change it in the following files:
+// * Source/DafnyDriver/DafnyDriver.csproj
+// * Source/Dafny/DafnyPipeline.csproj
+// * Source/DafnyLanguageServer/DafnyLanguageServer.csproj
+[assembly: AssemblyVersion("3.8.1.40901")]
+[assembly: AssemblyFileVersion("3.8.1.40901")]

@@ -4,39 +4,121 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
-using Bpl = Microsoft.Boogie;
-using IToken = Microsoft.Boogie.IToken;
+using System.Linq;
 
 namespace Microsoft.Dafny {
+  /// <summary>
+  /// A class that plugins should extend, in order to provide an extra Rewriter to the pipeline.
+  ///
+  /// If the plugin defines no PluginConfiguration, then Dafny will instantiate every sub-class
+  /// of Rewriter from the plugin, providing them with an ErrorReporter in the constructor
+  /// as the first and only argument.
+  /// </summary>
   public abstract class IRewriter {
-    protected readonly ErrorReporter reporter;
+    /// <summary>
+    /// Used to report errors and warnings, with positional information.
+    /// </summary>
+    protected readonly ErrorReporter Reporter;
 
-    public IRewriter(ErrorReporter reporter) {
+    /// <summary>
+    /// Constructor that accepts an ErrorReporter
+    /// You can obtain an ErrorReporter two following ways:
+    /// * Extend a PluginConfiguration class, and override the method GetRewriters(), whose first argument is an ErrorReporter
+    /// * Have no PluginConfiguration  class, and an ErrorReporter will be provided to your class's constructor.
+    /// 
+    /// Then you can use the protected field "reporter" like the following:
+    /// 
+    ///     reporter.Error(MessageSource.Compiler, token, "[Your plugin] Your error message here");
+    ///
+    /// The token is usually obtained on expressions and statements in the field `tok`
+    /// If you do not have access to them, use moduleDefinition.GetFirstTopLevelToken()
+    /// </summary>
+    /// <param name="reporter">The error reporter. Usually outputs automatically to IDE or command-line</param>
+    internal IRewriter(ErrorReporter reporter) {
       Contract.Requires(reporter != null);
-      this.reporter = reporter;
+      this.Reporter = reporter;
     }
 
-    internal virtual void PreResolve(ModuleDefinition m) {
-      Contract.Requires(m != null);
+    /// <summary>
+    /// Phase 1/7
+    /// Override this method to obtain the initial program after parsing and built-in pre-resolvers.
+    /// You can then report errors using reporter.Error (see above)
+    /// </summary>
+    /// <param name="program">The entire program</param>
+    internal virtual void PreResolve(Program program) {
+      Contract.Requires(program != null);
     }
 
-    internal virtual void PostResolve(ModuleDefinition m) {
-      Contract.Requires(m != null);
+    /// <summary>
+    /// Phase 2/7
+    /// Override this method to obtain a module definition after parsing and built-in pre-resolvers.
+    /// You can then report errors using reporter.Error(MessageSource.Resolver, token, "message") (see above)
+    /// This is a good place to perform AST rewritings, if necessary
+    /// </summary>
+    /// <param name="moduleDefinition">A module definition before is resolved</param>
+    internal virtual void PreResolve(ModuleDefinition moduleDefinition) {
+      Contract.Requires(moduleDefinition != null);
     }
 
-    // After SCC/Cyclicity/Recursivity analysis:
-    internal virtual void PostCyclicityResolve(ModuleDefinition m) {
-      Contract.Requires(m != null);
+    /// <summary>
+    /// Phase 3/7
+    /// Override this method to obtain a module definition after bare resolution, if no error were thrown.
+    /// You can then report errors using reporter.Error (see above)
+    /// We heavily discourage AST rewriting after this stage, as automatic type checking will not take place anymore.
+    /// </summary>
+    /// <param name="moduleDefinition">A module definition after it is resolved and type-checked</param>
+    internal virtual void PostResolveIntermediate(ModuleDefinition moduleDefinition) {
+      Contract.Requires(moduleDefinition != null);
     }
 
-    // After SCC/Cyclicity/Recursivity analysis and after application of default decreases:
-    internal virtual void PostDecreasesResolve(ModuleDefinition m) {
-      Contract.Requires(m != null);
+    /// <summary>
+    /// Phase 4/7
+    /// Override this method to obtain the module definition after resolution and
+    /// SCC/Cyclicity/Recursivity analysis.
+    /// You can then report errors using reporter.Error (see above)
+    /// </summary>
+    /// <param name="moduleDefinition">A module definition after it
+    /// is resolved, type-checked and SCC/Cyclicity/Recursivity have been performed</param>
+    internal virtual void PostCyclicityResolve(ModuleDefinition moduleDefinition) {
+      Contract.Requires(moduleDefinition != null);
+    }
+
+    /// <summary>
+    /// Phase 5/7
+    /// Override this method to obtain the module definition after the phase decreasesResolve
+    /// You can then report errors using reporter.Error (see above)
+    /// </summary>
+    /// <param name="moduleDefinition">A module definition after it
+    /// is resolved, type-checked and SCC/Cyclicity/Recursivity and decreasesResolve checks have been performed</param>
+    internal virtual void PostDecreasesResolve(ModuleDefinition moduleDefinition) {
+      Contract.Requires(moduleDefinition != null);
+    }
+
+    /// <summary>
+    /// Phase 6/7
+    /// Override this method to obtain a module definition after the entire resolution pipeline
+    /// You can then report errors using reporter.Error (see above)
+    /// </summary>
+    /// <param name="moduleDefinition">A module definition after it
+    /// is resolved, type-checked and SCC/Cyclicity/Recursivity have been performed</param>
+    internal virtual void PostResolve(ModuleDefinition moduleDefinition) {
+      Contract.Requires(moduleDefinition != null);
+    }
+
+    /// <summary>
+    /// Phase 7/7
+    /// Override this method to obtain the final program after the entire resolution pipeline
+    /// after the individual PostResolve on every module
+    /// You can then report errors using reporter.Error (see above)
+    /// </summary>
+    /// <param name="program">The entire program after it is fully resolved</param>
+    internal virtual void PostResolve(Program program) {
+      Contract.Requires(program != null);
     }
   }
 
   public class AutoGeneratedToken : TokenWrapper {
-    public AutoGeneratedToken(Boogie.IToken wrappedToken)
+    public AutoGeneratedToken(IToken wrappedToken)
       : base(wrappedToken) {
       Contract.Requires(wrappedToken != null);
     }
@@ -48,7 +130,7 @@ namespace Microsoft.Dafny {
     }
 
     internal override void PostCyclicityResolve(ModuleDefinition m) {
-      var finder = new Triggers.QuantifierCollector(reporter);
+      var finder = new Triggers.QuantifierCollector(Reporter);
 
       foreach (var decl in ModuleDefinition.AllCallables(m.TopLevelDecls)) {
         finder.Visit(decl, null);
@@ -67,7 +149,7 @@ namespace Microsoft.Dafny {
       Contract.Requires(reporter != null);
     }
 
-    internal override void PostResolve(ModuleDefinition m) {
+    internal override void PostResolveIntermediate(ModuleDefinition m) {
       var splitter = new Triggers.QuantifierSplitter();
       foreach (var decl in ModuleDefinition.AllCallables(m.TopLevelDecls)) {
         splitter.Visit(decl);
@@ -82,8 +164,8 @@ namespace Microsoft.Dafny {
       Contract.Requires(reporter != null);
     }
 
-    internal override void PostResolve(ModuleDefinition m) {
-      var forallvisiter = new ForAllStmtVisitor(reporter);
+    internal override void PostResolveIntermediate(ModuleDefinition m) {
+      var forallvisiter = new ForAllStmtVisitor(Reporter);
       foreach (var decl in ModuleDefinition.AllCallables(m.TopLevelDecls)) {
         forallvisiter.Visit(decl, true);
         if (decl is ExtremeLemma) {
@@ -147,10 +229,10 @@ namespace Microsoft.Dafny {
                     Contract.Assert(ll.SelectOne);
                     if (!FreeVariablesUtil.ContainsFreeVariable(ll.Seq, false, i)) {
                       Fi = ll.E0;
-                      lhsBuilder = e => { var l = new SeqSelectExpr(ll.tok, true, ll.Seq, e, null); l.Type = ll.Type; return l; };
+                      lhsBuilder = e => { var l = new SeqSelectExpr(ll.tok, true, ll.Seq, e, null, ll.CloseParen); l.Type = ll.Type; return l; };
                     } else if (!FreeVariablesUtil.ContainsFreeVariable(ll.E0, false, i)) {
                       Fi = ll.Seq;
-                      lhsBuilder = e => { var l = new SeqSelectExpr(ll.tok, true, e, ll.E0, null); l.Type = ll.Type; return l; };
+                      lhsBuilder = e => { var l = new SeqSelectExpr(ll.tok, true, e, ll.E0, null, ll.CloseParen); l.Type = ll.Type; return l; };
                     }
                   }
                 }
@@ -477,7 +559,7 @@ namespace Microsoft.Dafny {
       // Add:  predicate Valid()
       // ...unless an instance function with that name is already present
       if (!cl.Members.Exists(member => member is Function && member.Name == "Valid" && !member.IsStatic)) {
-        var valid = new Predicate(cl.tok, "Valid", false, true, new List<TypeParameter>(), new List<Formal>(),
+        var valid = new Predicate(cl.tok, "Valid", false, true, new List<TypeParameter>(), new List<Formal>(), null,
           new List<AttributedExpression>(), new List<FrameExpression>(), new List<AttributedExpression>(), new Specification<Expression>(new List<Expression>(), null),
           null, Predicate.BodyOriginKind.OriginalOrInherited, null, null, null, null);
         cl.Members.Add(valid);
@@ -494,7 +576,7 @@ namespace Microsoft.Dafny {
           // member is inherited from a module where it was already processed
           continue;
         }
-        Boogie.IToken tok = new AutoGeneratedToken(member.tok);
+        IToken tok = new AutoGeneratedToken(member.tok);
         if (member is Function && member.Name == "Valid" && !member.IsStatic) {
           var valid = (Function)member;
           // reads this, Repr
@@ -504,7 +586,7 @@ namespace Microsoft.Dafny {
           valid.Reads.Add(new FrameExpression(tok, r1, null));
           // ensures Valid() ==> this in Repr
           var post = new BinaryExpr(tok, BinaryExpr.Opcode.Imp,
-            new FunctionCallExpr(tok, "Valid", new ImplicitThisExpr(tok), tok, new List<ActualBinding>()),
+            new FunctionCallExpr(tok, "Valid", new ImplicitThisExpr(tok), tok, tok, new List<ActualBinding>()),
             new BinaryExpr(tok, BinaryExpr.Opcode.In,
               new ThisExpr(tok),
                new MemberSelectExpr(tok, new ImplicitThisExpr(tok), "Repr")));
@@ -513,12 +595,12 @@ namespace Microsoft.Dafny {
             // We added this function above, so produce a hover text for the entire function signature
             AddHoverText(cl.tok, "{0}", Printer.FunctionSignatureToString(valid));
           } else {
-            AddHoverText(member.tok, $"reads {r0}, {r1}\nensures {post}");
+            AddHoverText(member.tok, "reads {0}, {1}\nensures {2}", r0, r1, post);
           }
         } else if (member is Function && !member.IsStatic) {
           var f = (Function)member;
           // requires Valid()
-          var valid = new FunctionCallExpr(tok, "Valid", new ImplicitThisExpr(tok), tok, new List<ActualBinding>());
+          var valid = new FunctionCallExpr(tok, "Valid", new ImplicitThisExpr(tok), tok, tok, new List<ActualBinding>());
           f.Req.Insert(0, new AttributedExpression(valid));
           var format = "requires {0}";
           var repr = new MemberSelectExpr(tok, new ImplicitThisExpr(tok), "Repr");
@@ -531,7 +613,7 @@ namespace Microsoft.Dafny {
         } else if (member is Constructor) {
           var ctor = (Constructor)member;
           // ensures Valid();
-          var valid = new FunctionCallExpr(tok, "Valid", new ImplicitThisExpr(tok), tok, new List<ActualBinding>());
+          var valid = new FunctionCallExpr(tok, "Valid", new ImplicitThisExpr(tok), tok, tok, new List<ActualBinding>());
           ctor.Ens.Insert(0, new AttributedExpression(valid));
           // ensures fresh(Repr);
           var freshness = new FreshExpr(tok,
@@ -543,7 +625,7 @@ namespace Microsoft.Dafny {
       }
     }
 
-    internal override void PostResolve(ModuleDefinition m) {
+    internal override void PostResolveIntermediate(ModuleDefinition m) {
       foreach (var d in m.TopLevelDecls) {
         bool sayYes = true;
         if (d is ClassDecl && Attributes.ContainsBool(d.Attributes, "autocontracts", ref sayYes) && sayYes) {
@@ -598,7 +680,7 @@ namespace Microsoft.Dafny {
       }
       Contract.Assert(ReprField != null);  // we expect there to be a "Repr" field, since we added one in PreResolve
 
-      Boogie.IToken clTok = new AutoGeneratedToken(cl.tok);
+      IToken clTok = new AutoGeneratedToken(cl.tok);
       Type ty = Resolver.GetThisType(clTok, cl);
       var self = new ThisExpr(clTok);
       self.Type = ty;
@@ -611,7 +693,7 @@ namespace Microsoft.Dafny {
         if (Attributes.ContainsBool(member.Attributes, "autocontracts", ref sayYes) && !sayYes) {
           continue;
         }
-        Boogie.IToken tok = new AutoGeneratedToken(member.tok);
+        IToken tok = new AutoGeneratedToken(member.tok);
         if (member is Function && member.Name == "Valid" && !member.IsStatic) {
           var valid = (Function)member;
           var validConjuncts = new List<Expression>();
@@ -859,7 +941,7 @@ namespace Microsoft.Dafny {
       Contract.Requires(callingContext != null);
       Contract.Requires(receiver.Type.NormalizeExpand() is UserDefinedType && ((UserDefinedType)receiver.Type.NormalizeExpand()).ResolvedClass == Valid.EnclosingClass);
       Contract.Requires(receiver.Type.NormalizeExpand().TypeArgs.Count == Valid.EnclosingClass.TypeArgs.Count);
-      var call = new FunctionCallExpr(tok, Valid.Name, receiver, tok, new List<Expression>());
+      var call = new FunctionCallExpr(tok, Valid.Name, receiver, tok, tok, new List<Expression>());
       call.Function = Valid;
       call.Type = Type.Bool;
       call.TypeApplication_AtEnclosingClass = receiver.Type.TypeArgs;
@@ -868,7 +950,7 @@ namespace Microsoft.Dafny {
       return call;
     }
 
-    public static BinaryExpr BinBoolExpr(Boogie.IToken tok, BinaryExpr.ResolvedOpcode rop, Expression e0, Expression e1) {
+    public static BinaryExpr BinBoolExpr(IToken tok, BinaryExpr.ResolvedOpcode rop, Expression e0, Expression e1) {
       var p = new BinaryExpr(tok, BinaryExpr.ResolvedOp2SyntacticOp(rop), e0, e1);
       p.ResolvedOp = rop;  // resolve here
       p.Type = Type.Bool;  // resolve here
@@ -885,10 +967,9 @@ namespace Microsoft.Dafny {
         }
       }
       var s = "autocontracts:\n" + string.Format(format, args);
-      reporter.Info(MessageSource.Rewriter, tok, s.Replace("\n", "\n  "));
+      Reporter.Info(MessageSource.Rewriter, tok, s.Replace("\n", "\n  "));
     }
   }
-
 
   /// <summary>
   /// For any function foo() with the :opaque attribute,
@@ -896,34 +977,30 @@ namespace Microsoft.Dafny {
   /// recursive clique (if any), or if the programmer
   /// specifically asks to see it via the reveal_foo() lemma
   /// </summary>
-  public class OpaqueFunctionRewriter : IRewriter {
-    protected Dictionary<Function, Function> fullVersion; // Given an opaque function, retrieve the full
-    protected Dictionary<Function, Function> original;    // Given a full version of an opaque function, find the original opaque version
+  public class OpaqueMemberRewriter : IRewriter {
     protected Dictionary<Method, Function> revealOriginal; // Map reveal_* lemmas (or two-state lemmas) back to their original functions
 
-    public OpaqueFunctionRewriter(ErrorReporter reporter)
+    public OpaqueMemberRewriter(ErrorReporter reporter)
       : base(reporter) {
       Contract.Requires(reporter != null);
 
-      fullVersion = new Dictionary<Function, Function>();
-      original = new Dictionary<Function, Function>();
       revealOriginal = new Dictionary<Method, Function>();
     }
 
     internal override void PreResolve(ModuleDefinition m) {
       foreach (var d in m.TopLevelDecls) {
         if (d is TopLevelDeclWithMembers) {
-          ProcessOpaqueClassFunctions((TopLevelDeclWithMembers)d);
+          ProcessOpaqueClassMembers((TopLevelDeclWithMembers)d);
         }
       }
     }
 
-    internal override void PostResolve(ModuleDefinition m) {
+    internal override void PostResolveIntermediate(ModuleDefinition m) {
       foreach (var decl in ModuleDefinition.AllCallables(m.TopLevelDecls)) {
-        if (decl is Lemma || decl is TwoStateLemma) {
+        if (decl is Lemma or TwoStateLemma) {
           var lem = (Method)decl;
           if (revealOriginal.ContainsKey(lem)) {
-            Function fn = revealOriginal[lem];
+            var fn = revealOriginal[lem];
             AnnotateRevealFunction(lem, fn);
           }
         }
@@ -966,75 +1043,82 @@ namespace Microsoft.Dafny {
 
 
     // Tells the function to use 0 fuel by default
-    protected void ProcessOpaqueClassFunctions(TopLevelDeclWithMembers c) {
+    protected void ProcessOpaqueClassMembers(TopLevelDeclWithMembers c) {
       Contract.Requires(c != null);
-      List<MemberDecl> newDecls = new List<MemberDecl>();
-      foreach (MemberDecl member in c.Members) {
-        if (member is Function) {
-          var f = (Function)member;
-
-          if (!Attributes.Contains(f.Attributes, "opaque")) {
-            // Nothing to do
-          } else if (!RefinementToken.IsInherited(f.tok, c.EnclosingModuleDefinition)) {
-            RewriteOpaqueFunctionUseFuel(f, newDecls);
-          }
+      var newDecls = new List<MemberDecl>();
+      foreach (var member in c.Members.Where(member => member is Function or ConstantField)) {
+        if (!Attributes.Contains(member.Attributes, "opaque")) {
+          // Nothing to do
+        } else if (!RefinementToken.IsInherited(member.tok, c.EnclosingModuleDefinition)) {
+          GenerateRevealLemma(member, newDecls);
         }
       }
       c.Members.AddRange(newDecls);
     }
 
-    private void RewriteOpaqueFunctionUseFuel(Function f, List<MemberDecl> newDecls) {
-      // mark the opaque function with {:fuel, 0, 0}
-      LiteralExpr amount = new LiteralExpr(f.tok, 0);
-      f.Attributes = new Attributes("fuel", new List<Expression>() { amount, amount }, f.Attributes);
+    private void GenerateRevealLemma(MemberDecl m, List<MemberDecl> newDecls) {
+      if (m is Function f) {
+        // mark the opaque function with {:fuel 0, 0}
+        var amount = new LiteralExpr(m.tok, 0);
+        m.Attributes = new Attributes("fuel", new List<Expression>() { amount, amount }, m.Attributes);
 
-      // That is, given:
-      //   function {:opaque} foo(x:int, y:int) : int
-      //     requires 0 <= x < 5;
-      //     requires 0 <= y < 5;
-      //     ensures foo(x, y) < 10;
-      //   { x + y }
-      // We produce:
-      //   lemma {:axiom} {:auto_generated} {:fuel foo, 1, 2 } reveal_foo()
-      //
-      // If "foo" is a two-state function, then "reveal_foo" will be declared as a two-state lemma.
-      //
-      // The translator, in AddMethod, then adds ensures clauses to bump up the fuel parameters appropriately
+        // That is, given:
+        //   function {:opaque} foo(x:int, y:int) : int
+        //     requires 0 <= x < 5;
+        //     requires 0 <= y < 5;
+        //     ensures foo(x, y) < 10;
+        //   { x + y }
+        // We produce:
+        //   lemma {:axiom} {:auto_generated} {:fuel foo, 1, 2 } reveal_foo()
+        //
+        // If "foo" is a two-state function, then "reveal_foo" will be declared as a two-state lemma.
+        //
+        // The translator, in AddMethod, then adds ensures clauses to bump up the fuel parameters appropriately
 
-      var cloner = new Cloner();
+        var cloner = new Cloner();
 
-      List<TypeParameter> typeVars = new List<TypeParameter>();
-      List<Type> optTypeArgs = new List<Type>();
-      foreach (TypeParameter tp in f.TypeArgs) {
-        typeVars.Add(cloner.CloneTypeParam(tp));
-        // doesn't matter what type, just so we have it to make the resolver happy when resolving function member of
-        // the fuel attribute. This might not be needed after fixing codeplex issue #172.
-        optTypeArgs.Add(new IntType());
+        List<TypeParameter> typeVars = new List<TypeParameter>();
+        List<Type> optTypeArgs = new List<Type>();
+        foreach (var tp in f.TypeArgs) {
+          typeVars.Add(cloner.CloneTypeParam(tp));
+          // doesn't matter what type, just so we have it to make the resolver happy when resolving function member of
+          // the fuel attribute. This might not be needed after fixing codeplex issue #172.
+          optTypeArgs.Add(new IntType());
+        }
       }
 
+      // Given:
+      //   const {:opaque} foo := x
+      // We produce:
+      //   lemma {:auto_generated} {:opaque_reveal} {:verify false} reveal_foo()
+      //     ensures foo == x
+
       // Add an axiom attribute so that the compiler won't complain about the lemma's lack of a body
-      Attributes lemma_attrs = BuiltIns.AxiomAttribute();
+      Attributes lemma_attrs = null;
+      if (m is Function) {
+        lemma_attrs = new Attributes("axiom", new List<Expression>(), lemma_attrs);
+      }
       lemma_attrs = new Attributes("auto_generated", new List<Expression>(), lemma_attrs);
       lemma_attrs = new Attributes("opaque_reveal", new List<Expression>(), lemma_attrs);
-      lemma_attrs = new Attributes("verify", new List<Expression>() { new LiteralExpr(f.tok, false) }, lemma_attrs);
+      lemma_attrs = new Attributes("verify", new List<Expression>() { new LiteralExpr(m.tok, false) }, lemma_attrs);
+      var ens = new List<AttributedExpression>();
+      if (m is ConstantField c && c.Rhs != null) {
+        ens.Add(new AttributedExpression(new BinaryExpr(c.tok, BinaryExpr.Opcode.Eq, new NameSegment(c.Tok, c.Name, null), c.Rhs)));
+      }
       Method reveal;
-      if (f is TwoStateFunction) {
-        reveal = new TwoStateLemma(f.tok, "reveal_" + f.Name, f.HasStaticKeyword, new List<TypeParameter>(), new List<Formal>(), new List<Formal>(), new List<AttributedExpression>(),
-          new Specification<FrameExpression>(new List<FrameExpression>(), null), /* newEnsuresList*/new List<AttributedExpression>(),
+      if (m is TwoStateFunction) {
+        reveal = new TwoStateLemma(m.tok, "reveal_" + m.Name, m.HasStaticKeyword, new List<TypeParameter>(), new List<Formal>(), new List<Formal>(), new List<AttributedExpression>(),
+          new Specification<FrameExpression>(new List<FrameExpression>(), null), ens,
           new Specification<Expression>(new List<Expression>(), null), null, lemma_attrs, null);
       } else {
-        reveal = new Lemma(f.tok, "reveal_" + f.Name, f.HasStaticKeyword, new List<TypeParameter>(), new List<Formal>(), new List<Formal>(), new List<AttributedExpression>(),
-          new Specification<FrameExpression>(new List<FrameExpression>(), null), /* newEnsuresList*/new List<AttributedExpression>(),
+        reveal = new Lemma(m.tok, "reveal_" + m.Name, m.HasStaticKeyword, new List<TypeParameter>(), new List<Formal>(), new List<Formal>(), new List<AttributedExpression>(),
+          new Specification<FrameExpression>(new List<FrameExpression>(), null), ens,
           new Specification<Expression>(new List<Expression>(), null), null, lemma_attrs, null);
       }
       newDecls.Add(reveal);
-      revealOriginal[reveal] = f;
-      reveal.InheritVisibility(f, true);
-    }
-
-    class OpaqueFunctionVisitor : TopDownVisitor<bool> {
-      protected override bool VisitOneExpr(Expression expr, ref bool context) {
-        return true;
+      reveal.InheritVisibility(m, true);
+      if (m is Function fn) {
+        revealOriginal[reveal] = fn;
       }
     }
   }
@@ -1053,7 +1137,7 @@ namespace Microsoft.Dafny {
       Contract.Requires(reporter != null);
     }
 
-    internal override void PostResolve(ModuleDefinition m) {
+    internal override void PostResolveIntermediate(ModuleDefinition m) {
       var components = m.CallGraph.TopologicallySortedComponents();
 
       foreach (var scComponent in components) {  // Visit the call graph bottom up, so anything we call already has its prequisites calculated
@@ -1104,21 +1188,6 @@ namespace Microsoft.Dafny {
       }
     }
 
-    Expression subVars(List<Formal> formals, List<Expression> values, Expression e, Expression f_this) {
-      Contract.Assert(formals != null);
-      Contract.Assert(values != null);
-      Contract.Assert(formals.Count == values.Count);
-      Dictionary<IVariable, Expression/*!*/> substMap = new Dictionary<IVariable, Expression>();
-      Dictionary<TypeParameter, Type> typeMap = new Dictionary<TypeParameter, Type>();
-
-      for (int i = 0; i < formals.Count; i++) {
-        substMap.Add(formals[i], values[i]);
-      }
-
-      Substituter sub = new Substituter(f_this, substMap, typeMap);
-      return sub.Substitute(e);
-    }
-
     public void addAutoReqToolTipInfoToFunction(string label, Function f, List<AttributedExpression> reqs) {
       string prefix = "auto requires " + label + " ";
       string tip = "";
@@ -1134,7 +1203,7 @@ namespace Microsoft.Dafny {
       }
 
       if (!tip.Equals("")) {
-        reporter.Info(MessageSource.Rewriter, f.tok, tip);
+        Reporter.Info(MessageSource.Rewriter, f.tok, tip);
         if (DafnyOptions.O.AutoReqPrintFile != null) {
           using (System.IO.TextWriter writer = new System.IO.StreamWriter(DafnyOptions.O.AutoReqPrintFile, true)) {
             writer.WriteLine(f.Name);
@@ -1158,7 +1227,7 @@ namespace Microsoft.Dafny {
       }
 
       if (!tip.Equals("")) {
-        reporter.Info(MessageSource.Rewriter, method.tok, tip);
+        Reporter.Info(MessageSource.Rewriter, method.tok, tip);
         if (DafnyOptions.O.AutoReqPrintFile != null) {
           using (System.IO.TextWriter writer = new System.IO.StreamWriter(DafnyOptions.O.AutoReqPrintFile, true)) {
             writer.WriteLine(method.Name);
@@ -1169,7 +1238,7 @@ namespace Microsoft.Dafny {
     }
 
     // Stitch a list of expressions together with logical ands
-    Expression andify(Bpl.IToken tok, List<Expression> exprs) {
+    Expression andify(IToken tok, List<Expression> exprs) {
       Expression ret = Expression.CreateBoolLiteral(tok, true);
 
       foreach (var expr in exprs) {
@@ -1359,7 +1428,7 @@ namespace Microsoft.Dafny {
           Expression allReqsSatisfied = andify(e.Term.tok, auto_reqs);
           Expression allReqsSatisfiedAndTerm = Expression.CreateAnd(allReqsSatisfied, e.Term);
           e.UpdateTerm(allReqsSatisfiedAndTerm);
-          reporter.Info(MessageSource.Rewriter, e.tok, "autoreq added (" + Printer.ExtendedExprToString(allReqsSatisfied) + ") &&");
+          Reporter.Info(MessageSource.Rewriter, e.tok, "autoreq added (" + Printer.ExtendedExprToString(allReqsSatisfied) + ") &&");
         }
       } else if (expr is SetComprehension) {
         var e = (SetComprehension)expr;
@@ -1369,7 +1438,7 @@ namespace Microsoft.Dafny {
         //reqs.AddRange(generateAutoReqs(e.Range));
         var auto_reqs = generateAutoReqs(e.Term);
         if (auto_reqs.Count > 0) {
-          reqs.Add(Expression.CreateQuantifier(new ForallExpr(e.tok, e.BodyEndTok, new List<TypeParameter>(), e.BoundVars, e.Range, andify(e.Term.tok, auto_reqs), e.Attributes), true));
+          reqs.Add(Expression.CreateQuantifier(new ForallExpr(e.tok, e.BodyEndTok, e.BoundVars, e.Range, andify(e.Term.tok, auto_reqs), e.Attributes), true));
         }
       } else if (expr is MapComprehension) {
         var e = (MapComprehension)expr;
@@ -1382,7 +1451,7 @@ namespace Microsoft.Dafny {
         }
         auto_reqs.AddRange(generateAutoReqs(e.Term));
         if (auto_reqs.Count > 0) {
-          reqs.Add(Expression.CreateQuantifier(new ForallExpr(e.tok, e.BodyEndTok, new List<TypeParameter>(), e.BoundVars, e.Range, andify(e.Term.tok, auto_reqs), e.Attributes), true));
+          reqs.Add(Expression.CreateQuantifier(new ForallExpr(e.tok, e.BodyEndTok, e.BoundVars, e.Range, andify(e.Term.tok, auto_reqs), e.Attributes), true));
         }
       } else if (expr is StmtExpr) {
         var e = (StmtExpr)expr;
@@ -1509,7 +1578,7 @@ namespace Microsoft.Dafny {
                         Expression newArg = new LiteralExpr(attr.Args[0].tok, value * current_limit);
                         member.Attributes = new Attributes("_" + name, new List<Expression>() { newArg }, attrs);
                         if (Attributes.Contains(attrs, name)) {
-                          reporter.Warning(MessageSource.Rewriter, member.tok, "timeLimitMultiplier annotation overrides " + name + " annotation");
+                          Reporter.Warning(MessageSource.Rewriter, member.tok, "timeLimitMultiplier annotation overrides " + name + " annotation");
                         }
                       }
                     }
@@ -1577,7 +1646,7 @@ namespace Microsoft.Dafny {
         }
         return new NameSegment(new AutoGeneratedToken(e.tok), bv.Name, null);
       } else {
-        return new ApplySuffix(Tok(e.tok), e.AtTok == null ? null : Tok(e.AtTok), CloneExpr(e.Lhs), e.Bindings.ArgumentBindings.ConvertAll(CloneActualBinding));
+        return new ApplySuffix(Tok(e.tok), e.AtTok == null ? null : Tok(e.AtTok), CloneExpr(e.Lhs), e.Bindings.ArgumentBindings.ConvertAll(CloneActualBinding), Tok(e.CloseParen));
       }
     }
 
@@ -1765,7 +1834,7 @@ namespace Microsoft.Dafny {
               continue;
             }
             if (0 <= j) {
-              reporter.Warning(MessageSource.Rewriter, arg.tok, "{0}s given as :induction arguments must be given in the same order as in the {1}; ignoring attribute",
+              Reporter.Warning(MessageSource.Rewriter, arg.tok, "{0}s given as :induction arguments must be given in the same order as in the {1}; ignoring attribute",
                 lemma != null ? "lemma parameter" : "bound variable", lemma != null ? "lemma" : "quantifier");
               return;
             }
@@ -1776,10 +1845,10 @@ namespace Microsoft.Dafny {
               i = 0;
               continue;
             }
-            reporter.Warning(MessageSource.Rewriter, arg.tok, "lemma parameters given as :induction arguments must be given in the same order as in the lemma; ignoring attribute");
+            Reporter.Warning(MessageSource.Rewriter, arg.tok, "lemma parameters given as :induction arguments must be given in the same order as in the lemma; ignoring attribute");
             return;
           }
-          reporter.Warning(MessageSource.Rewriter, arg.tok, "invalid :induction attribute argument; expected {0}{1}; ignoring attribute",
+          Reporter.Warning(MessageSource.Rewriter, arg.tok, "invalid :induction attribute argument; expected {0}{1}; ignoring attribute",
             i == 0 ? "'false' or 'true' or " : "",
             lemma != null ? "lemma parameter" : "bound variable");
           return;
@@ -1809,7 +1878,7 @@ namespace Microsoft.Dafny {
         if (lemma is PrefixLemma) {
           s = lemma.Name + " " + s;
         }
-        reporter.Info(MessageSource.Rewriter, tok, s);
+        Reporter.Info(MessageSource.Rewriter, tok, s);
       }
     }
     class Induction_Visitor : BottomUpVisitor {
@@ -1822,18 +1891,6 @@ namespace Microsoft.Dafny {
         var q = expr as QuantifierExpr;
         if (q != null && q.SplitQuantifier == null) {
           IndRewriter.ComputeInductionVariables(q.tok, q.BoundVars, new List<Expression>() { q.LogicalBody() }, null, ref q.Attributes);
-        }
-      }
-      void VisitInductionStmt(Statement stmt) {
-        Contract.Requires(stmt != null);
-        // visit a selection of subexpressions
-        if (stmt is AssertStmt) {
-          var s = (AssertStmt)stmt;
-          Visit(s.Expr);
-        }
-        // recursively visit all substatements
-        foreach (var s in stmt.SubStatements) {
-          VisitInductionStmt(s);
         }
       }
     }
@@ -2007,6 +2064,20 @@ namespace Microsoft.Dafny {
       }
     }
   }
+
+  class PluginRewriter : IRewriter {
+    private Plugins.Rewriter internalRewriter;
+
+    public PluginRewriter(ErrorReporter reporter, Plugins.Rewriter internalRewriter) : base(reporter) {
+      this.internalRewriter = internalRewriter;
+    }
+
+    internal override void PostResolve(ModuleDefinition moduleDefinition) {
+      internalRewriter.PostResolve(moduleDefinition);
+    }
+
+    internal override void PostResolve(Program program) {
+      internalRewriter.PostResolve(program);
+    }
+  }
 }
-
-

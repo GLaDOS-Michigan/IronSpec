@@ -5,7 +5,9 @@ using Serilog;
 using System;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Threading.Tasks;
+using Serilog.Events;
 using OmniSharpLanguageServer = OmniSharp.Extensions.LanguageServer.Server.LanguageServer;
 
 namespace Microsoft.Dafny.LanguageServer {
@@ -14,6 +16,7 @@ namespace Microsoft.Dafny.LanguageServer {
       var configuration = CreateConfiguration(args);
       InitializeLogger(configuration);
       try {
+        Action? shutdownServer = null;
         var server = await OmniSharpLanguageServer.From(
           options => options
             .WithInput(Console.OpenStandardInput())
@@ -21,8 +24,13 @@ namespace Microsoft.Dafny.LanguageServer {
             .ConfigureConfiguration(builder => builder.AddConfiguration(configuration))
             .ConfigureLogging(SetupLogging)
             .WithUnhandledExceptionHandler(LogException)
-            .WithDafnyLanguageServer(configuration)
+            // ReSharper disable once AccessToModifiedClosure
+            .WithDafnyLanguageServer(configuration, () => shutdownServer!())
         );
+        // Prevent any other parts of the language server to actually write to standard output.
+        await using var logWriter = new LogWriter();
+        Console.SetOut(logWriter);
+        shutdownServer = () => server.ForcefulShutdown();
         await server.WaitForExit;
       }
       finally {
@@ -53,6 +61,18 @@ namespace Microsoft.Dafny.LanguageServer {
       builder
         .ClearProviders()
         .AddSerilog(Log.Logger);
+    }
+
+    private class LogWriter : TextWriter {
+      public override void Write(char value) {
+        Log.Logger.Verbose("Unexpected console output: {value}", value);
+      }
+
+      public override void Write(string? value) {
+        Log.Logger.Verbose("Unexpected console output: {value}", value);
+      }
+
+      public override Encoding Encoding { get; } = Encoding.ASCII;
     }
   }
 }
