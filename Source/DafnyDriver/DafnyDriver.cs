@@ -302,7 +302,8 @@ namespace Microsoft.Dafny {
       }
 
       string programName = dafnyFileNames.Count == 1 ? dafnyFileNames[0] : "the_program";
-      string err = Dafny.Main.ParseCheck(dafnyFiles, programName, reporter, out dafnyProgram);
+      string err = Dafny.Main.ParseCheck(dafnyFiles, programName, reporter, out var dafnyProgram);
+      Dafny.Main.Parse(dafnyFiles, programName, reporter, out var dafnyUnresolvedProgram);
       if (DafnyOptions.O.FindHoleFromFunctionName != null) {
         var holeFinder = new HoleFinder();
         Function holeFunc = null;
@@ -329,6 +330,7 @@ namespace Microsoft.Dafny {
       if (DafnyOptions.O.HoleEvaluatorFunctionName != null) {
         var holeEvaluator = new HoleEvaluator();
         var foundDesiredFunction = holeEvaluator.Evaluate(dafnyProgram,
+            dafnyUnresolvedProgram,
             DafnyOptions.O.HoleEvaluatorFunctionName,
             DafnyOptions.O.HoleEvaluatorBaseFunctionName,
             DafnyOptions.O.HoleEvaluatorDepth);
@@ -337,6 +339,7 @@ namespace Microsoft.Dafny {
       if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
         var holeEvaluator = new HoleEvaluator();
         var foundDesiredFunction = holeEvaluator.EvaluateAfterRemoveFileLine(dafnyProgram,
+            dafnyUnresolvedProgram,
             DafnyOptions.O.HoleEvaluatorRemoveFileLine,
             DafnyOptions.O.HoleEvaluatorBaseFunctionName,
             DafnyOptions.O.HoleEvaluatorDepth);
