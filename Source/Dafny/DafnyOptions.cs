@@ -679,7 +679,10 @@ namespace Microsoft.Dafny {
           return true;
 
         case "holeEvalDepth":
-          ps.GetNumericArgument(ref HoleEvaluatorDepth, 4);
+          int depth = 0;
+          if (ps.GetIntArgument(ref depth, 4)) {
+            HoleEvaluatorDepth = depth;
+          }
           return true;
 
         case "holeEvalRunOnce":

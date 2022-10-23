@@ -389,7 +389,7 @@ namespace Microsoft.Dafny {
         foreach (var arg in arguments) {
           bindings.Add(new ActualBinding(null, arg));
         }
-        var applySuffixExpr = new ApplySuffix(ctor.tok, null, new NameSegment(ctor.tok, ctor.Name, null), bindings);
+        var applySuffixExpr = new ApplySuffix(ctor.tok, null, new NameSegment(ctor.tok, ctor.Name, null), bindings, null);
         applySuffixExpr.Type = ty;
         yield return applySuffixExpr;
         yield break;
@@ -428,7 +428,7 @@ namespace Microsoft.Dafny {
         foreach (var arg in arguments) {
           bindings.Add(new ActualBinding(null, arg));
         }
-        var funcCallExpr = new FunctionCallExpr(func.tok, func.FullDafnyName, new ImplicitThisExpr(func.tok), func.tok, bindings);
+        var funcCallExpr = new FunctionCallExpr(func.tok, func.FullDafnyName, new ImplicitThisExpr(func.tok), func.tok, func.tok, bindings);
         funcCallExpr.Type = func.ResultType;
         yield return funcCallExpr;
         yield break;
@@ -466,7 +466,7 @@ namespace Microsoft.Dafny {
         foreach (var arg in arguments) {
           bindings.Add(new ActualBinding(null, arg));
         }
-        var applySuffixExpr = new ApplySuffix(func.tok, null, new IdentifierExpr(func.tok, func.FullDafnyName), bindings);
+        var applySuffixExpr = new ApplySuffix(func.tok, null, new IdentifierExpr(func.tok, func.FullDafnyName), bindings, null);
         applySuffixExpr.Type = func.ResultType;
         yield return applySuffixExpr;
         yield break;
@@ -545,7 +545,7 @@ namespace Microsoft.Dafny {
           yield return cardinalityExpr;
           if (t is SeqType) {
             var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
-            var zerothElement = new SeqSelectExpr(expr.tok, true, expr, zeroLiteralExpr, null);
+            var zerothElement = new SeqSelectExpr(expr.tok, true, expr, zeroLiteralExpr, null, null);
             var st = t as SeqType;
             zerothElement.Type = st.Arg;
             foreach (var e in TraverseFormal(program, zerothElement)) {

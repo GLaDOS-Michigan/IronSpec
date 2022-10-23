@@ -350,7 +350,7 @@ namespace Microsoft.Dafny {
       return res;
     }
 
-    public async Task<bool> EvaluateAfterRemoveFileLine(Program program, string removeFileLine, string baseFuncName, int depth) {
+    public async Task<bool> EvaluateAfterRemoveFileLine(Program program, Program unresolvedProgram, string removeFileLine, string baseFuncName, int depth) {
       var fileLineArray = removeFileLine.Split(':');
       var file = fileLineArray[0];
       var line = Int32.Parse(fileLineArray[1]);
@@ -373,7 +373,7 @@ namespace Microsoft.Dafny {
                 body = Expression.CreateAnd(body, exprList[j]);
               }
               topLevelDecl.Body = body;
-              return await Evaluate(program, topLevelDecl.FullDafnyName, baseFuncName, depth);
+              return await Evaluate(program, unresolvedProgram, topLevelDecl.FullDafnyName, baseFuncName, depth);
             }
           }
         }
@@ -381,7 +381,7 @@ namespace Microsoft.Dafny {
       return false;
     }
 
-    public async Task<bool> Evaluate(Program program, string funcName, string baseFuncName, int depth) {
+    public async Task<bool> Evaluate(Program program, Program unresolvedProgram, string funcName, string baseFuncName, int depth) {
       if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
         return false;
@@ -436,6 +436,7 @@ namespace Microsoft.Dafny {
       dafnyVerifier.sw = Stopwatch.StartNew();
       Console.WriteLine($"hole evaluation begins for func {funcName}");
       Function desiredFunction = null;
+      Function desiredFunctionUnresolved = null;
       Function topLevelDeclCopy = null;
       desiredFunction = GetFunction(program, funcName);
       if (desiredFunction != null) {
@@ -464,21 +465,23 @@ namespace Microsoft.Dafny {
           Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr)}");
         }
         expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
+        desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
         topLevelDeclCopy = new Function(
-          desiredFunction.tok, desiredFunction.Name, desiredFunction.HasStaticKeyword,
-          desiredFunction.IsGhost, desiredFunction.TypeArgs, desiredFunction.Formals,
-          desiredFunction.Result, desiredFunction.ResultType, desiredFunction.Req,
-          desiredFunction.Reads, desiredFunction.Ens, desiredFunction.Decreases,
-          desiredFunction.Body, desiredFunction.ByMethodTok, desiredFunction.ByMethodBody,
-          desiredFunction.Attributes, desiredFunction.SignatureEllipsis);
+          desiredFunctionUnresolved.tok, desiredFunctionUnresolved.Name, desiredFunctionUnresolved.HasStaticKeyword,
+          desiredFunctionUnresolved.IsGhost, desiredFunctionUnresolved.TypeArgs, desiredFunctionUnresolved.Formals,
+          desiredFunctionUnresolved.Result, desiredFunctionUnresolved.ResultType, desiredFunctionUnresolved.Req,
+          desiredFunctionUnresolved.Reads, desiredFunctionUnresolved.Ens, desiredFunctionUnresolved.Decreases,
+          desiredFunctionUnresolved.Body, desiredFunctionUnresolved.ByMethodTok, desiredFunctionUnresolved.ByMethodBody,
+          desiredFunctionUnresolved.Attributes, desiredFunctionUnresolved.SignatureEllipsis);
       } else {
         Console.WriteLine($"{funcName} was not found!");
         return false;
       }
       Console.WriteLine($"expressionFinder.availableExpressions.Count == {expressionFinder.availableExpressions.Count}");
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
-        PrintExprAndCreateProcess(program, desiredFunction, expressionFinder.availableExpressions[i], i);
-        desiredFunction.Body = topLevelDeclCopy.Body;
+      // for (int i = 0; i < 1; i++) {
+        PrintExprAndCreateProcess(unresolvedProgram, desiredFunctionUnresolved, expressionFinder.availableExpressions[i], i);
+        desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
       }
       await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
       Console.WriteLine("finish");
@@ -657,7 +660,7 @@ namespace Microsoft.Dafny {
         var udt = type as UserDefinedType;
         if (udt.Name == "nat" || udt.Name == "object?")
           return udt.ToString();
-        foreach (var decl in ModuleDefinition.AllTypesWithMembers(moduleDef.TopLevelDecls)) {
+        foreach (var decl in moduleDef.TopLevelDecls) {
           if (decl.ToString() == type.ToString()) {
             var moduleName = GetFullModuleName(moduleDef);
             return (moduleName == "") ? type.ToString() : (moduleName + "." + type.ToString());
@@ -718,12 +721,44 @@ namespace Microsoft.Dafny {
       return null;
     }
 
+    public static Function GetFunctionFromModuleDef(ModuleDefinition moduleDef, string funcName) {
+      foreach (var topLevelDecl in moduleDef.TopLevelDecls) {
+        if (topLevelDecl is ClassDecl) {
+          var cd = topLevelDecl as ClassDecl;
+          foreach (var member in cd.Members) {
+            if ($"{cd.FullDafnyName}.{member.Name}" == funcName) {
+              return member as Function;
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    public static Function GetFunctionFromUnresolved(Program program, string funcName) {
+      foreach (var topLevelDecl in program.DefaultModuleDef.TopLevelDecls) {
+        if(topLevelDecl.FullDafnyName == "Protocol_Node_i") {
+          var lmd = topLevelDecl as LiteralModuleDecl;
+          var func = GetFunctionFromModuleDef(lmd.ModuleDef, funcName);
+          if (func != null) {
+            return func;
+          }
+        }
+          foreach (var member in ModuleDefinition.AllFunctions(program.DefaultModuleDef.TopLevelDecls)) {
+            if ($"{member.Name}" == funcName) {
+              return member as Function;
+            }
+          }
+      }
+      return null;
+    }
+
     public void PrintExprAndCreateProcess(Program program, Function func, Expression expr, int cnt) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
       string lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr);
 
-      var funcName = func.FullDafnyName;
+      var funcName = func.Name;
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
 
@@ -750,7 +785,7 @@ namespace Microsoft.Dafny {
       // string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
       // dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
       // The first 22 characters are: "Command Line Options: "
-      string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
+      string env = DafnyOptions.O.Environment.Remove(0, 22);
       var argList = env.Split(' ');
       List<string> args = new List<string>();
       foreach (var arg in argList) {
@@ -795,7 +830,7 @@ namespace Microsoft.Dafny {
 
       string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
       dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
-      string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
+      string env = DafnyOptions.O.Environment.Remove(0, 22);
       var argList = env.Split(' ');
       string args = "";
       foreach (var arg in argList) {

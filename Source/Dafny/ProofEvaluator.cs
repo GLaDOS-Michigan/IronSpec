@@ -641,7 +641,7 @@ namespace Microsoft.Dafny {
       // string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
       // dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
       // The first 22 characters are: "Command Line Options: "
-      string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
+      string env = DafnyOptions.O.Environment.Remove(0, 22);
       var argList = env.Split(' ');
       List<string> args = new List<string>();
       foreach (var arg in argList) {

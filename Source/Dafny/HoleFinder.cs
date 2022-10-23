@@ -69,7 +69,7 @@ namespace Microsoft.Dafny {
       }
       string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
       dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
-      string env = CommandLineOptions.Clo.Environment.Remove(0, 22);
+      string env = DafnyOptions.O.Environment.Remove(0, 22);
       var argList = env.Split(' ');
       string args = "";
       foreach (var arg in argList) {
