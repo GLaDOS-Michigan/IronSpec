@@ -753,35 +753,76 @@ namespace Microsoft.Dafny {
       return null;
     }
 
+    public int DuplicateAllFiles(Program program, string workingDir, int cnt)
+    {
+      if (System.IO.Directory.Exists(workingDir))
+      {
+        System.IO.Directory.Delete(workingDir, true);
+      }
+      System.IO.Directory.CreateDirectory(workingDir);
+      var samples = new List<string>();
+      foreach (var file in program.DefaultModuleDef.Includes) {
+        samples.Add(file.CanonicalPath);
+      }
+      var commonPrefix = new string(
+        samples.First().Substring(0, samples.Min(s => s.Length))
+        .TakeWhile((c, i) => samples.All(s => s[i] == c)).ToArray());
+      for (int i = 0; i < samples.Count; i++) {
+        samples[i] = samples[i].Remove(0, commonPrefix.Length);
+      }
+      for (int i = 0; i < samples.Count; i++) {
+        System.IO.Directory.CreateDirectory(Path.GetDirectoryName($"{workingDir}/{samples[i]}"));
+        File.Copy(program.DefaultModuleDef.Includes[i].CanonicalPath, $"{workingDir}/{samples[i]}", true);
+      }
+      return commonPrefix.Length;
+    }
+
     public void PrintExprAndCreateProcess(Program program, Function func, Expression expr, int cnt) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
+      var funcName = func.Name;
+
+      var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{funcName}_{cnt}";
+      int commonPrefixLength = DuplicateAllFiles(program, workingDir, cnt);
       string lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr);
 
-      var funcName = func.Name;
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
 
-      string code = "";
-      using (var wr = new System.IO.StringWriter()) {
-        var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
-        pr.UniqueStringBeforeUnderscore = UnderscoreStr;
-        if (expr.HasCardinality) {
-          func.Body = Expression.CreateAnd(expr, func.Body);
-        } else {
-          func.Body = Expression.CreateAnd(func.Body, expr);
-        }
-        pr.PrintProgram(program, true);
-        code = $"// #{cnt}\n";
-        code += $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
-        lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
-        code += lemmaForExprValidityString + "\n";
-        lemmaForExprValidityPosition = code.Count(f => f == '\n');
-        if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
-          File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
-        // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
-        // Console.WriteLine("");
+      // string code = "";
+      // using (var wr = new System.IO.StringWriter()) {
+        // var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
+      Expression newFuncBody = null;
+        // pr.UniqueStringBeforeUnderscore = UnderscoreStr;
+      if (expr.HasCardinality) {
+        newFuncBody = Expression.CreateAnd(expr, func.Body);
+      } else {
+        newFuncBody = Expression.CreateAnd(func.Body, expr);
       }
+      // pr.PrintExpression(newFuncBody, false, func.BodyStartTok.col + 2);
+      var baseCode = File.ReadAllLines(func.BodyStartTok.Filename);
+      if (func.BodyStartTok.line == func.BodyEndTok.line) {
+        baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Remove(func.BodyStartTok.col, func.BodyEndTok.col - func.BodyStartTok.col);
+        baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Insert(func.BodyStartTok.col + 1, Printer.ExprToString(newFuncBody));
+      }
+      else {
+        baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Remove(func.BodyStartTok.col);
+        for (int i = func.BodyStartTok.line; i < func.BodyEndTok.line - 1; i++) {
+          baseCode[i] = "";
+        }
+        baseCode[func.BodyEndTok.line - 1] = baseCode[func.BodyEndTok.line - 1].Remove(0, func.BodyEndTok.col - 1);
+        baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Insert(func.BodyStartTok.col, Printer.ExprToString(newFuncBody));
+      }
+      lemmaForExprValidityStartPosition = baseCode.Length;
+      baseCode = baseCode.Append(lemmaForExprValidityString).ToArray();
+      lemmaForExprValidityPosition = baseCode.Length;
+      var newCode = String.Join('\n', baseCode);
+      File.WriteAllTextAsync($"{workingDir}/{func.BodyStartTok.Filename.Remove(0, commonPrefixLength)}", newCode);
+      // if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
+        // File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
+      // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
+      // Console.WriteLine("");
+      // }
       // string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
       // dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
       // The first 22 characters are: "Command Line Options: "
@@ -795,7 +836,7 @@ namespace Microsoft.Dafny {
       }
       // Console.WriteLine($"Creating process : ");
       args.Add("/exitAfterFirstError");
-      dafnyVerifier.runDafny(code, args,
+      dafnyVerifier.runDafny(newCode, args,
           expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition);
       // dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
       //     $"{args} {DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
