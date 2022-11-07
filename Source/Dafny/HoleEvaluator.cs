@@ -54,6 +54,8 @@ namespace Microsoft.Dafny {
     private DafnyExecutor dafnyImpliesExecutor = new DafnyExecutor();
     private DafnyVerifierClient dafnyVerifier;
 
+    private TasksList tasksList = null;
+
     public static int validityLemmaNameStartCol = 0;
 
     private void UpdateCombinationResult(int index) {
@@ -385,6 +387,10 @@ namespace Microsoft.Dafny {
       if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
         return false;
+      }
+      if (DafnyOptions.O.HoleEvaluatorCommands != null) {
+        var input = File.ReadAllText(DafnyOptions.O.HoleEvaluatorCommands);
+        tasksList = Google.Protobuf.JsonParser.Default.Parse<TasksList>(input);
       }
       dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPortList, $"output_{funcName}");
       expressionFinder = new ExpressionFinder(this);
