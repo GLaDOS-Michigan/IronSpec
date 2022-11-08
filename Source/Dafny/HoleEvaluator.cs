@@ -55,6 +55,8 @@ namespace Microsoft.Dafny {
     private DafnyVerifierClient dafnyVerifier;
 
     private TasksList tasksList = null;
+    private IncludeParser includeParser = null;
+    private List<string> affectedFiles = new List<string>();
 
     public static int validityLemmaNameStartCol = 0;
 
@@ -446,6 +448,11 @@ namespace Microsoft.Dafny {
       Function topLevelDeclCopy = null;
       desiredFunction = GetFunction(program, funcName);
       if (desiredFunction != null) {
+        includeParser = new IncludeParser(program);
+        var filename = includeParser.Normalized(desiredFunction.BodyStartTok.Filename);
+        foreach (var file in includeParser.GetListOfAffectedFilesBy(filename)) {
+          affectedFiles.Add(file);
+        }
         // calculate holeEvaluatorConstraint Invocation
         if (constraintFunc != null) {
           Dictionary<string, List<Expression>> typeToExpressionDictForInputs = new Dictionary<string, List<Expression>>();
@@ -759,7 +766,7 @@ namespace Microsoft.Dafny {
       return null;
     }
 
-    public int DuplicateAllFiles(Program program, string workingDir, int cnt)
+    public void DuplicateAllFiles(Program program, string workingDir, int cnt)
     {
       if (System.IO.Directory.Exists(workingDir))
       {
@@ -768,19 +775,12 @@ namespace Microsoft.Dafny {
       System.IO.Directory.CreateDirectory(workingDir);
       var samples = new List<string>();
       foreach (var file in program.DefaultModuleDef.Includes) {
-        samples.Add(file.CanonicalPath);
-      }
-      var commonPrefix = new string(
-        samples.First().Substring(0, samples.Min(s => s.Length))
-        .TakeWhile((c, i) => samples.All(s => s[i] == c)).ToArray());
-      for (int i = 0; i < samples.Count; i++) {
-        samples[i] = samples[i].Remove(0, commonPrefix.Length);
+        samples.Add(includeParser.Normalized(file.CanonicalPath));
       }
       for (int i = 0; i < samples.Count; i++) {
         System.IO.Directory.CreateDirectory(Path.GetDirectoryName($"{workingDir}/{samples[i]}"));
         File.Copy(program.DefaultModuleDef.Includes[i].CanonicalPath, $"{workingDir}/{samples[i]}", true);
       }
-      return commonPrefix.Length;
     }
 
     public void PrintExprAndCreateProcess(Program program, Function func, Expression expr, int cnt) {
@@ -789,7 +789,7 @@ namespace Microsoft.Dafny {
       var funcName = func.Name;
 
       var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{funcName}_{cnt}";
-      int commonPrefixLength = DuplicateAllFiles(program, workingDir, cnt);
+      DuplicateAllFiles(program, workingDir, cnt);
       string lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr);
 
       int lemmaForExprValidityPosition = 0;
@@ -823,7 +823,7 @@ namespace Microsoft.Dafny {
       baseCode = baseCode.Append(lemmaForExprValidityString).ToArray();
       lemmaForExprValidityPosition = baseCode.Length;
       var newCode = String.Join('\n', baseCode);
-      File.WriteAllTextAsync($"{workingDir}/{func.BodyStartTok.Filename.Remove(0, commonPrefixLength)}", newCode);
+      File.WriteAllTextAsync($"{workingDir}/{includeParser.Normalized(func.BodyStartTok.Filename)}", newCode);
       // if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
         // File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
       // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
