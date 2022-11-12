@@ -44,6 +44,9 @@ namespace Microsoft.Dafny {
     private void CreateIncludeGraph()
     {
       var samples = new List<string>();
+      if (program.DefaultModuleDef.Includes.Count == 0) {
+        return;
+      }
       foreach (var file in program.DefaultModuleDef.Includes) {
         samples.Add(file.CanonicalPath);
       }
