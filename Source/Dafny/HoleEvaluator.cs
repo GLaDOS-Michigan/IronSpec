@@ -774,12 +774,15 @@ namespace Microsoft.Dafny {
       }
       System.IO.Directory.CreateDirectory(workingDir);
       var samples = new List<string>();
+      samples.Add(includeParser.Normalized(program.FullName));
+      System.IO.Directory.CreateDirectory(Path.GetDirectoryName($"{workingDir}/{samples[0]}"));
+      File.Copy(program.FullName, $"{workingDir}/{samples[0]}", true);
       foreach (var file in program.DefaultModuleDef.Includes) {
         samples.Add(includeParser.Normalized(file.CanonicalPath));
       }
-      for (int i = 0; i < samples.Count; i++) {
+      for (int i = 1; i < samples.Count; i++) {
         System.IO.Directory.CreateDirectory(Path.GetDirectoryName($"{workingDir}/{samples[i]}"));
-        File.Copy(program.DefaultModuleDef.Includes[i].CanonicalPath, $"{workingDir}/{samples[i]}", true);
+        File.Copy(program.DefaultModuleDef.Includes[i - 1].CanonicalPath, $"{workingDir}/{samples[i]}", true);
       }
     }
 
@@ -788,66 +791,73 @@ namespace Microsoft.Dafny {
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
       var funcName = func.Name;
 
-      var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{funcName}_{cnt}";
-      DuplicateAllFiles(program, workingDir, cnt);
       string lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr);
 
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
 
-      // string code = "";
-      // using (var wr = new System.IO.StringWriter()) {
-        // var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
-      Expression newFuncBody = null;
-        // pr.UniqueStringBeforeUnderscore = UnderscoreStr;
-      if (expr.HasCardinality) {
-        newFuncBody = Expression.CreateAnd(expr, func.Body);
-      } else {
-        newFuncBody = Expression.CreateAnd(func.Body, expr);
-      }
-      // pr.PrintExpression(newFuncBody, false, func.BodyStartTok.col + 2);
-      var baseCode = File.ReadAllLines(func.BodyStartTok.Filename);
-      if (func.BodyStartTok.line == func.BodyEndTok.line) {
-        baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Remove(func.BodyStartTok.col, func.BodyEndTok.col - func.BodyStartTok.col);
-        baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Insert(func.BodyStartTok.col + 1, Printer.ExprToString(newFuncBody));
-      }
-      else {
-        baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Remove(func.BodyStartTok.col);
-        for (int i = func.BodyStartTok.line; i < func.BodyEndTok.line - 1; i++) {
-          baseCode[i] = "";
+      var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{funcName}_{cnt}";
+      if (tasksList == null)
+      {
+        string code = "";
+        using (var wr = new System.IO.StringWriter()) {
+          var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
+          pr.UniqueStringBeforeUnderscore = UnderscoreStr;
+          if (expr.HasCardinality) {
+            func.Body = Expression.CreateAnd(expr, func.Body);
+          } else {
+            func.Body = Expression.CreateAnd(func.Body, expr);
+          }
+          pr.PrintProgram(program, true);
+          code = $"// #{cnt}\n";
+          code += $"// {Printer.ExprToString(expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+          lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
+          code += lemmaForExprValidityString + "\n";
+          lemmaForExprValidityPosition = code.Count(f => f == '\n');
+          if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
+            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
         }
-        baseCode[func.BodyEndTok.line - 1] = baseCode[func.BodyEndTok.line - 1].Remove(0, func.BodyEndTok.col - 1);
-        baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Insert(func.BodyStartTok.col, Printer.ExprToString(newFuncBody));
-      }
-      lemmaForExprValidityStartPosition = baseCode.Length;
-      baseCode = baseCode.Append(lemmaForExprValidityString).ToArray();
-      lemmaForExprValidityPosition = baseCode.Length;
-      var newCode = String.Join('\n', baseCode);
-      File.WriteAllTextAsync($"{workingDir}/{includeParser.Normalized(func.BodyStartTok.Filename)}", newCode);
-      // if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
-        // File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
-      // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
-      // Console.WriteLine("");
-      // }
-      // string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
-      // dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
-      // The first 22 characters are: "Command Line Options: "
-      string env = DafnyOptions.O.Environment.Remove(0, 22);
-      var argList = env.Split(' ');
-      List<string> args = new List<string>();
-      foreach (var arg in argList) {
-        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")) {
-          args.Add(arg);
+        string env = DafnyOptions.O.Environment.Remove(0, 22);
+        var argList = env.Split(' ');
+        List<string> args = new List<string>();
+        foreach (var arg in argList) {
+          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")) {
+            args.Add(arg);
+          }
         }
+        args.Add("/exitAfterFirstError");
+        dafnyVerifier.runDafny(code, args,
+            expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition);
       }
-      // Console.WriteLine($"Creating process : ");
-      args.Add("/exitAfterFirstError");
-      dafnyVerifier.runDafny(newCode, args,
-          expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition);
-      // dafnyMainExecutor.createProcessWithOutput(dafnyBinaryPath,
-      //     $"{args} {DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy " + (runOnce ? "/exitAfterFirstError" : "/proc:Impl*validityCheck*"),
-      //     expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, $"{funcName}_{cnt}");
-      // Printer.PrintFunction(transformedFunction, 0, false);
+      else
+      {
+        DuplicateAllFiles(program, workingDir, cnt);
+
+        Expression newFuncBody = null;
+        if (expr.HasCardinality) {
+          newFuncBody = Expression.CreateAnd(expr, func.Body);
+        } else {
+          newFuncBody = Expression.CreateAnd(func.Body, expr);
+        }
+        var baseCode = File.ReadAllLines(func.BodyStartTok.Filename);
+        if (func.BodyStartTok.line == func.BodyEndTok.line) {
+          baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Remove(func.BodyStartTok.col, func.BodyEndTok.col - func.BodyStartTok.col);
+          baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Insert(func.BodyStartTok.col + 1, Printer.ExprToString(newFuncBody));
+        }
+        else {
+          baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Remove(func.BodyStartTok.col);
+          for (int i = func.BodyStartTok.line; i < func.BodyEndTok.line - 1; i++) {
+            baseCode[i] = "";
+          }
+          baseCode[func.BodyEndTok.line - 1] = baseCode[func.BodyEndTok.line - 1].Remove(0, func.BodyEndTok.col - 1);
+          baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Insert(func.BodyStartTok.col, Printer.ExprToString(newFuncBody));
+        }
+        lemmaForExprValidityStartPosition = baseCode.Length;
+        baseCode = baseCode.Append(lemmaForExprValidityString).ToArray();
+        lemmaForExprValidityPosition = baseCode.Length;
+        var newCode = String.Join('\n', baseCode);
+        File.WriteAllTextAsync($"{workingDir}/{includeParser.Normalized(func.BodyStartTok.Filename)}", newCode);
+      }
     }
 
     public void PrintImplies(Program program, Function func, int availableExprAIndex, int availableExprBIndex) {

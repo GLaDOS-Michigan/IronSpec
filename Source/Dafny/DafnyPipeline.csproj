@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <Protobuf Include="Protos\verifier.proto" GrpcServices="Client" />
+    <Protobuf Include="Protos\dafnyArgs.proto" GrpcServices="Client" />
   </ItemGroup>
 
   <ItemGroup>
