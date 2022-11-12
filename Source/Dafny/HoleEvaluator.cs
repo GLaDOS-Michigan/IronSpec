@@ -479,6 +479,7 @@ namespace Microsoft.Dafny {
         }
         expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
+        Contract.Assert(desiredFunctionUnresolved != null);
         topLevelDeclCopy = new Function(
           desiredFunctionUnresolved.tok, desiredFunctionUnresolved.Name, desiredFunctionUnresolved.HasStaticKeyword,
           desiredFunctionUnresolved.IsGhost, desiredFunctionUnresolved.TypeArgs, desiredFunctionUnresolved.Formals,
@@ -749,19 +750,16 @@ namespace Microsoft.Dafny {
     }
 
     public static Function GetFunctionFromUnresolved(Program program, string funcName) {
+      int index = funcName.LastIndexOf('.');
+      string moduleName = funcName.Remove(index);
       foreach (var topLevelDecl in program.DefaultModuleDef.TopLevelDecls) {
-        if(topLevelDecl.FullDafnyName == "Protocol_Node_i") {
+        if(topLevelDecl.FullDafnyName == moduleName) {
           var lmd = topLevelDecl as LiteralModuleDecl;
           var func = GetFunctionFromModuleDef(lmd.ModuleDef, funcName);
           if (func != null) {
             return func;
           }
         }
-          foreach (var member in ModuleDefinition.AllFunctions(program.DefaultModuleDef.TopLevelDecls)) {
-            if ($"{member.Name}" == funcName) {
-              return member as Function;
-            }
-          }
       }
       return null;
     }
