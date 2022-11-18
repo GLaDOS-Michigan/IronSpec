@@ -195,6 +195,7 @@ namespace Microsoft.Dafny {
     public string HoleEvaluatorInvariant = null;
     public string HoleEvaluatorConstraint = null;
     public string HoleEvaluatorRemoveFileLine = null;
+    public string HoleEvaluatorCommands = null;
 
     protected override bool ParseOption(string name, Bpl.CommandLineParseState ps) {
       var args = ps.args; // convenient synonym
@@ -708,6 +709,12 @@ namespace Microsoft.Dafny {
         case "holeEvalWorkingDir":
           if (ps.ConfirmArgumentCount(1)) {
             HoleEvaluatorWorkingDirectory = args[ps.i] + "/";
+          }
+          return true;
+
+        case "holeEvalCommands":
+          if (ps.ConfirmArgumentCount(1)) {
+            HoleEvaluatorCommands = args[ps.i];
           }
           return true;
 
