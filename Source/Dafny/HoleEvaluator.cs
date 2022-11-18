@@ -479,10 +479,7 @@ namespace Microsoft.Dafny {
         }
         expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
-<<<<<<< HEAD
-=======
         Contract.Assert(desiredFunctionUnresolved != null);
->>>>>>> 678caec9c26697864c0465c506d8a79782b705c6
         topLevelDeclCopy = new Function(
           desiredFunctionUnresolved.tok, desiredFunctionUnresolved.Name, desiredFunctionUnresolved.HasStaticKeyword,
           desiredFunctionUnresolved.IsGhost, desiredFunctionUnresolved.TypeArgs, desiredFunctionUnresolved.Formals,
