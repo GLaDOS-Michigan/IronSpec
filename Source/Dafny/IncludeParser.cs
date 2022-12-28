@@ -20,6 +20,7 @@ namespace Microsoft.Dafny {
   public class IncludeParser {
     private Program program;
     private Dictionary<string, List<string>> affectedFilesList = new Dictionary<string, List<string>>();
+    public string commonPrefix;
     private int commonPrefixLength;
 
     public IncludeParser(Program program) {
@@ -50,7 +51,7 @@ namespace Microsoft.Dafny {
       foreach (var file in program.DefaultModuleDef.Includes) {
         samples.Add(file.CanonicalPath);
       }
-      var commonPrefix = new string(
+      commonPrefix = new string(
         samples.First().Substring(0, samples.Min(s => s.Length))
         .TakeWhile((c, i) => samples.All(s => s[i] == c)).ToArray());
       commonPrefixLength = commonPrefix.Length;

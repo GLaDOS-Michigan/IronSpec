@@ -26,6 +26,7 @@ namespace Microsoft.Dafny {
     private List<string> ServerIpPortList = new List<string>();
     private List<DafnyVerifierService.DafnyVerifierServiceClient> serversList =
       new List<DafnyVerifierService.DafnyVerifierServiceClient>();
+    private List<TmpFolder> baseFoldersPath = new List<TmpFolder>();
     private string OutputPrefix;
     private Random rand = new Random();
     public DafnyVerifierClient(string serverIpPortFileName, string outputPrefix) {
@@ -37,11 +38,18 @@ namespace Microsoft.Dafny {
         channelsList.Add(new Channel(line, ChannelCredentials.Insecure));
         serversList.Add(new DafnyVerifierService.DafnyVerifierServiceClient(
           channelsList[channelsList.Count - 1]));
+        baseFoldersPath.Add(new TmpFolder());
       }
+      Parallel.For(0, serversList.Count,
+        index => {
+          Empty emptyProto = new Empty();
+          baseFoldersPath[index] = serversList[index].CreateTmpFolder(emptyProto);
+        }
+      );
     }
     public Stopwatch sw;
     public Dictionary<VerificationRequest, VerificationResponse> dafnyOutput = new Dictionary<VerificationRequest, VerificationResponse>();
-    public Dictionary<int, VerificationRequest> requestsList = new Dictionary<int, VerificationRequest>();
+    public Dictionary<int, List<VerificationRequest>> requestsList = new Dictionary<int, List<VerificationRequest>>();
     public Dictionary<VerificationRequest, Expression> requestToExpr = new Dictionary<VerificationRequest, Expression>();
     public Dictionary<VerificationRequest, List<Expression>> requestToExprList = new Dictionary<VerificationRequest, List<Expression>>();
     public Dictionary<VerificationRequest, AsyncUnaryCall<VerificationResponse>> requestToCall =
@@ -52,10 +60,42 @@ namespace Microsoft.Dafny {
     public Dictionary<VerificationRequest, int> requestToPostConditionPosition = new Dictionary<VerificationRequest, int>();
     public Dictionary<VerificationRequest, int> requestToLemmaStartPosition = new Dictionary<VerificationRequest, int>();
 
-    public static Result IsCorrectOutput(string output, string expectedOutput, string expectedInconclusiveOutputStart) {
+    public void InitializeBaseFoldersInRemoteServers(Program program, string commonPrefix) {
+      for (int i = 0; i < serversList.Count; i++) {
+        var ipPort = ServerIpPortList[i];
+        var ip = ipPort.Split(':')[0];
+
+        string arguments = $"-az --rsh=\" ssh -o StrictHostKeyChecking=no\" --include '*/' --include '*\\.dfy' --exclude '*' {commonPrefix}/ arminvak@{ip}:{baseFoldersPath[i].Path}/";
+        ProcessStartInfo startInfo = new ProcessStartInfo() { FileName = "/usr/bin/rsync", Arguments = arguments, }; 
+        Process proc = new Process() { StartInfo = startInfo, };
+        proc.Start();
+        proc.WaitForExit();
+      }
+      // var filesList = new List<string>();
+      // foreach (var file in program.DefaultModuleDef.Includes) {
+      //   filesList.Add(file.CanonicalPath);
+      // }
+
+    }
+
+    public TmpFolder DuplicateAllFiles(int cnt, string changingFilePath) {
+      var serverId = cnt % serversList.Count;
+      TmpFolder duplicateFileRequest = new TmpFolder();
+      duplicateFileRequest.Path = baseFoldersPath[serverId].Path;
+      duplicateFileRequest.ModifyingFile = changingFilePath;
+      TmpFolder targetFolder = serversList[serverId].DuplicateFolder(duplicateFileRequest);
+      return targetFolder;
+    }
+
+    public static Result IsCorrectOutputForValidityCheck(string output, string expectedOutput, string expectedInconclusiveOutputStart) {
       if (output.EndsWith("1 error\n")) {
         var outputList = output.Split('\n');
-        return ((outputList.Length >= 7) && (outputList[outputList.Length - 7] == expectedOutput)) ? Result.CorrectProof : Result.IncorrectProof;
+        for(int i = 1; i <= 7; i++) {
+          if ((outputList.Length >= i) && (outputList[outputList.Length - i] == expectedOutput)) {
+            return Result.CorrectProof;
+          }
+        }
+        return Result.IncorrectProof;
       } else if (output.EndsWith("1 inconclusive\n")) {
         var outputList = output.Split('\n');
         return ((outputList.Length >= 4) && outputList[outputList.Length - 4].StartsWith(expectedInconclusiveOutputStart)) ? Result.CorrectProofByTimeout : Result.IncorrectProof;
@@ -64,39 +104,35 @@ namespace Microsoft.Dafny {
       }
     }
 
+    public static Result IsCorrectOutputForNoErrors(string output)
+    {
+      if (output.EndsWith("0 errors\n")) {
+        return Result.CorrectProof;
+      }
+      else {
+        return Result.IncorrectProof;
+      }
+    }
+
     public async Task<bool> startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
-      await Parallel.ForEachAsync(requestsList,
-        async (kv, tmp) => {
+      await Parallel.ForEachAsync(requestsList.Values.SelectMany(x => x).ToList(),
+        async (request, tmp) => {
         start:
-          var request = kv.Value;
           try {
             VerificationResponse response = await requestToCall[request];
-            var output = response.Response;
-            var expectedOutput =
-              $"{response.FileName}({requestToPostConditionPosition[request]},0): Error: A postcondition might not hold on this return path.";
-            var expectedInconclusiveOutputStart =
-              $"{response.FileName}({requestToLemmaStartPosition[request]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
-            var result = IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
-            if (result != Result.IncorrectProof) {
-              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer {result.ToString()} #{requestToCnt[request]}: {Printer.ExprToString(requestToExpr[request])}");
-            }
             dafnyOutput[request] = response;
-            await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{requestToCnt[request]}_0.txt",
-              (requestToExpr.ContainsKey(request) ? "// " + Printer.ExprToString(requestToExpr[request]) + "\n" : "") + output + "\n");
-            // Console.WriteLine($"finish executing {requestToCnt[request]}");
           } catch (RpcException ex) {
             Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: Restarting task #{requestToCnt[request]} {ex.Message}");
-            RestartTask(requestToCnt[request]);
+            RestartTask(request);
             goto start;
           }
         });
       return true;
     }
     public async Task<bool> startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
-      await Parallel.ForEachAsync(requestsList,
-        async (kv, tmp) => {
+      await Parallel.ForEachAsync(requestsList.Values.SelectMany(x => x).ToList(),
+        async (request, tmp) => {
         start:
-          var request = kv.Value;
           try {
             VerificationResponse response = await requestToCall[request];
             var output = response.Response;
@@ -116,15 +152,14 @@ namespace Microsoft.Dafny {
             // Console.WriteLine($"finish executing {requestToCnt[request]}");
           } catch (RpcException ex) {
             Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: Restarting task #{requestToCnt[request]} {ex.Message}");
-            RestartTask(requestToCnt[request]);
+            RestartTask(request);
             goto start;
           }
         });
       return true;
     }
 
-    private void RestartTask(int index) {
-      var request = requestsList[index];
+    private void RestartTask(VerificationRequest request) {
       var prevTask = requestToCall[request];
       var serverId = requestToCnt[request] % serversList.Count;
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
@@ -132,7 +167,7 @@ namespace Microsoft.Dafny {
       requestToCall[request] = task;
     }
     public void runDafny(string code, List<string> args, Expression expr,
-        int cnt, int postConditionPos, int lemmaStartPos) {
+        int cnt, int postConditionPos, int lemmaStartPos, string remoteFilePath) {
       sentRequests++;
       // if (sentRequests == 500) {
       //   sentRequests = 0;
@@ -140,10 +175,14 @@ namespace Microsoft.Dafny {
       // }
       VerificationRequest request = new VerificationRequest();
       request.Code = code;
+      request.Path = remoteFilePath;
       foreach (var arg in args) {
         request.Arguments.Add(arg);
       }
-      requestsList.Add(cnt, request);
+      if (!requestsList.ContainsKey(cnt)) {
+        requestsList.Add(cnt, new List<VerificationRequest>());
+      }
+      requestsList[cnt].Add(request);
       var serverId = cnt % serversList.Count;
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
         deadline: DateTime.UtcNow.AddMinutes(30000));
@@ -164,7 +203,10 @@ namespace Microsoft.Dafny {
       var serverId = (availableExprAIndex * availableExprBIndex) % serversList.Count;
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request);
       requestToCall[request] = task;
-      requestsList.Add(requestsList.Count, request);
+      if (!requestsList.ContainsKey(requestsList.Count)) {
+        requestsList.Add(requestsList.Count, new List<VerificationRequest>());
+      }
+      requestsList[requestsList.Count].Add(request);
       requestToAvailableExprAIndex[request] = availableExprAIndex;
       requestToAvailableExprBIndex[request] = availableExprBIndex;
       requestToPostConditionPosition[request] = postConditionPos;
@@ -183,7 +225,10 @@ namespace Microsoft.Dafny {
       foreach (var arg in args) {
         request.Arguments.Add(arg);
       }
-      requestsList.Add(cnt, request);
+      if (!requestsList.ContainsKey(cnt)) {
+        requestsList.Add(cnt, new List<VerificationRequest>());
+      }
+      requestsList[cnt].Add(request);
       var serverId = cnt % serversList.Count;
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
         deadline: DateTime.UtcNow.AddMinutes(30000));

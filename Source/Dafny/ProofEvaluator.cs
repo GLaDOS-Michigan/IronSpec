@@ -54,37 +54,38 @@ namespace Microsoft.Dafny {
     }
 
     private void UpdateCombinationResult(int index) {
-      if (!dafnyVerifier.requestsList.ContainsKey(index)) {
-        combinationResults[index] = Result.NoMatchingTrigger;
-        return;
-      }
-      var request = dafnyVerifier.requestsList[index];
-      var output = dafnyVerifier.dafnyOutput[request];
-      var response = output.Response;
-      var filePath = output.FileName;
-      var startTime = output.StartTime;
-      var execTime = output.ExecutionTime;
-      executionTimes.Add(execTime);
-      startTimes.Add(startTime);
-      // Console.WriteLine($"{index} => {output}");
-      // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
-      // Console.WriteLine($"----------------------------------------------------------------");
-      if (response.EndsWith("0 errors\n")) {
-        // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
-        // Console.WriteLine(output);
-        combinationResults[index] = Result.CorrectProof;
-        // Console.WriteLine(p.StartInfo.Arguments);
-        var str = "";
-        var sep = "";
-        foreach (var expr in dafnyVerifier.requestToExprList[request]) {
-          str += sep + Printer.ExprToString(expr);
-          sep = ", ";
-        }
-        Console.WriteLine(str);
-      } else {
-        combinationResults[index] = Result.IncorrectProof;
-      }
-      expressionFinder.combinationResults[index] = combinationResults[index];
+      throw new NotImplementedException("need to rewrite the following based on the changes in dafnyVerifier");
+      // if (!dafnyVerifier.requestsList.ContainsKey(index)) {
+      //   combinationResults[index] = Result.NoMatchingTrigger;
+      //   return;
+      // }
+      // var request = dafnyVerifier.requestsList[index];
+      // var output = dafnyVerifier.dafnyOutput[request];
+      // var response = output.Response;
+      // var filePath = output.FileName;
+      // var startTime = output.StartTime;
+      // var execTime = output.ExecutionTime;
+      // executionTimes.Add(execTime);
+      // startTimes.Add(startTime);
+      // // Console.WriteLine($"{index} => {output}");
+      // // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
+      // // Console.WriteLine($"----------------------------------------------------------------");
+      // if (response.EndsWith("0 errors\n")) {
+      //   // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
+      //   // Console.WriteLine(output);
+      //   combinationResults[index] = Result.CorrectProof;
+      //   // Console.WriteLine(p.StartInfo.Arguments);
+      //   var str = "";
+      //   var sep = "";
+      //   foreach (var expr in dafnyVerifier.requestToExprList[request]) {
+      //     str += sep + Printer.ExprToString(expr);
+      //     sep = ", ";
+      //   }
+      //   Console.WriteLine(str);
+      // } else {
+      //   combinationResults[index] = Result.IncorrectProof;
+      // }
+      // expressionFinder.combinationResults[index] = combinationResults[index];
     }
 
     public Dictionary<string, List<string>> GetEqualExpressionList(Expression expr) {
