@@ -165,22 +165,22 @@ namespace Microsoft.Dafny {
     public Dictionary<string, List<Expression>> GetRawExpressions(Program program, MemberDecl decl,
         IEnumerable<Expression> expressions, bool addToAvailableExpressions) {
       var typeToExpressionDict = GetTypeToExpressionDict(expressions);
-      foreach (var kvp in program.ModuleSigs) {
-        foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
-          var cl = d as TopLevelDeclWithMembers;
-          if (cl != null) {
-            foreach (var member in cl.Members) {
-              if (member is Predicate) {
-                var predicateInvocations = GetAllPossiblePredicateInvocations(program, member as Predicate, typeToExpressionDict);
-                if (!typeToExpressionDict.ContainsKey("bool")) {
-                  typeToExpressionDict.Add("bool", new List<Expression>());
-                }
-                typeToExpressionDict["bool"].AddRange(predicateInvocations);
-              }
-            }
-          }
-        }
-      }
+      // foreach (var kvp in program.ModuleSigs) {
+      //   foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
+      //     var cl = d as TopLevelDeclWithMembers;
+      //     if (cl != null) {
+      //       foreach (var member in cl.Members) {
+      //         if (member is Predicate) {
+      //           var predicateInvocations = GetAllPossiblePredicateInvocations(program, member as Predicate, typeToExpressionDict);
+      //           if (!typeToExpressionDict.ContainsKey("bool")) {
+      //             typeToExpressionDict.Add("bool", new List<Expression>());
+      //           }
+      //           typeToExpressionDict["bool"].AddRange(predicateInvocations);
+      //         }
+      //       }
+      //     }
+      //   }
+      // }
       if (decl is Function) {
         var desiredFunction = decl as Function;
         var equalExprToCheck = desiredFunction.Body;

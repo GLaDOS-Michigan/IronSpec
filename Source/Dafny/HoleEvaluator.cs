@@ -309,8 +309,11 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr) {
+    public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, int cnt) {
       string res = "lemma {:timeLimitMultiplier 2} validityCheck";
+      if (cnt != -1) {
+        res += "_" + cnt.ToString();
+      }
       foreach (var nwPair in path) {
         res += "_" + nwPair.Item1.Name;
       }
@@ -553,8 +556,14 @@ namespace Microsoft.Dafny {
         switch (combinationResults[i]) {
           case Result.InvalidExpr: invalidExprCount++; break;
           case Result.FalsePredicate: falsePredicateCount++; break;
-          case Result.CorrectProof: correctProofCount++; break;
-          case Result.CorrectProofByTimeout: correctProofByTimeoutCount++; break;
+          case Result.CorrectProof: 
+            Console.WriteLine($"correct answer: {i}");
+            correctProofCount++; 
+            break;
+          case Result.CorrectProofByTimeout: 
+            Console.WriteLine($"correct answer by timeout: {i}");
+            correctProofByTimeoutCount++; 
+            break;
           case Result.IncorrectProof: incorrectProofCount++; break;
           case Result.NoMatchingTrigger: noMatchingTriggerCount++; break;
           case Result.Unknown: throw new NotSupportedException();
@@ -807,7 +816,7 @@ namespace Microsoft.Dafny {
       Console.WriteLine($"{cnt} {Printer.ExprToString(expr)}");
       var funcName = func.Name;
 
-      string lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr);
+      string lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr, cnt);
 
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
