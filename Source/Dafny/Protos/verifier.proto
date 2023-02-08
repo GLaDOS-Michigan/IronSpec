@@ -8,13 +8,26 @@ package DafnyExecutorServer;
 service DafnyVerifierService {
   // Run Dafny on the given code and returns the output
   rpc Verify(VerificationRequest) returns (VerificationResponse) {}
+  rpc CreateTmpFolder(Empty) returns (TmpFolder) {}
+  rpc DuplicateFolder(TmpFolder) returns (TmpFolder) {}
+}
+
+message Empty {
+}
+
+message TmpFolder {
+  // Path to the temporary folder
+  string path = 1;
+  string modifyingFile = 2;
 }
 
 message VerificationRequest {
-  // Dafny code that needs to be verified
+  // Dafny code that needs to be verified given by actual code
   string code = 1;
+  // The location where the code should be written in the dafny server
+  string path = 2;
   // List of arguments to be passed to Dafny
-  repeated string arguments = 2;
+  repeated string arguments = 3;
 }
 
 message VerificationResponse {

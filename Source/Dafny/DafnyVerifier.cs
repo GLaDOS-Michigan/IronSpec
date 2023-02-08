@@ -70,6 +70,10 @@ namespace Microsoft.Dafny {
         Process proc = new Process() { StartInfo = startInfo, };
         proc.Start();
         proc.WaitForExit();
+        if (proc.ExitCode != 0) {
+          Console.WriteLine($"Unsuccessful rsync for node{i}: Confirm connection between nodes");
+          System.Environment.Exit(-1);
+        }
       }
       // var filesList = new List<string>();
       // foreach (var file in program.DefaultModuleDef.Includes) {
@@ -185,7 +189,7 @@ namespace Microsoft.Dafny {
       requestsList[cnt].Add(request);
       var serverId = cnt % serversList.Count;
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
-        deadline: DateTime.UtcNow.AddMinutes(30000));
+        deadline: DateTime.UtcNow.AddMinutes(30));
       requestToCall[request] = task;
       requestToExpr[request] = expr;
       requestToCnt[request] = cnt;
@@ -231,7 +235,34 @@ namespace Microsoft.Dafny {
       requestsList[cnt].Add(request);
       var serverId = cnt % serversList.Count;
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
-        deadline: DateTime.UtcNow.AddMinutes(30000));
+        deadline: DateTime.UtcNow.AddMinutes(30));
+      requestToCall[request] = task;
+      requestToExprList[request] = exprList;
+      requestToCnt[request] = cnt;
+      dafnyOutput[request] = new VerificationResponse();
+    }
+
+    public void runDafnyProofCheck(string code, List<string> args, List<Expression> exprList,
+        int cnt, string remoteFilePath, string lemmaName) {
+      sentRequests++;
+      // if (sentRequests == 500) {
+      //   sentRequests = 0;
+      //   ResetChannel();
+      // }
+      VerificationRequest request = new VerificationRequest();
+      request.Code = code;
+      request.Path = remoteFilePath;
+      foreach (var arg in args) {
+        request.Arguments.Add(arg);
+      }
+      request.Arguments.Add($"/proc:*{lemmaName}*");
+      if (!requestsList.ContainsKey(cnt)) {
+        requestsList.Add(cnt, new List<VerificationRequest>());
+      }
+      requestsList[cnt].Add(request);
+      var serverId = cnt % serversList.Count;
+      AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
+        deadline: DateTime.UtcNow.AddMinutes(30));
       requestToCall[request] = task;
       requestToExprList[request] = exprList;
       requestToCnt[request] = cnt;

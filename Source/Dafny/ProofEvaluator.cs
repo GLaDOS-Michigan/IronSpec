@@ -33,6 +33,9 @@ namespace Microsoft.Dafny {
     private List<float> startTimes = new List<float>();
     private Dictionary<int, Result> combinationResults = new Dictionary<int, Result>();
     private DafnyVerifierClient dafnyVerifier;
+    private TasksList tasksList = null;
+    private Dictionary<string, VerificationTask> tasksListDictionary = new Dictionary<string, VerificationTask>();
+    private IncludeParser includeParser = null;
 
     public static Lemma GetLemma(Program program, string lemmaName) {
       foreach (var kvp in program.ModuleSigs) {
@@ -54,38 +57,38 @@ namespace Microsoft.Dafny {
     }
 
     private void UpdateCombinationResult(int index) {
-      throw new NotImplementedException("need to rewrite the following based on the changes in dafnyVerifier");
-      // if (!dafnyVerifier.requestsList.ContainsKey(index)) {
-      //   combinationResults[index] = Result.NoMatchingTrigger;
-      //   return;
-      // }
-      // var request = dafnyVerifier.requestsList[index];
-      // var output = dafnyVerifier.dafnyOutput[request];
-      // var response = output.Response;
-      // var filePath = output.FileName;
-      // var startTime = output.StartTime;
-      // var execTime = output.ExecutionTime;
-      // executionTimes.Add(execTime);
-      // startTimes.Add(startTime);
-      // // Console.WriteLine($"{index} => {output}");
-      // // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
-      // // Console.WriteLine($"----------------------------------------------------------------");
-      // if (response.EndsWith("0 errors\n")) {
-      //   // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
-      //   // Console.WriteLine(output);
-      //   combinationResults[index] = Result.CorrectProof;
-      //   // Console.WriteLine(p.StartInfo.Arguments);
-      //   var str = "";
-      //   var sep = "";
-      //   foreach (var expr in dafnyVerifier.requestToExprList[request]) {
-      //     str += sep + Printer.ExprToString(expr);
-      //     sep = ", ";
-      //   }
-      //   Console.WriteLine(str);
-      // } else {
-      //   combinationResults[index] = Result.IncorrectProof;
-      // }
-      // expressionFinder.combinationResults[index] = combinationResults[index];
+      // throw new NotImplementedException("need to rewrite the following based on the changes in dafnyVerifier");
+      if (!dafnyVerifier.requestsList.ContainsKey(index)) {
+        combinationResults[index] = Result.NoMatchingTrigger;
+        return;
+      }
+      var request = dafnyVerifier.requestsList[index];
+      var output = dafnyVerifier.dafnyOutput[request[0]];
+      var response = output.Response;
+      var filePath = output.FileName;
+      var startTime = output.StartTime;
+      var execTime = output.ExecutionTime;
+      executionTimes.Add(execTime);
+      startTimes.Add(startTime);
+      // Console.WriteLine($"{index} => {output}");
+      // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
+      // Console.WriteLine($"----------------------------------------------------------------");
+      if (response.EndsWith("0 errors\n")) {
+        // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
+        // Console.WriteLine(output);
+        combinationResults[index] = Result.CorrectProof;
+        // Console.WriteLine(p.StartInfo.Arguments);
+        var str = "";
+        var sep = "";
+        foreach (var expr in dafnyVerifier.requestToExprList[request[0]]) {
+          str += sep + Printer.ExprToString(expr);
+          sep = ", ";
+        }
+        Console.WriteLine(str);
+      } else {
+        combinationResults[index] = Result.IncorrectProof;
+      }
+      expressionFinder.combinationResults[index] = combinationResults[index];
     }
 
     public Dictionary<string, List<string>> GetEqualExpressionList(Expression expr) {
@@ -159,11 +162,18 @@ namespace Microsoft.Dafny {
         yield break;
       } else {
         foreach (var t in GetExpressionTuples(availableExpressions, depth - 1)) {
-          foreach (var expr in availableExpressions) {
+          {
             List<Expression> tuples = new List<Expression>();
             tuples.AddRange(t);
-            tuples.Add(expr);
             yield return tuples;
+          }
+          foreach (var expr in availableExpressions) {
+            if (!t.Contains(expr)) {
+              List<Expression> tuples = new List<Expression>();
+              tuples.AddRange(t);
+              tuples.Add(expr);
+              yield return tuples;
+            }
           }
         }
       }
@@ -371,6 +381,13 @@ namespace Microsoft.Dafny {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
         return false;
       }
+      if (DafnyOptions.O.HoleEvaluatorCommands != null) {
+        var input = File.ReadAllText(DafnyOptions.O.HoleEvaluatorCommands);
+        tasksList = Google.Protobuf.JsonParser.Default.Parse<TasksList>(input);
+        foreach (var task in tasksList.Tasks) {
+          tasksListDictionary.Add(task.Path, task);
+        }
+      }
       dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPortList, $"output_{lemmaName}");
       expressionFinder = new ExpressionFinder(this);
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
@@ -401,6 +418,10 @@ namespace Microsoft.Dafny {
         }
         return false;
       }
+
+      includeParser = new IncludeParser(program);
+      var filename = includeParser.Normalized(baseLemma.BodyStartTok.Filename);
+      dafnyVerifier.InitializeBaseFoldersInRemoteServers(program, includeParser.commonPrefix);
 
       UnderscoreStr = RandomString(8);
       dafnyVerifier.sw = Stopwatch.StartNew();
@@ -475,8 +496,9 @@ namespace Microsoft.Dafny {
         Console.WriteLine($"{lemmaName} was not found!");
         return false;
       }
-      return true;
+      // return true;
       var numberOfMatchedExpressions = 0;
+      var selectedExpressions = new List<Expression>();
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         // Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} start");
         var matchingTrigger = DoesMatchWithAnyTrigger(expressionFinder.availableExpressions[i], typeToTriggerDict);
@@ -487,11 +509,12 @@ namespace Microsoft.Dafny {
               $"{expressionFinder.availableExpressions[i]} " + "\t\t" + Printer.ExprToString(matchingTrigger));
             numberOfMatchedExpressions++;
           }
-          var l = new List<Expression>();
-          l.Add(expressionFinder.availableExpressions[i]);
-          PrintExprAndCreateProcess(program, desiredLemma, l, i);
-          var desiredLemmaBody = desiredLemma.Body.Body;
-          desiredLemmaBody.RemoveAt(0);
+          selectedExpressions.Add(expressionFinder.availableExpressions[i]);
+          // var l = new List<Expression>();
+          // l.Add(expressionFinder.availableExpressions[i]);
+          // PrintExprAndCreateProcess(program, desiredLemma, l, i);
+          // var desiredLemmaBody = desiredLemma.Body.Body;
+          // desiredLemmaBody.RemoveAt(0);
         }
       }
       if (DafnyOptions.O.ProofEvaluatorCollectAllTriggerMatches) {
@@ -502,35 +525,35 @@ namespace Microsoft.Dafny {
       Console.WriteLine($"totalExpressions: {expressionFinder.availableExpressions.Count}");
       Console.WriteLine($"numberOfMatchedExpressions: {numberOfMatchedExpressions}");
       // return true;
-      await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
-      Console.WriteLine("finish");
+      // await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      // Console.WriteLine("finish");
 
       // bool foundCorrectExpr = false;
-      for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
-        UpdateCombinationResult(i);
-        // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
-      }
+      // for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
+      //   UpdateCombinationResult(i);
+      //   // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
+      // }
 
       // Until here, we only check depth 1 of expressions.
       // Now we try to check next depths
       // int numberOfSingleExpr = expressionFinder.availableExpressions.Count;
 
       // empty expression list should represent the original code without any additions
-      // PrintExprAndCreateProcess(program, desiredLemma, new List<Expression>(), 0);
-      // int cnt = 1;
-      // var exprTuples = GetExpressionTuples(expressionFinder.availableExpressions, depth);
-      // foreach (var e in exprTuples) {
-      //   PrintExprAndCreateProcess(program, desiredLemma, e, cnt);
-      //   var desiredLemmaBody = desiredLemma.Body.Body;
-      //   for (int i = 0; i < e.Count; i++) {
-      //     desiredLemmaBody.RemoveAt(0);
-      //   }
-      //   cnt++;
-      // }
-      // await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
-      // for (int i = 0; i < cnt; i++) {
-      //   UpdateCombinationResult(i);
-      // }
+      PrintExprAndCreateProcess(program, desiredLemma, new List<Expression>(), 0);
+      int cnt = 1;
+      var exprTuples = GetExpressionTuples(selectedExpressions, depth);
+      foreach (var e in exprTuples) {
+        PrintExprAndCreateProcess(program, desiredLemma, e, cnt);
+        // var desiredLemmaBody = desiredLemma.Body.Body;
+        // for (int i = 0; i < e.Count; i++) {
+        //   desiredLemmaBody.RemoveAt(0);
+        // }
+        cnt++;
+      }
+      await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      for (int i = 0; i < cnt; i++) {
+        UpdateCombinationResult(i);
+      }
       Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
       int correctProofCount = 0;
       int correctProofByTimeoutCount = 0;
@@ -538,7 +561,7 @@ namespace Microsoft.Dafny {
       int invalidExprCount = 0;
       int falsePredicateCount = 0;
       int noMatchingTriggerCount = 0;
-      for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
+      for (int i = 0; i < cnt; i++) {
         switch (combinationResults[i]) {
           case Result.InvalidExpr: invalidExprCount++; break;
           case Result.FalsePredicate: falsePredicateCount++; break;
@@ -553,7 +576,7 @@ namespace Microsoft.Dafny {
         "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "NoMatchingTrigger", "Total");
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
         invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount,
-        noMatchingTriggerCount, expressionFinder.availableExpressions.Count);
+        noMatchingTriggerCount, cnt);
       string executionTimesSummary = "";
       // executionTimes.Sort();
       for (int i = 0; i < executionTimes.Count; i++) {
@@ -614,47 +637,30 @@ namespace Microsoft.Dafny {
 
       var lemmaName = lemma.FullDafnyName;
 
-      string code = "";
-      using (var wr = new System.IO.StringWriter()) {
-        var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
-        pr.UniqueStringBeforeUnderscore = UnderscoreStr;
-        var methodBody = lemma.Body.Body;
-        for (int i = 0; i < exprList.Count; i++) {
-          List<LocalVariable> localVarList = new List<LocalVariable>();
-          List<Expression> lhss = new List<Expression>();
-          List<AssignmentRhs> rhss = new List<AssignmentRhs>();
-          localVarList.Add(new LocalVariable(lemma.tok, lemma.tok, $"temp_{cnt}_{i}", new InferredTypeProxy(), true));
-          lhss.Add(new IdentifierExpr(lemma.tok, $"temp_{cnt}_${i}"));
-          rhss.Add(new ExprRhs(exprList[i]));
-          UpdateStmt updateStmt = new UpdateStmt(lemma.tok, lemma.tok, lhss, rhss);
-          VarDeclStmt varDeclStmt = new VarDeclStmt(lemma.tok, lemma.tok, localVarList, updateStmt);
-          methodBody.Insert(0, varDeclStmt);
-        }
-        pr.PrintProgram(program, true);
-        code = $"// #{cnt}\n";
-        code += $"// {signature}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
-        if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles) {
-          File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{lemmaName}_{cnt}.dfy", code);
-        }
-        // Console.WriteLine(Printer.ToStringWithoutNewline(wr));
-        // Console.WriteLine("");
+      var varDeclStmtStringList = new List<string>();
+      for (int i = 0; i < exprList.Count; i++) {
+        List<LocalVariable> localVarList = new List<LocalVariable>();
+        List<Expression> lhss = new List<Expression>();
+        List<AssignmentRhs> rhss = new List<AssignmentRhs>();
+        localVarList.Add(new LocalVariable(lemma.tok, lemma.tok, $"temp_{cnt}_{i}", new InferredTypeProxy(), true));
+        lhss.Add(new IdentifierExpr(lemma.tok, $"temp_{cnt}_${i}"));
+        rhss.Add(new ExprRhs(exprList[i]));
+        UpdateStmt updateStmt = new UpdateStmt(lemma.tok, lemma.tok, lhss, rhss);
+        VarDeclStmt varDeclStmt = new VarDeclStmt(lemma.tok, lemma.tok, localVarList, updateStmt);
+        varDeclStmtStringList.Add(Printer.StatementToString(varDeclStmt));
       }
-      // string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
-      // dafnyBinaryPath = dafnyBinaryPath.Substring(0, dafnyBinaryPath.Length - 4);
-      // The first 22 characters are: "Command Line Options: "
-      string env = DafnyOptions.O.Environment.Remove(0, 22);
-      var argList = env.Split(' ');
-      List<string> args = new List<string>();
-      foreach (var arg in argList) {
-        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && !arg.StartsWith("/proofEval") && arg.StartsWith("/")) {
-          args.Add(arg);
-        }
-      }
-      // Console.WriteLine($"Creating process : ");
-      args.Add("/exitAfterFirstError");
-      args.Add("/trace");
-      args.Add($"/proc:*{lemma.CompileName}");
-      dafnyVerifier.runDafnyProofCheck(code, args, exprList, cnt);
+
+      var changingFilePath = includeParser.Normalized(lemma.BodyStartTok.Filename);
+      var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
+      var baseCode = File.ReadAllLines(lemma.BodyStartTok.Filename);
+
+      baseCode[lemma.BodyStartTok.line - 1] = baseCode[lemma.BodyStartTok.line - 1].Insert(lemma.BodyStartTok.col, String.Join('\n', varDeclStmtStringList));
+
+      var newCode = String.Join('\n', baseCode);
+
+      dafnyVerifier.runDafnyProofCheck(newCode, tasksListDictionary[changingFilePath].Arguments.ToList(),
+              exprList, cnt, $"{remoteFolderPath.Path}/{changingFilePath}",
+              lemma.CompileName);
     }
   }
 }
