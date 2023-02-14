@@ -52,7 +52,7 @@ namespace Microsoft.Dafny {
     private Dictionary<int, int> negateOfExpressionIndex = new Dictionary<int, int>();
     // private DafnyExecutor dafnyMainExecutor = new DafnyExecutor();
     private DafnyExecutor dafnyImpliesExecutor = new DafnyExecutor();
-    private DafnyVerifierClient dafnyVerifier;
+    public DafnyVerifierClient dafnyVerifier;
 
     private TasksList tasksList = null;
     private Dictionary<string, VerificationTask> tasksListDictionary = new Dictionary<string, VerificationTask>();

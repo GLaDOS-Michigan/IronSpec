@@ -9,6 +9,7 @@ service DafnyVerifierService {
   // Run Dafny on the given code and returns the output
   rpc Verify(VerificationRequest) returns (VerificationResponse) {}
   rpc CreateTmpFolder(Empty) returns (TmpFolder) {}
+  rpc RemoveFolder(TmpFolder) returns (Empty) {}
   rpc DuplicateFolder(TmpFolder) returns (TmpFolder) {}
 }
 

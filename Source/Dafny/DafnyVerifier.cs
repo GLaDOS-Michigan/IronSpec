@@ -27,6 +27,8 @@ namespace Microsoft.Dafny {
     private List<DafnyVerifierService.DafnyVerifierServiceClient> serversList =
       new List<DafnyVerifierService.DafnyVerifierServiceClient>();
     private List<TmpFolder> baseFoldersPath = new List<TmpFolder>();
+    private List<List<TmpFolder>> temporaryFoldersList = new List<List<TmpFolder>>();
+    private List<AsyncUnaryCall<Empty>> outstandingCleanupTasks = new List<AsyncUnaryCall<Empty>>();
     private string OutputPrefix;
     private Random rand = new Random();
     public DafnyVerifierClient(string serverIpPortFileName, string outputPrefix) {
@@ -39,6 +41,7 @@ namespace Microsoft.Dafny {
         serversList.Add(new DafnyVerifierService.DafnyVerifierServiceClient(
           channelsList[channelsList.Count - 1]));
         baseFoldersPath.Add(new TmpFolder());
+        temporaryFoldersList.Add(new List<TmpFolder>());
       }
       Parallel.For(0, serversList.Count,
         index => {
@@ -46,6 +49,9 @@ namespace Microsoft.Dafny {
           baseFoldersPath[index] = serversList[index].CreateTmpFolder(emptyProto);
         }
       );
+      for (int i = 0; i < serversList.Count; i++) {
+        temporaryFoldersList[i].Add(baseFoldersPath[i]);
+      }
     }
     public Stopwatch sw;
     public Dictionary<VerificationRequest, VerificationResponse> dafnyOutput = new Dictionary<VerificationRequest, VerificationResponse>();
@@ -88,6 +94,7 @@ namespace Microsoft.Dafny {
       duplicateFileRequest.Path = baseFoldersPath[serverId].Path;
       duplicateFileRequest.ModifyingFile = changingFilePath;
       TmpFolder targetFolder = serversList[serverId].DuplicateFolder(duplicateFileRequest);
+      temporaryFoldersList[serverId].Add(targetFolder);
       return targetFolder;
     }
 
@@ -116,6 +123,25 @@ namespace Microsoft.Dafny {
       else {
         return Result.IncorrectProof;
       }
+    }
+
+    public void Cleanup() {
+      for (int serverId = 0; serverId < temporaryFoldersList.Count; serverId++) {
+        for (int i = 0; i < temporaryFoldersList[serverId].Count; i++) {
+          AsyncUnaryCall<Empty> task = serversList[serverId].RemoveFolderAsync(
+            temporaryFoldersList[serverId][i],
+            deadline: DateTime.UtcNow.AddMinutes(30));
+          outstandingCleanupTasks.Add(task);
+        }
+      }
+      temporaryFoldersList.Clear();
+    }
+
+    public async Task<bool> FinalizeCleanup() {
+      for (int i = 0; i < outstandingCleanupTasks.Count; i++) {
+        Empty response = await outstandingCleanupTasks[i];
+      }
+      return true;
     }
 
     public async Task<bool> startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {

@@ -32,7 +32,7 @@ namespace Microsoft.Dafny {
     private List<float> executionTimes = new List<float>();
     private List<float> startTimes = new List<float>();
     private Dictionary<int, Result> combinationResults = new Dictionary<int, Result>();
-    private DafnyVerifierClient dafnyVerifier;
+    public DafnyVerifierClient dafnyVerifier;
     private TasksList tasksList = null;
     private Dictionary<string, VerificationTask> tasksListDictionary = new Dictionary<string, VerificationTask>();
     private IncludeParser includeParser = null;
@@ -554,7 +554,8 @@ namespace Microsoft.Dafny {
       for (int i = 0; i < cnt; i++) {
         UpdateCombinationResult(i);
       }
-      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish exploring");
+      dafnyVerifier.Cleanup();
       int correctProofCount = 0;
       int correctProofByTimeoutCount = 0;
       int incorrectProofCount = 0;
@@ -592,6 +593,7 @@ namespace Microsoft.Dafny {
       }
       await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummary.txt",
             startTimesSummary);
+      await dafnyVerifier.FinalizeCleanup();
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   var ba = bitArrayList[i];
       //   Console.WriteLine("------------------------------");
