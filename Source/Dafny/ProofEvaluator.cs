@@ -80,8 +80,12 @@ namespace Microsoft.Dafny {
         // Console.WriteLine(p.StartInfo.Arguments);
         var str = "";
         var sep = "";
-        foreach (var expr in dafnyVerifier.requestToExprList[request[0]]) {
-          str += sep + Printer.ExprToString(expr);
+        foreach (var stmtExpr in dafnyVerifier.requestToStmtExprList[request[0]]) {
+          if (stmtExpr.Expr != null) {
+            str += sep + Printer.ExprToString(stmtExpr.Expr);
+          } else {
+            str += sep + Printer.StatementToString(stmtExpr.Stmt);
+          }
           sep = ", ";
         }
         Console.WriteLine(str);
@@ -150,28 +154,88 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public IEnumerable<List<Expression>> GetExpressionTuples(List<Expression> availableExpressions, int depth) {
+    public class ExprStmtUnion {
+      public Statement Stmt;
+      public Expression Expr;
+
+      public ExprStmtUnion(Expression expr) {
+        this.Stmt = null;
+        this.Expr = expr;
+      }
+      public ExprStmtUnion(Statement stmt) {
+        this.Stmt = stmt;
+        this.Expr = null;
+      }
+    }
+
+    public IEnumerable<List<ExprStmtUnion>> GetExprStmtTuples(List<Statement> availableStatements, 
+      List<Expression> availableExpressions, int depth) {
+      if (depth <= 0) {
+        yield break;
+      } else if (depth == 1) {
+        foreach (var stmt in availableStatements) {
+          List<ExprStmtUnion> tuples = new List<ExprStmtUnion>();
+          tuples.Add(new ExprStmtUnion(stmt));
+          yield return tuples;
+        }
+        foreach (var expr in availableExpressions) {
+          List<ExprStmtUnion> tuples = new List<ExprStmtUnion>();
+          tuples.Add(new ExprStmtUnion(expr));
+          yield return tuples;
+        }
+        yield break;
+      } else {
+        foreach (var t in GetExprStmtTuples(availableStatements, availableExpressions, depth - 1)) {
+          {
+            List<ExprStmtUnion> tuples = new List<ExprStmtUnion>();
+            tuples.AddRange(t);
+            yield return tuples;
+          }
+          foreach (var stmt in availableStatements) 
+          {
+            if (!t.Contains(new ExprStmtUnion(stmt))) {
+              List<ExprStmtUnion> tuples = new List<ExprStmtUnion>();
+              tuples.AddRange(t);
+              tuples.Add(new ExprStmtUnion(stmt));
+              yield return tuples;
+            }
+          }
+          foreach (var expr in availableExpressions) 
+          {
+            if (!t.Contains(new ExprStmtUnion(expr))) {
+              List<ExprStmtUnion> tuples = new List<ExprStmtUnion>();
+              tuples.AddRange(t);
+              tuples.Add(new ExprStmtUnion(expr));
+              yield return tuples;
+            }
+          }
+        }
+      }
+    }
+
+    public IEnumerable<List<ExprStmtUnion>> GetExpressionTuples(List<Expression> availableExpressions, int depth) {
       if (depth <= 0) {
         yield break;
       } else if (depth == 1) {
         foreach (var expr in availableExpressions) {
-          List<Expression> tuples = new List<Expression>();
-          tuples.Add(expr);
+          List<ExprStmtUnion> tuples = new List<ExprStmtUnion>();
+          tuples.Add(new ExprStmtUnion(expr));
           yield return tuples;
         }
         yield break;
       } else {
         foreach (var t in GetExpressionTuples(availableExpressions, depth - 1)) {
           {
-            List<Expression> tuples = new List<Expression>();
+            List<ExprStmtUnion> tuples = new List<ExprStmtUnion>();
             tuples.AddRange(t);
             yield return tuples;
           }
-          foreach (var expr in availableExpressions) {
-            if (!t.Contains(expr)) {
-              List<Expression> tuples = new List<Expression>();
+          foreach (var expr in availableExpressions) 
+          {
+            if (!t.Contains(new ExprStmtUnion(expr))) {
+              List<ExprStmtUnion> tuples = new List<ExprStmtUnion>();
               tuples.AddRange(t);
-              tuples.Add(expr);
+              tuples.Add(new ExprStmtUnion(expr));
               yield return tuples;
             }
           }
@@ -496,7 +560,25 @@ namespace Microsoft.Dafny {
         Console.WriteLine($"{lemmaName} was not found!");
         return false;
       }
+
+      Console.WriteLine("Type To Expression Dict:");
+      foreach (var t in typeToExpressionDict.Keys) {
+        Console.WriteLine("--------------------------------");
+        Console.WriteLine($"{t} {typeToExpressionDict[t].Count}");
+        foreach (var expr in typeToExpressionDict[t]) {
+          var exprStr = Printer.ExprToString(expr);
+          Console.WriteLine(exprStr);
+        }
+        Console.WriteLine("--------------------------------");
+      }
       // return true;
+      var revealFinder = new RevealFinder(this);
+      var revealStatements = revealFinder.GetRevealStatements(program);
+      var lemmaFinder = new LemmaFinder(this);
+      var lemmaStatements = lemmaFinder.GetLemmaStatements(program, typeToExpressionDict);
+      var statements = new List<Statement>();
+      statements.AddRange(revealStatements.AsEnumerable());
+      statements.AddRange(lemmaStatements.AsEnumerable());
       var numberOfMatchedExpressions = 0;
       var selectedExpressions = new List<Expression>();
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -539,10 +621,10 @@ namespace Microsoft.Dafny {
       // int numberOfSingleExpr = expressionFinder.availableExpressions.Count;
 
       // empty expression list should represent the original code without any additions
-      PrintExprAndCreateProcess(program, desiredLemma, new List<Expression>(), 0);
+      PrintExprAndCreateProcess(program, desiredLemma, new List<ExprStmtUnion>(), 0);
       int cnt = 1;
-      var exprTuples = GetExpressionTuples(selectedExpressions, depth);
-      foreach (var e in exprTuples) {
+      var exprStmtTuples = GetExprStmtTuples(statements, selectedExpressions, depth);
+      foreach (var e in exprStmtTuples) {
         PrintExprAndCreateProcess(program, desiredLemma, e, cnt);
         // var desiredLemmaBody = desiredLemma.Body.Body;
         // for (int i = 0; i < e.Count; i++) {
@@ -627,12 +709,16 @@ namespace Microsoft.Dafny {
       return true;
     }
 
-    public void PrintExprAndCreateProcess(Program program, Lemma lemma, List<Expression> exprList, int cnt) {
+    public void PrintExprAndCreateProcess(Program program, Lemma lemma, List<ExprStmtUnion> exprStmtList, int cnt) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       string signature = $"{cnt} ";
       string sep = "";
-      foreach (var expr in exprList) {
-        signature += sep + Printer.ExprToString(expr);
+      foreach (var exprStmt in exprStmtList) {
+        if (exprStmt.Expr != null) {
+          signature += sep + Printer.ExprToString(exprStmt.Expr);
+        } else {
+          signature += sep + Printer.StatementToString(exprStmt.Stmt);
+        }
         sep = ", ";
       }
       Console.WriteLine(signature);
@@ -640,16 +726,21 @@ namespace Microsoft.Dafny {
       var lemmaName = lemma.FullDafnyName;
 
       var varDeclStmtStringList = new List<string>();
-      for (int i = 0; i < exprList.Count; i++) {
-        List<LocalVariable> localVarList = new List<LocalVariable>();
-        List<Expression> lhss = new List<Expression>();
-        List<AssignmentRhs> rhss = new List<AssignmentRhs>();
-        localVarList.Add(new LocalVariable(lemma.tok, lemma.tok, $"temp_{cnt}_{i}", new InferredTypeProxy(), true));
-        lhss.Add(new IdentifierExpr(lemma.tok, $"temp_{cnt}_${i}"));
-        rhss.Add(new ExprRhs(exprList[i]));
-        UpdateStmt updateStmt = new UpdateStmt(lemma.tok, lemma.tok, lhss, rhss);
-        VarDeclStmt varDeclStmt = new VarDeclStmt(lemma.tok, lemma.tok, localVarList, updateStmt);
-        varDeclStmtStringList.Add(Printer.StatementToString(varDeclStmt));
+      for (int i = 0; i < exprStmtList.Count; i++) {
+        if (exprStmtList[i].Expr != null) {
+          List<LocalVariable> localVarList = new List<LocalVariable>();
+          List<Expression> lhss = new List<Expression>();
+          List<AssignmentRhs> rhss = new List<AssignmentRhs>();
+          localVarList.Add(new LocalVariable(lemma.tok, lemma.tok, $"temp_{cnt}_{i}", new InferredTypeProxy(), true));
+          lhss.Add(new IdentifierExpr(lemma.tok, $"temp_{cnt}_${i}"));
+          rhss.Add(new ExprRhs(exprStmtList[i].Expr));
+          UpdateStmt updateStmt = new UpdateStmt(lemma.tok, lemma.tok, lhss, rhss);
+          VarDeclStmt varDeclStmt = new VarDeclStmt(lemma.tok, lemma.tok, localVarList, updateStmt);
+          varDeclStmtStringList.Add(Printer.StatementToString(varDeclStmt));
+        }
+        else {
+          varDeclStmtStringList.Add(Printer.StatementToString(exprStmtList[i].Stmt));
+        }
       }
 
       var changingFilePath = includeParser.Normalized(lemma.BodyStartTok.Filename);
@@ -661,7 +752,7 @@ namespace Microsoft.Dafny {
       var newCode = String.Join('\n', baseCode);
 
       dafnyVerifier.runDafnyProofCheck(newCode, tasksListDictionary[changingFilePath].Arguments.ToList(),
-              exprList, cnt, $"{remoteFolderPath.Path}/{changingFilePath}",
+              exprStmtList, cnt, $"{remoteFolderPath.Path}/{changingFilePath}",
               lemma.CompileName);
     }
   }

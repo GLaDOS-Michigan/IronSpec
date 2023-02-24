@@ -57,6 +57,7 @@ namespace Microsoft.Dafny {
     public Dictionary<VerificationRequest, VerificationResponse> dafnyOutput = new Dictionary<VerificationRequest, VerificationResponse>();
     public Dictionary<int, List<VerificationRequest>> requestsList = new Dictionary<int, List<VerificationRequest>>();
     public Dictionary<VerificationRequest, Expression> requestToExpr = new Dictionary<VerificationRequest, Expression>();
+    public Dictionary<VerificationRequest, List<ProofEvaluator.ExprStmtUnion>> requestToStmtExprList = new Dictionary<VerificationRequest, List<ProofEvaluator.ExprStmtUnion>>();
     public Dictionary<VerificationRequest, List<Expression>> requestToExprList = new Dictionary<VerificationRequest, List<Expression>>();
     public Dictionary<VerificationRequest, AsyncUnaryCall<VerificationResponse>> requestToCall =
       new Dictionary<VerificationRequest, AsyncUnaryCall<VerificationResponse>>();
@@ -169,8 +170,13 @@ namespace Microsoft.Dafny {
             if (output.EndsWith("0 errors\n")) {
               var str = $"{sw.ElapsedMilliseconds / 1000}:: correct answer #{requestToCnt[request]}: ";
               var sep = "";
-              foreach (var expr in requestToExprList[request]) {
-                str += ($"{sep}{Printer.ExprToString(expr)}");
+              foreach (var stmtExpr in requestToStmtExprList[request]) {
+                if (stmtExpr.Expr != null) {
+                  str += ($"{sep}{Printer.ExprToString(stmtExpr.Expr)}");
+                }
+                else {
+                  str += ($"{sep}{Printer.StatementToString(stmtExpr.Stmt)}");
+                }
                 sep = ", ";
               }
               Console.WriteLine(str);
@@ -244,7 +250,7 @@ namespace Microsoft.Dafny {
       dafnyOutput[request] = new VerificationResponse();
     }
 
-    public void runDafnyProofCheck(string code, List<string> args, List<Expression> exprList, int cnt) {
+    public void runDafnyProofCheck(string code, List<string> args, List<ProofEvaluator.ExprStmtUnion> stmtExprList, int cnt) {
       sentRequests++;
       // if (sentRequests == 500) {
       //   sentRequests = 0;
@@ -263,12 +269,12 @@ namespace Microsoft.Dafny {
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
         deadline: DateTime.UtcNow.AddMinutes(30));
       requestToCall[request] = task;
-      requestToExprList[request] = exprList;
+      requestToStmtExprList[request] = stmtExprList;
       requestToCnt[request] = cnt;
       dafnyOutput[request] = new VerificationResponse();
     }
 
-    public void runDafnyProofCheck(string code, List<string> args, List<Expression> exprList,
+    public void runDafnyProofCheck(string code, List<string> args, List<ProofEvaluator.ExprStmtUnion> exprStmtList,
         int cnt, string remoteFilePath, string lemmaName) {
       sentRequests++;
       // if (sentRequests == 500) {
@@ -290,7 +296,7 @@ namespace Microsoft.Dafny {
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
         deadline: DateTime.UtcNow.AddMinutes(30));
       requestToCall[request] = task;
-      requestToExprList[request] = exprList;
+      requestToStmtExprList[request] = exprStmtList;
       requestToCnt[request] = cnt;
       dafnyOutput[request] = new VerificationResponse();
     }

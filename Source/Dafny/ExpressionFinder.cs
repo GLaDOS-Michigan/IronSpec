@@ -31,6 +31,16 @@ namespace Microsoft.Dafny {
     public Dictionary<int, Result> combinationResults = new Dictionary<int, Result>();
     private Dictionary<int, int> negateOfExpressionIndex = new Dictionary<int, int>();
 
+    class ExpressionPriority {
+      public Expression expr;
+      public int priority;
+      public ExpressionPriority(Expression expr, int priority) 
+      {
+        this.expr = expr;
+        this.priority = priority;
+      }
+    }
+
     public ExpressionFinder(HoleEvaluator holeEval) {
       this.holeEval = holeEval;
     }
