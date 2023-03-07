@@ -157,19 +157,22 @@ namespace Microsoft.Dafny {
     public class ExprStmtUnion {
       public Statement Stmt;
       public Expression Expr;
+      public int Depth;
 
-      public ExprStmtUnion(Expression expr) {
+      public ExprStmtUnion(ExpressionFinder.ExpressionDepth exprDepth) {
         this.Stmt = null;
-        this.Expr = expr;
+        this.Expr = exprDepth.expr;
+        this.Depth = exprDepth.depth;
       }
-      public ExprStmtUnion(Statement stmt) {
-        this.Stmt = stmt;
+      public ExprStmtUnion(ExpressionFinder.StatementDepth stmtDepth) {
+        this.Stmt = stmtDepth.stmt;
         this.Expr = null;
+        this.Depth = stmtDepth.depth;
       }
     }
 
-    public IEnumerable<List<ExprStmtUnion>> GetExprStmtTuples(List<Statement> availableStatements, 
-      List<Expression> availableExpressions, int depth) {
+    public IEnumerable<List<ExprStmtUnion>> GetExprStmtTuples(List<ExpressionFinder.StatementDepth> availableStatements, 
+      List<ExpressionFinder.ExpressionDepth> availableExpressions, int depth) {
       if (depth <= 0) {
         yield break;
       } else if (depth == 1) {
@@ -213,7 +216,7 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public IEnumerable<List<ExprStmtUnion>> GetExpressionTuples(List<Expression> availableExpressions, int depth) {
+    public IEnumerable<List<ExprStmtUnion>> GetExpressionTuples(List<ExpressionFinder.ExpressionDepth> availableExpressions, int depth) {
       if (depth <= 0) {
         yield break;
       } else if (depth == 1) {
@@ -551,7 +554,7 @@ namespace Microsoft.Dafny {
       //   }
       // }
       // return true;
-      Dictionary<string, List<Expression>> typeToExpressionDict = null;
+      Dictionary<string, List<ExpressionFinder.ExpressionDepth>> typeToExpressionDict = null;
       if (desiredLemma != null) {
         var expressions = expressionFinder.ListArguments(program, desiredLemma);
         var extendedExpressions = expressionFinder.ExtendSeqSelectExpressions(expressions);
@@ -566,7 +569,7 @@ namespace Microsoft.Dafny {
         Console.WriteLine("--------------------------------");
         Console.WriteLine($"{t} {typeToExpressionDict[t].Count}");
         foreach (var expr in typeToExpressionDict[t]) {
-          var exprStr = Printer.ExprToString(expr);
+          var exprStr = $"{Printer.ExprToString(expr.expr)}:{expr.depth}";
           Console.WriteLine(exprStr);
         }
         Console.WriteLine("--------------------------------");
@@ -576,18 +579,18 @@ namespace Microsoft.Dafny {
       var revealStatements = revealFinder.GetRevealStatements(program);
       var lemmaFinder = new LemmaFinder(this);
       var lemmaStatements = lemmaFinder.GetLemmaStatements(program, typeToExpressionDict);
-      var statements = new List<Statement>();
+      var statements = new List<ExpressionFinder.StatementDepth>();
       statements.AddRange(revealStatements.AsEnumerable());
       statements.AddRange(lemmaStatements.AsEnumerable());
       var numberOfMatchedExpressions = 0;
-      var selectedExpressions = new List<Expression>();
+      var selectedExpressions = new List<ExpressionFinder.ExpressionDepth>();
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         // Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} start");
-        var matchingTrigger = DoesMatchWithAnyTrigger(expressionFinder.availableExpressions[i], typeToTriggerDict);
+        var matchingTrigger = DoesMatchWithAnyTrigger(expressionFinder.availableExpressions[i].expr, typeToTriggerDict);
         if (i == 0 || matchingTrigger != null) {
           if (i != 0) {
-            Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} " +
-              $"{expressionFinder.availableExpressions[i].Type.ToString()} " +
+            Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i].expr)} " +
+              $"{expressionFinder.availableExpressions[i].expr.Type.ToString()} " +
               $"{expressionFinder.availableExpressions[i]} " + "\t\t" + Printer.ExprToString(matchingTrigger));
             numberOfMatchedExpressions++;
           }

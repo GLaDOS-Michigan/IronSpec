@@ -20,6 +20,7 @@ using Grpc.Core;
 namespace Microsoft.Dafny {
 
   public class DafnyVerifierClient {
+    private const int MaxDepth = 100;
 
     private List<Channel> channelsList = new List<Channel>();
     private int sentRequests;
@@ -29,6 +30,7 @@ namespace Microsoft.Dafny {
     private List<TmpFolder> baseFoldersPath = new List<TmpFolder>();
     private List<List<TmpFolder>> temporaryFoldersList = new List<List<TmpFolder>>();
     private List<AsyncUnaryCall<Empty>> outstandingCleanupTasks = new List<AsyncUnaryCall<Empty>>();
+    private List<Queue<VerificationTask>> tasksQueuePerDepth = new List<Queue<VerificationTask>>();
     private string OutputPrefix;
     private Random rand = new Random();
     public DafnyVerifierClient(string serverIpPortFileName, string outputPrefix) {
@@ -51,6 +53,9 @@ namespace Microsoft.Dafny {
       );
       for (int i = 0; i < serversList.Count; i++) {
         temporaryFoldersList[i].Add(baseFoldersPath[i]);
+      }
+      for (int i = 0; i < MaxDepth; i++) {
+        tasksQueuePerDepth.Add(new Queue<VerificationTask>());
       }
     }
     public Stopwatch sw;

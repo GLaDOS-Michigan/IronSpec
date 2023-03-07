@@ -61,8 +61,8 @@ namespace Microsoft.Dafny {
       else return IsOpaque(attrs.Prev);
     }
 
-    public List<Statement> GetRevealStatements(Program program) {
-      var result = new List<Statement>();
+    public List<ExpressionFinder.StatementDepth> GetRevealStatements(Program program) {
+      var result = new List<ExpressionFinder.StatementDepth>();
       foreach (var kvp in program.ModuleSigs) {
         foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
           var cl = d as TopLevelDeclWithMembers;
@@ -79,7 +79,7 @@ namespace Microsoft.Dafny {
                   // lhss.Add(new IdentifierExpr(member.tok, $"temp_{cnt}_${i}"));
                   rhss.Add(new ExprRhs(new ApplySuffix(member.tok, null, new NameSegment(member.tok, $"reveal_{member.ToString()}", new List<Type>()), new List<ActualBinding>(), member.tok)));
                   UpdateStmt updateStmt = new UpdateStmt(member.tok, member.tok, lhss, rhss);
-                  result.Add(updateStmt);
+                  result.Add(new ExpressionFinder.StatementDepth(updateStmt, 1));
                   Console.WriteLine(Printer.StatementToString(updateStmt));
                 }
                 // var exprs = new List<Expression>();

@@ -24,20 +24,30 @@ namespace Microsoft.Dafny {
     private int numberOfSingleExpr = 0;
     private HoleEvaluator holeEval = null;
     private ProofEvaluator proofEval = null;
-    public List<Expression> availableExpressions = new List<Expression>();
+    public List<ExpressionDepth> availableExpressions = new List<ExpressionDepth>();
     private List<BitArray> bitArrayList = new List<BitArray>();
     private HashSet<string> currCombinations = new HashSet<string>();
     private Dictionary<string, int> bitArrayStringToIndex = new Dictionary<string, int>();
     public Dictionary<int, Result> combinationResults = new Dictionary<int, Result>();
     private Dictionary<int, int> negateOfExpressionIndex = new Dictionary<int, int>();
 
-    class ExpressionPriority {
+    public class ExpressionDepth {
       public Expression expr;
-      public int priority;
-      public ExpressionPriority(Expression expr, int priority) 
+      public int depth;
+      public ExpressionDepth(Expression expr, int depth) 
       {
         this.expr = expr;
-        this.priority = priority;
+        this.depth = depth;
+      }
+    }
+
+    public class StatementDepth {
+      public Statement stmt;
+      public int depth;
+      public StatementDepth(Statement stmt, int depth) 
+      {
+        this.stmt = stmt;
+        this.depth = depth;
       }
     }
 
@@ -121,12 +131,12 @@ namespace Microsoft.Dafny {
       return true;
     }
 
-    public IEnumerable<Expression> ExtendSeqSelectExpressions(IEnumerable<Expression> expressionList) {
+    public IEnumerable<ExpressionDepth> ExtendSeqSelectExpressions(IEnumerable<ExpressionDepth> expressionList) {
       Console.WriteLine("here");
       var typeToExpressionDict = GetTypeToExpressionDict(expressionList);
-      foreach (var expr in expressionList) {
-        if (expr is SeqSelectExpr) {
-          Console.WriteLine($"ExtendSeqSelect: {Printer.ExprToString(expr)}");
+      foreach (var exprDepth in expressionList) {
+        if (exprDepth.expr is SeqSelectExpr) {
+          Console.WriteLine($"ExtendSeqSelect: {Printer.ExprToString(exprDepth.expr)}");
         }
       }
       yield break;
@@ -147,9 +157,10 @@ namespace Microsoft.Dafny {
       CalcDepthOneAvailableExpresssions(program, desiredLemma, extendedExpressions);
     }
 
-    public Dictionary<string, List<Expression>> GetTypeToExpressionDict(IEnumerable<Expression> expressionList) {
-      Dictionary<string, List<Expression>> typeToExpressionDict = new Dictionary<string, List<Expression>>();
-      foreach (var expr in expressionList) {
+    public Dictionary<string, List<ExpressionDepth>> GetTypeToExpressionDict(IEnumerable<ExpressionDepth> expressionList) {
+      Dictionary<string, List<ExpressionDepth>> typeToExpressionDict = new Dictionary<string, List<ExpressionDepth>>();
+      foreach (var exprDepth in expressionList) {
+        var expr = exprDepth.expr;
         var exprString = Printer.ExprToString(expr);
         var typeString = expr.Type.ToString();
         // Console.WriteLine($"{c,2} {exprString,-20} {typeString}");
@@ -158,13 +169,13 @@ namespace Microsoft.Dafny {
         }
         if (typeToExpressionDict.ContainsKey(typeString)) {
           bool containsItem = typeToExpressionDict[typeString].Any(
-               item => Printer.ExprToString(item) == Printer.ExprToString(expr));
+               item => Printer.ExprToString(item.expr) == Printer.ExprToString(expr));
           if (!containsItem) {
-            typeToExpressionDict[typeString].Add(expr);
+            typeToExpressionDict[typeString].Add(exprDepth);
           }
         } else {
-          var lst = new List<Expression>();
-          lst.Add(expr);
+          var lst = new List<ExpressionDepth>();
+          lst.Add(exprDepth);
           typeToExpressionDict.Add(typeString, lst);
         }
         // AddExpression(program, topLevelDecl, expr);
@@ -172,8 +183,8 @@ namespace Microsoft.Dafny {
       return typeToExpressionDict;
     }
 
-    public Dictionary<string, List<Expression>> GetRawExpressions(Program program, MemberDecl decl,
-        IEnumerable<Expression> expressions, bool addToAvailableExpressions) {
+    public Dictionary<string, List<ExpressionDepth>> GetRawExpressions(Program program, MemberDecl decl,
+        IEnumerable<ExpressionDepth> expressions, bool addToAvailableExpressions) {
       var typeToExpressionDict = GetTypeToExpressionDict(expressions);
       // foreach (var kvp in program.ModuleSigs) {
       //   foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
@@ -202,7 +213,7 @@ namespace Microsoft.Dafny {
           var t = equalExprList[k][0];
           for (int i = 1; i < equalExprList[k].Count; i++) {
             for (int j = 0; j < typeToExpressionDict[t].Count; j++) {
-              if (Printer.ExprToString(typeToExpressionDict[t][j]) == equalExprList[k][i]) {
+              if (Printer.ExprToString(typeToExpressionDict[t][j].expr) == equalExprList[k][i]) {
                 typeToExpressionDict[t].RemoveAt(j);
                 break;
               }
@@ -220,12 +231,12 @@ namespace Microsoft.Dafny {
       return typeToExpressionDict;
     }
 
-    public void CalcDepthOneAvailableExpresssions(Program program, MemberDecl decl, IEnumerable<Expression> expressions) {
+    public void CalcDepthOneAvailableExpresssions(Program program, MemberDecl decl, IEnumerable<ExpressionDepth> expressions) {
       Contract.Requires(availableExpressions.Count == 0);
-      Dictionary<string, List<Expression>> typeToExpressionDict = GetRawExpressions(program, decl, expressions, false);
+      Dictionary<string, List<ExpressionDepth>> typeToExpressionDict = GetRawExpressions(program, decl, expressions, false);
 
       var trueExpr = Expression.CreateBoolLiteral(decl.tok, true);
-      availableExpressions.Add(trueExpr);
+      availableExpressions.Add(new ExpressionDepth(trueExpr, 1));
       foreach (var k in typeToExpressionDict.Keys) {
         var values = typeToExpressionDict[k];
         if (k == "_questionMark_") {
@@ -239,26 +250,27 @@ namespace Microsoft.Dafny {
         } else {
           for (int i = 0; i < values.Count; i++) {
             for (int j = i + 1; j < values.Count; j++) {
-              if (values[i] is LiteralExpr && values[j] is LiteralExpr) {
+              if (values[i].expr is LiteralExpr && values[j].expr is LiteralExpr) {
                 continue;
               }
-              if (values[i] is ApplySuffix && values[j] is ApplySuffix) {
+              if (values[i].expr is ApplySuffix && values[j].expr is ApplySuffix) {
                 continue;
               }
               // Equality
               {
-                var equalityExpr = Expression.CreateEq(values[i], values[j], values[i].Type);
-                equalityExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                availableExpressions.Add(equalityExpr);
+                var equalityExpr = Expression.CreateEq(values[i].expr, values[j].expr, values[i].expr.Type);
+                equalityExpr.HasCardinality = values[i].expr.HasCardinality | values[j].expr.HasCardinality;
+                // TODO(armin): should this be max or addition?
+                availableExpressions.Add(new ExpressionDepth(equalityExpr, Math.Max(values[i].depth, values[j].depth)));
               }
-              if (values[i] is ApplySuffix || values[j] is ApplySuffix) {
+              if (values[i].expr is ApplySuffix || values[j].expr is ApplySuffix) {
                 continue;
               }
               // Non-Equality
               {
-                var neqExpr = Expression.CreateNot(values[i].tok, Expression.CreateEq(values[i], values[j], values[i].Type));
-                neqExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                availableExpressions.Add(neqExpr);
+                var neqExpr = Expression.CreateNot(values[i].expr.tok, Expression.CreateEq(values[i].expr, values[j].expr, values[i].expr.Type));
+                neqExpr.HasCardinality = values[i].expr.HasCardinality | values[j].expr.HasCardinality;
+                availableExpressions.Add(new ExpressionDepth(neqExpr, Math.Max(values[i].depth, values[j].depth)));
                 negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
                 negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
               }
@@ -268,29 +280,29 @@ namespace Microsoft.Dafny {
 
               // Lower than
               {
-                var lowerThanExpr = Expression.CreateLess(values[i], values[j]);
-                lowerThanExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                availableExpressions.Add(lowerThanExpr);
+                var lowerThanExpr = Expression.CreateLess(values[i].expr, values[j].expr);
+                lowerThanExpr.HasCardinality = values[i].expr.HasCardinality | values[j].expr.HasCardinality;
+                availableExpressions.Add(new ExpressionDepth(lowerThanExpr, Math.Max(values[i].depth, values[j].depth)));
               }
               // Greater Equal = !(Lower than)
               {
-                var geExpr = Expression.CreateNot(values[i].tok, Expression.CreateLess(values[i], values[j]));
-                geExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                availableExpressions.Add(geExpr);
+                var geExpr = Expression.CreateNot(values[i].expr.tok, Expression.CreateLess(values[i].expr, values[j].expr));
+                geExpr.HasCardinality = values[i].expr.HasCardinality | values[j].expr.HasCardinality;
+                availableExpressions.Add(new ExpressionDepth(geExpr, Math.Max(values[i].depth, values[j].depth)));
                 negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
                 negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
               }
               // Lower Equal
               {
-                var leExpr = Expression.CreateAtMost(values[i], values[j]);
-                leExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                availableExpressions.Add(leExpr);
+                var leExpr = Expression.CreateAtMost(values[i].expr, values[j].expr);
+                leExpr.HasCardinality = values[i].expr.HasCardinality | values[j].expr.HasCardinality;
+                availableExpressions.Add(new ExpressionDepth(leExpr, Math.Max(values[i].depth, values[j].depth)));
               }
               // Greater Than = !(Lower equal)
               {
-                var gtExpr = Expression.CreateNot(values[i].tok, Expression.CreateAtMost(values[i], values[j]));
-                gtExpr.HasCardinality = values[i].HasCardinality | values[j].HasCardinality;
-                availableExpressions.Add(gtExpr);
+                var gtExpr = Expression.CreateNot(values[i].expr.tok, Expression.CreateAtMost(values[i].expr, values[j].expr));
+                gtExpr.HasCardinality = values[i].expr.HasCardinality | values[j].expr.HasCardinality;
+                availableExpressions.Add(new ExpressionDepth(gtExpr, Math.Max(values[i].depth, values[j].depth)));
                 negateOfExpressionIndex[availableExpressions.Count - 1] = availableExpressions.Count - 2;
                 negateOfExpressionIndex[availableExpressions.Count - 2] = availableExpressions.Count - 1;
               }
@@ -322,8 +334,10 @@ namespace Microsoft.Dafny {
       for (int i = prevDepthExprStartIndex; i < tmp; i++) {
         for (int j = 1; j < numberOfSingleExpr; j++) {
           if (IsGoodExprCombinationToExecute(i, j)) {
-            var exprA = availableExpressions[i];
-            var exprB = availableExpressions[j];
+            var exprDepthA = availableExpressions[i];
+            var exprDepthB = availableExpressions[j];
+            var exprA = exprDepthA.expr;
+            var exprB = exprDepthA.expr;
             var conjunctExpr = Expression.CreateAnd(exprA, exprB);
             conjunctExpr.HasCardinality = exprA.HasCardinality | exprB.HasCardinality;
             BitArray bitArray = new BitArray(bitArrayList[i]);
@@ -331,7 +345,7 @@ namespace Microsoft.Dafny {
             bitArrayList.Add(bitArray);
             currCombinations.Add(ToBitString(bitArray, true));
             bitArrayStringToIndex[ToBitString(bitArray, true)] = bitArrayList.Count - 1;
-            availableExpressions.Add(conjunctExpr);
+            availableExpressions.Add(new ExpressionDepth(conjunctExpr, Math.Max(exprDepthA.depth, exprDepthB.depth)));
           }
         }
       }
@@ -504,13 +518,13 @@ namespace Microsoft.Dafny {
       return result;
     }
 
-    public IEnumerable<Expression> ListArguments(Program program, Function func) {
+    public IEnumerable<ExpressionDepth> ListArguments(Program program, Function func) {
       foreach (var formal in func.Formals) {
         // Console.WriteLine($"\n{formal.Name}\t{formal.Type.ToString()}");
         // Console.WriteLine(formal.Type.NormalizeExpand().IsTopLevelTypeWithMembers);
         // var c = 0;
         var identExpr = Expression.CreateIdentExpr(formal);
-        foreach (var expr in TraverseFormal(program, identExpr)) {
+        foreach (var expr in TraverseFormal(program, new ExpressionDepth(identExpr, 1))) {
           // Console.WriteLine($"{c} {variable.Name,-20}:\t{variable.Type}");
           // c++;
           yield return expr;
@@ -519,46 +533,47 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public IEnumerable<Expression> ListArguments(Program program, Lemma lemma) {
+    public IEnumerable<ExpressionDepth> ListArguments(Program program, Lemma lemma) {
       foreach (var formal in lemma.Ins) {
         var identExpr = Expression.CreateIdentExpr(formal);
-        foreach (var expr in TraverseFormal(program, identExpr)) {
+        foreach (var expr in TraverseFormal(program, new ExpressionDepth(identExpr, 1))) {
           yield return expr;
         }
       }
       foreach (var formal in lemma.Outs) {
         var identExpr = Expression.CreateIdentExpr(formal);
-        foreach (var expr in TraverseFormal(program, identExpr)) {
+        foreach (var expr in TraverseFormal(program, new ExpressionDepth(identExpr, 1))) {
           yield return expr;
         }
       }
     }
 
-    public IEnumerable<Expression> TraverseFormal(Program program, Expression expr) {
-      Contract.Requires(expr != null);
-      yield return expr;
+    public IEnumerable<ExpressionDepth> TraverseFormal(Program program, ExpressionDepth exprDepth) {
+      Contract.Requires(exprDepth != null);
+      yield return exprDepth;
+      var expr = exprDepth.expr;
       var t = expr.Type;
       if (t is BoolType || t is CharType || t is IntType || t is BigOrdinalType ||
           t is RealType || t is BitvectorType || t is CollectionType) {
         if (t is BoolType) {
           var trueLiteralExpr = Expression.CreateBoolLiteral(expr.tok, true);
-          yield return trueLiteralExpr;
+          yield return new ExpressionDepth(trueLiteralExpr, 1);
           // NOTE: No need to add false literal since we also check for non-equality.
         } else if (t is IntType) {
           var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
-          yield return zeroLiteralExpr;
+          yield return new ExpressionDepth(zeroLiteralExpr, 1);
           var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
-          yield return oneLiteralExpr;
+          yield return new ExpressionDepth(oneLiteralExpr, 1);
         } else if (t is CollectionType) {
           // create cardinality
           var cardinalityExpr = Expression.CreateCardinality(expr, program.BuiltIns);
-          yield return cardinalityExpr;
+          yield return new ExpressionDepth(cardinalityExpr, exprDepth.depth + 1);
           if (t is SeqType) {
             var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
             var zerothElement = new SeqSelectExpr(expr.tok, true, expr, zeroLiteralExpr, null, null);
             var st = t as SeqType;
             zerothElement.Type = st.Arg;
-            foreach (var e in TraverseFormal(program, zerothElement)) {
+            foreach (var e in TraverseFormal(program, new ExpressionDepth(zerothElement, exprDepth.depth + 1))) {
               yield return e;
             }
             // create 0th element of the sequence
@@ -592,10 +607,10 @@ namespace Microsoft.Dafny {
           var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
           zeroLiteralExpr.Type = t;
           // TODO Add the literal for maximum value of this newtype decl.
-          yield return zeroLiteralExpr;
+          yield return new ExpressionDepth(zeroLiteralExpr, 1);
           var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
           oneLiteralExpr.Type = t;
-          yield return oneLiteralExpr;
+          yield return new ExpressionDepth(oneLiteralExpr, 1);
         } else {
           throw new NotImplementedException();
         }
@@ -615,10 +630,10 @@ namespace Microsoft.Dafny {
         if (td.Rhs is IntType) {
           var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
           zeroLiteralExpr.Type = t;
-          yield return zeroLiteralExpr;
+          yield return new ExpressionDepth(zeroLiteralExpr, 1);
           var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
           oneLiteralExpr.Type = t;
-          yield return oneLiteralExpr;
+          yield return new ExpressionDepth(oneLiteralExpr, 1);
 
         }
         // Console.WriteLine($"{variable.Name} is SubsetTypeDecl");
@@ -634,7 +649,7 @@ namespace Microsoft.Dafny {
           if (dt.Ctors.Count > 1) {
             var exprDot = new ExprDotName(ctor.tok, expr, ctor.tok.val + "?", null);
             exprDot.Type = Type.Bool;
-            yield return exprDot;
+            yield return new ExpressionDepth(exprDot, exprDepth.depth + 1);
           }
           foreach (var formal in ctor.Formals) {
             // Console.WriteLine($"type={formal.Type} => {Resolver.SubstType(formal.Type, subst)}");
@@ -644,7 +659,7 @@ namespace Microsoft.Dafny {
             // var identExpr = Expression.CreateIdentExpr(convertedFormal);
             var exprDot = new ExprDotName(formal.tok, expr, formal.tok.val, null);
             exprDot.Type = Resolver.SubstType(formal.Type, subst);
-            foreach (var v in TraverseFormal(program, exprDot)) {
+            foreach (var v in TraverseFormal(program, new ExpressionDepth(exprDot, exprDepth.depth + 1))) {
               // Console.WriteLine($"aaa {v.tok.val}");
               // // var ngv = (Formal)variable;
               // // var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);

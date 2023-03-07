@@ -514,7 +514,7 @@ namespace Microsoft.Dafny {
       Console.WriteLine($"expressionFinder.availableExpressions.Count == {expressionFinder.availableExpressions.Count}");
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
       // for (int i = 0; i < 1; i++) {
-        PrintExprAndCreateProcess(unresolvedProgram, desiredFunctionUnresolved, expressionFinder.availableExpressions[i], i);
+        PrintExprAndCreateProcess(unresolvedProgram, desiredFunctionUnresolved, expressionFinder.availableExpressions[i].expr, i);
         desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
       }
       await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
@@ -536,7 +536,7 @@ namespace Microsoft.Dafny {
         expressionFinder.CalcNextDepthAvailableExpressions();
         for (int i = prevDepthExprStartIndex; i < expressionFinder.availableExpressions.Count; i++) {
           var expr = expressionFinder.availableExpressions[i];
-          PrintExprAndCreateProcess(program, desiredFunction, expr, i);
+          PrintExprAndCreateProcess(program, desiredFunction, expr.expr, i);
           desiredFunction.Body = topLevelDeclCopy.Body;
         }
         await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
@@ -641,15 +641,15 @@ namespace Microsoft.Dafny {
       string graphVizOutput = $"digraph \"{funcName}_implies_graph\" {{\n";
       graphVizOutput += "  // The list of correct expressions\n";
       for (int i = 0; i < correctExpressionsIndex.Count; i++) {
-        graphVizOutput += $"  {correctExpressionsIndex[i]} [label=\"{Printer.ExprToString(expressionFinder.availableExpressions[correctExpressionsIndex[i]])}\"];\n";
+        graphVizOutput += $"  {correctExpressionsIndex[i]} [label=\"{Printer.ExprToString(expressionFinder.availableExpressions[correctExpressionsIndex[i]].expr)}\"];\n";
       }
       graphVizOutput += "\n  // The list of edges:\n";
       foreach (var p in dafnyImpliesExecutor.dafnyProcesses) {
         var availableExprAIndex = dafnyImpliesExecutor.processToAvailableExprAIndex[p];
         var availableExprBIndex = dafnyImpliesExecutor.processToAvailableExprBIndex[p];
         // skip connecting all nodes to true
-        if (Printer.ExprToString(expressionFinder.availableExpressions[availableExprAIndex]) == "true" ||
-            Printer.ExprToString(expressionFinder.availableExpressions[availableExprBIndex]) == "true")
+        if (Printer.ExprToString(expressionFinder.availableExpressions[availableExprAIndex].expr) == "true" ||
+            Printer.ExprToString(expressionFinder.availableExpressions[availableExprBIndex].expr) == "true")
           continue;
         var output = dafnyImpliesExecutor.dafnyOutput[p];
         if (output.EndsWith("0 errors\n")) {
@@ -904,8 +904,8 @@ namespace Microsoft.Dafny {
       var parameterNameTypes = paramList.Item2;
       string lemmaForCheckingImpliesString = "lemma checkIfExprAImpliesExprB(";
       lemmaForCheckingImpliesString += parameterNameTypes + ")\n";
-      Expression A = expressionFinder.availableExpressions[availableExprAIndex];
-      Expression B = expressionFinder.availableExpressions[availableExprBIndex];
+      Expression A = expressionFinder.availableExpressions[availableExprAIndex].expr;
+      Expression B = expressionFinder.availableExpressions[availableExprBIndex].expr;
       lemmaForCheckingImpliesString += "  requires " + Printer.ExprToString(A) + "\n";
       lemmaForCheckingImpliesString += "  ensures " + Printer.ExprToString(B) + "\n";
       lemmaForCheckingImpliesString += "{}";
