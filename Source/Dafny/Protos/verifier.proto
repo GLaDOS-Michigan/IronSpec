@@ -8,12 +8,24 @@ package DafnyExecutorServer;
 service DafnyVerifierService {
   // Run Dafny on the given code and returns the output
   rpc Verify(VerificationRequest) returns (VerificationResponse) {}
+  rpc CloneAndVerify(CloneAndVerifyRequest) returns (VerificationResponse) {}
   rpc CreateTmpFolder(Empty) returns (TmpFolder) {}
   rpc RemoveFolder(TmpFolder) returns (Empty) {}
   rpc DuplicateFolder(TmpFolder) returns (TmpFolder) {}
 }
 
 message Empty {
+}
+
+message CloneAndVerifyRequest {
+  // Path to the base folder that needs to be cloned
+  string directoryPath = 1;
+  // Dafny code that needs to be verified given by actual code
+  string code = 2;
+  // The location where the code should be written in the dafny server
+  string modifyingFile = 3;
+  // List of arguments to be passed to Dafny
+  repeated string arguments = 4;
 }
 
 message TmpFolder {

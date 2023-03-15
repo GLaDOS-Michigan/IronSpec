@@ -187,6 +187,7 @@ namespace Microsoft.Dafny {
     public string HoleEvaluatorFunctionName = null;
     public string HoleEvaluatorBaseFunctionName = null;
     public int HoleEvaluatorDepth = 1;
+    public int HoleEvaluatorExpressionDepth = 1;
     public bool HoleEvaluatorRunOnce = false;
     public bool HoleEvaluatorCreateAuxFiles = true;
     public bool ProofEvaluatorCollectAllTriggerMatches = false;
@@ -683,6 +684,13 @@ namespace Microsoft.Dafny {
           int depth = 0;
           if (ps.GetIntArgument(ref depth, 4)) {
             HoleEvaluatorDepth = depth;
+          }
+          return true;
+
+        case "holeEvalExpressionDepth":
+          int exprDepth = 0;
+          if (ps.GetIntArgument(ref exprDepth)) {
+            HoleEvaluatorExpressionDepth = exprDepth;
           }
           return true;
 

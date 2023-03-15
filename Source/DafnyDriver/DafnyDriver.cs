@@ -327,7 +327,8 @@ namespace Microsoft.Dafny {
           proofEvaluator = new ProofEvaluator();
           var foundDesiredLemma = proofEvaluator.Evaluate(dafnyProgram,
               DafnyOptions.O.ProofEvaluatorLemmaName,
-              DafnyOptions.O.HoleEvaluatorDepth);
+              DafnyOptions.O.HoleEvaluatorDepth,
+              DafnyOptions.O.HoleEvaluatorExpressionDepth);
           return foundDesiredLemma.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
         }
         if (DafnyOptions.O.HoleEvaluatorFunctionName != null) {
@@ -358,6 +359,8 @@ namespace Microsoft.Dafny {
           proofEvaluator.dafnyVerifier.Cleanup();
           await proofEvaluator.dafnyVerifier.FinalizeCleanup();
         }
+        Console.WriteLine(e.ToString());
+        return ExitValue.COMPILE_ERROR;
       }
       if (err != null) {
         exitValue = ExitValue.DAFNY_ERROR;

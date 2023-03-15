@@ -412,7 +412,7 @@ namespace Microsoft.Dafny {
       return result;
     }
 
-    public async Task<bool> EvaluateAfterRemoveFileLine(Program program, string removeFileLine, int depth) {
+    public async Task<bool> EvaluateAfterRemoveFileLine(Program program, string removeFileLine, int depth, int expressionDepth) {
       var fileLineArray = removeFileLine.Split(':');
       var file = fileLineArray[0];
       var line = Int32.Parse(fileLineArray[1]);
@@ -435,7 +435,7 @@ namespace Microsoft.Dafny {
                 body = Expression.CreateAnd(body, exprList[j]);
               }
               topLevelDecl.Body = body;
-              return await Evaluate(program, topLevelDecl.FullDafnyName, depth);
+              return await Evaluate(program, topLevelDecl.FullDafnyName, depth, expressionDepth);
             }
           }
         }
@@ -443,7 +443,7 @@ namespace Microsoft.Dafny {
       return false;
     }
 
-    public async Task<bool> Evaluate(Program program, string lemmaName, int depth) {
+    public async Task<bool> Evaluate(Program program, string lemmaName, int depth, int expressionDepth) {
       if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
         return false;
@@ -466,7 +466,7 @@ namespace Microsoft.Dafny {
       }
 
       // Collect all paths from baseFunc to func
-      Console.WriteLine($"{lemmaName} {depth}");
+      Console.WriteLine($"{lemmaName} {depth} {expressionDepth}");
       Lemma baseLemma = ProofEvaluator.GetLemma(program, lemmaName);
       if (baseLemma == null) {
         Console.WriteLine($"couldn't find function {lemmaName}. List of all lemma:");
@@ -578,7 +578,7 @@ namespace Microsoft.Dafny {
       var revealFinder = new RevealFinder(this);
       var revealStatements = revealFinder.GetRevealStatements(program);
       var lemmaFinder = new LemmaFinder(this);
-      var lemmaStatements = lemmaFinder.GetLemmaStatements(program, typeToExpressionDict);
+      var lemmaStatements = lemmaFinder.GetLemmaStatements(program, typeToExpressionDict, expressionDepth);
       var statements = new List<ExpressionFinder.StatementDepth>();
       statements.AddRange(revealStatements.AsEnumerable());
       statements.AddRange(lemmaStatements.AsEnumerable());
@@ -591,7 +591,7 @@ namespace Microsoft.Dafny {
           if (i != 0) {
             Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i].expr)} " +
               $"{expressionFinder.availableExpressions[i].expr.Type.ToString()} " +
-              $"{expressionFinder.availableExpressions[i]} " + "\t\t" + Printer.ExprToString(matchingTrigger));
+              "\t\t" + Printer.ExprToString(matchingTrigger));
             numberOfMatchedExpressions++;
           }
           selectedExpressions.Add(expressionFinder.availableExpressions[i]);
@@ -609,6 +609,7 @@ namespace Microsoft.Dafny {
       }
       Console.WriteLine($"totalExpressions: {expressionFinder.availableExpressions.Count}");
       Console.WriteLine($"numberOfMatchedExpressions: {numberOfMatchedExpressions}");
+      Console.WriteLine($"numberOfRevealAndLemmaStatements: {statements.Count}");
       // return true;
       // await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
       // Console.WriteLine("finish");
@@ -624,18 +625,33 @@ namespace Microsoft.Dafny {
       // int numberOfSingleExpr = expressionFinder.availableExpressions.Count;
 
       // empty expression list should represent the original code without any additions
-      PrintExprAndCreateProcess(program, desiredLemma, new List<ExprStmtUnion>(), 0);
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: start generatinng expressions and lemmas");
+      workingLemma = desiredLemma;
+      workingLemmaCode = File.ReadAllLines(workingLemma.BodyStartTok.Filename);
+      if (workingLemma.BodyStartTok.line - 1 != 0) {
+        mergedCode.Add(String.Join('\n', workingLemmaCode.Take(workingLemma.BodyStartTok.line - 2)));
+      }
+      else {
+        mergedCode.Add("");
+      }
+      mergedCode.Add(workingLemmaCode[workingLemma.BodyStartTok.line - 1]);
+      if (workingLemma.BodyStartTok.line < workingLemmaCode.Length) {
+        mergedCode.Add(String.Join('\n', workingLemmaCode.Skip(workingLemma.BodyStartTok.line)));
+      }
+
+      PrintExprAndCreateProcess(program, new List<ExprStmtUnion>(), 0);
       int cnt = 1;
       var exprStmtTuples = GetExprStmtTuples(statements, selectedExpressions, depth);
       foreach (var e in exprStmtTuples) {
-        PrintExprAndCreateProcess(program, desiredLemma, e, cnt);
+        PrintExprAndCreateProcess(program, e, cnt);
         // var desiredLemmaBody = desiredLemma.Body.Body;
         // for (int i = 0; i < e.Count; i++) {
         //   desiredLemmaBody.RemoveAt(0);
         // }
         cnt++;
       }
-      await dafnyVerifier.startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish generatinng expressions and lemmas");
+      await dafnyVerifier.startProofTasksAccordingToPriority();
       for (int i = 0; i < cnt; i++) {
         UpdateCombinationResult(i);
       }
@@ -712,7 +728,12 @@ namespace Microsoft.Dafny {
       return true;
     }
 
-    public void PrintExprAndCreateProcess(Program program, Lemma lemma, List<ExprStmtUnion> exprStmtList, int cnt) {
+    private Lemma workingLemma = null;
+    private string[] workingLemmaCode;
+    private List<string> mergedCode = new List<string>();
+
+    public void PrintExprAndCreateProcess(Program program, List<ExprStmtUnion> exprStmtList, int cnt) {
+      Contract.Requires(workingLemma != null);
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       string signature = $"{cnt} ";
       string sep = "";
@@ -724,9 +745,9 @@ namespace Microsoft.Dafny {
         }
         sep = ", ";
       }
-      Console.WriteLine(signature);
+      // Console.WriteLine(signature);
 
-      var lemmaName = lemma.FullDafnyName;
+      var lemmaName = workingLemma.FullDafnyName;
 
       var varDeclStmtStringList = new List<string>();
       for (int i = 0; i < exprStmtList.Count; i++) {
@@ -734,11 +755,11 @@ namespace Microsoft.Dafny {
           List<LocalVariable> localVarList = new List<LocalVariable>();
           List<Expression> lhss = new List<Expression>();
           List<AssignmentRhs> rhss = new List<AssignmentRhs>();
-          localVarList.Add(new LocalVariable(lemma.tok, lemma.tok, $"temp_{cnt}_{i}", new InferredTypeProxy(), true));
-          lhss.Add(new IdentifierExpr(lemma.tok, $"temp_{cnt}_${i}"));
+          localVarList.Add(new LocalVariable(workingLemma.tok, workingLemma.tok, $"temp_{cnt}_{i}", new InferredTypeProxy(), true));
+          lhss.Add(new IdentifierExpr(workingLemma.tok, $"temp_{cnt}_${i}"));
           rhss.Add(new ExprRhs(exprStmtList[i].Expr));
-          UpdateStmt updateStmt = new UpdateStmt(lemma.tok, lemma.tok, lhss, rhss);
-          VarDeclStmt varDeclStmt = new VarDeclStmt(lemma.tok, lemma.tok, localVarList, updateStmt);
+          UpdateStmt updateStmt = new UpdateStmt(workingLemma.tok, workingLemma.tok, lhss, rhss);
+          VarDeclStmt varDeclStmt = new VarDeclStmt(workingLemma.tok, workingLemma.tok, localVarList, updateStmt);
           varDeclStmtStringList.Add(Printer.StatementToString(varDeclStmt));
         }
         else {
@@ -746,17 +767,17 @@ namespace Microsoft.Dafny {
         }
       }
 
-      var changingFilePath = includeParser.Normalized(lemma.BodyStartTok.Filename);
+      var changingFilePath = includeParser.Normalized(workingLemma.BodyStartTok.Filename);
       var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
-      var baseCode = File.ReadAllLines(lemma.BodyStartTok.Filename);
 
-      baseCode[lemma.BodyStartTok.line - 1] = baseCode[lemma.BodyStartTok.line - 1].Insert(lemma.BodyStartTok.col, String.Join('\n', varDeclStmtStringList));
-
-      var newCode = String.Join('\n', baseCode);
+      var modifyingLineBackup = mergedCode[1];
+      mergedCode[1] = mergedCode[1].Insert(workingLemma.BodyStartTok.col, String.Join('\n', varDeclStmtStringList));
+      var newCode = String.Join('\n', mergedCode);
+      mergedCode[1] = modifyingLineBackup;
 
       dafnyVerifier.runDafnyProofCheck(newCode, tasksListDictionary[changingFilePath].Arguments.ToList(),
               exprStmtList, cnt, $"{remoteFolderPath.Path}/{changingFilePath}",
-              lemma.CompileName);
+              workingLemma.CompileName);
     }
   }
 }

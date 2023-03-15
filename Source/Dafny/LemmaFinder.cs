@@ -26,7 +26,7 @@ namespace Microsoft.Dafny {
       this.proofEval = proofEval;
     }
 
-    public List<ExpressionFinder.StatementDepth> GetLemmaStatements(Program program, Dictionary<string, List<ExpressionFinder.ExpressionDepth>> typeToExpressionDict) {
+    public List<ExpressionFinder.StatementDepth> GetLemmaStatements(Program program, Dictionary<string, List<ExpressionFinder.ExpressionDepth>> typeToExpressionDict, int maxLeastOneOccurenceDepth) {
       var result = new List<ExpressionFinder.StatementDepth>();
       foreach (var kvp in program.ModuleSigs) {
         foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
@@ -34,7 +34,7 @@ namespace Microsoft.Dafny {
           if (cl != null) {
             foreach (var member in cl.Members) {
               if (member is Lemma) {
-                var lemmaExprs = GetAllPossibleLemmaInvocations(program, member as Lemma, typeToExpressionDict);
+                var lemmaExprs = GetAllPossibleLemmaInvocations(program, member as Lemma, typeToExpressionDict, maxLeastOneOccurenceDepth);
                 Console.WriteLine($"{member.Name} -> {lemmaExprs.Count}");
                 foreach (var expr in lemmaExprs) {
                   List<Expression> lhss = new List<Expression>();
@@ -63,22 +63,30 @@ namespace Microsoft.Dafny {
         Lemma lemma,
         Dictionary<string, List<ExpressionFinder.ExpressionDepth>> typeToExpressionDict,
         List<Expression> arguments,
-        int maxDepth,
+        int currentMaxDepth,
+        int maxLeastOneOccurenceDepth,
         int shouldFillIndex) {
+      if (currentMaxDepth > maxLeastOneOccurenceDepth) {
+        yield break;
+      }
       if (shouldFillIndex == lemma.Ins.Count) {
+        if(currentMaxDepth != maxLeastOneOccurenceDepth) {
+          yield break;
+        }
         List<ActualBinding> bindings = new List<ActualBinding>();
         foreach (var arg in arguments) {
           bindings.Add(new ActualBinding(null, arg));
         }
         var lemmaCallExpr = new ApplySuffix(lemma.tok, null, new NameSegment(lemma.tok, lemma.Name, new List<Type>()), bindings, lemma.tok);
-        yield return new ExpressionFinder.ExpressionDepth(lemmaCallExpr, maxDepth);
+        yield return new ExpressionFinder.ExpressionDepth(lemmaCallExpr, currentMaxDepth);
         yield break;
       }
       var t = lemma.Ins[shouldFillIndex].Type;
       if (typeToExpressionDict.ContainsKey(t.ToString())) {
         foreach (var expr in typeToExpressionDict[t.ToString()]) {
           arguments.Add(expr.expr);
-          foreach (var ans in ListInvocations(lemma, typeToExpressionDict, arguments, Math.Max(maxDepth, expr.depth), shouldFillIndex + 1)) {
+          foreach (var ans in ListInvocations(lemma, typeToExpressionDict, arguments, Math.Max(currentMaxDepth, expr.depth),
+          maxLeastOneOccurenceDepth, shouldFillIndex + 1)) {
             yield return ans;
           }
           arguments.RemoveAt(arguments.Count - 1);
@@ -88,10 +96,11 @@ namespace Microsoft.Dafny {
 
     public List<ExpressionFinder.ExpressionDepth> GetAllPossibleLemmaInvocations(Program program,
         Lemma lemma,
-        Dictionary<string, List<ExpressionFinder.ExpressionDepth>> typeToExpressionDict) {
+        Dictionary<string, List<ExpressionFinder.ExpressionDepth>> typeToExpressionDict,
+        int maxLeastOneOccurenceDepth) {
       List<ExpressionFinder.ExpressionDepth> result = new List<ExpressionFinder.ExpressionDepth>();
       List<Expression> workingList = new List<Expression>();
-      foreach (var expr in ListInvocations(lemma, typeToExpressionDict, workingList, 0, 0)) {
+      foreach (var expr in ListInvocations(lemma, typeToExpressionDict, workingList, 0, maxLeastOneOccurenceDepth, 0)) {
         result.Add(expr);
       }
       return result;
