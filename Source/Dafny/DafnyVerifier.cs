@@ -81,7 +81,7 @@ namespace Microsoft.Dafny {
         var ip = ipPort.Split(':')[0];
 
         string arguments = $"-az --rsh=\" ssh -o StrictHostKeyChecking=no\" --include '*/' --include '*\\.dfy' --exclude '*' {commonPrefix}/ edgoldwe@{ip}:{baseFoldersPath[i].Path}/";
-        ProcessStartInfo startInfo = new ProcessStartInfo() { FileName = "/usr/bin/rsync", Arguments = arguments, };
+        ProcessStartInfo startInfo = new ProcessStartInfo() { FileName = "sudo /usr/bin/rsync", Arguments = arguments, };
         Process proc = new Process() { StartInfo = startInfo, };
         proc.Start();
         proc.WaitForExit();
