@@ -97,6 +97,19 @@ namespace Microsoft.Dafny {
 
     }
 
+
+    public static Result IsCorrectOutput(string output, string expectedOutput, string expectedInconclusiveOutputStart) {
+      if (output.EndsWith("1 error\n")) {
+        var outputList = output.Split('\n');
+        return ((outputList.Length >= 7) && (outputList[outputList.Length - 7] == expectedOutput)) ? Result.CorrectProof : Result.IncorrectProof;
+      } else if (output.EndsWith("1 inconclusive\n")) {
+        var outputList = output.Split('\n');
+        return ((outputList.Length >= 4) && outputList[outputList.Length - 4].StartsWith(expectedInconclusiveOutputStart)) ? Result.CorrectProofByTimeout : Result.IncorrectProof;
+      } else {
+        return Result.IncorrectProof;
+      }
+    }
+    
     public TmpFolder DuplicateAllFiles(int cnt, string changingFilePath) {
       var serverId = cnt % serversList.Count;
       TmpFolder duplicateFileRequest = new TmpFolder();
