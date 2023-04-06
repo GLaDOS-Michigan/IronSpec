@@ -185,6 +185,10 @@ namespace Microsoft.Dafny {
     public string FindHoleFromFunctionName = null;
     public string ProofEvaluatorLemmaName = null;
     public string HoleEvaluatorFunctionName = null;
+    public string ProofLemmaName = null;
+    public string ProofModuleName = null;
+    public string ProofLocation = null;
+    public bool MutationsFromParams = false;
     public string HoleEvaluatorBaseFunctionName = null;
     public int HoleEvaluatorDepth = 1;
     public int HoleEvaluatorExpressionDepth = 1;
@@ -658,6 +662,26 @@ namespace Microsoft.Dafny {
           }
           return true;
 
+        case "proofName":
+          if (ps.ConfirmArgumentCount(1)) {
+            ProofLemmaName = args[ps.i];
+          }
+          return true;
+        case "proofModuleName":
+          if (ps.ConfirmArgumentCount(1)) {
+            ProofModuleName = args[ps.i];
+          }
+          return true;
+        case "proofLocation":
+          if (ps.ConfirmArgumentCount(1)) {
+            ProofLocation = args[ps.i];
+          }
+          return true;
+          //mutationsFromParams
+        case "mutationsFromParams":
+          MutationsFromParams = true;
+          return true;
+          
         case "holeEvalBase":
           if (ps.ConfirmArgumentCount(1)) {
             HoleEvaluatorBaseFunctionName = args[ps.i];

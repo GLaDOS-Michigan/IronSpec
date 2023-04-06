@@ -323,6 +323,54 @@ namespace Microsoft.Dafny {
           }
           return ExitValue.SUCCESS;
         }
+
+      if (DafnyOptions.O.HoleEvaluatorFunctionName != null 
+          && DafnyOptions.O.ProofLemmaName != null
+          && DafnyOptions.O.ProofModuleName != null) {
+         holeEvaluator = new HoleEvaluator();
+        var foundDesiredFunction = holeEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
+            dafnyUnresolvedProgram,
+            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.ProofLemmaName,
+            DafnyOptions.O.ProofModuleName,
+            DafnyOptions.O.HoleEvaluatorBaseFunctionName,
+            DafnyOptions.O.HoleEvaluatorDepth,
+            DafnyOptions.O.MutationsFromParams,null,null);
+        return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
+      }
+      if (DafnyOptions.O.HoleEvaluatorFunctionName != null && DafnyOptions.O.ProofLemmaName != null) {
+         holeEvaluator = new HoleEvaluator();
+      if(DafnyOptions.O.ProofLocation != null){
+        var df1 = new DafnyFile(DafnyOptions.O.ProofLocation);
+         var test = new List<DafnyFile>();
+         test.Add(df1);
+        string programName1 = dafnyFileNames.Count == 1 ? dafnyFileNames[0] : "the_program";
+        string err1 = Dafny.Main.ParseCheck(test, programName, reporter, out var dafnyProofProgram);
+        Dafny.Main.Parse(test, programName, reporter, out var dafnyUnresolvedProofProgram);
+        var foundDesiredFunction = holeEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
+            dafnyUnresolvedProgram,
+            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.ProofLemmaName,
+            null,
+            DafnyOptions.O.HoleEvaluatorBaseFunctionName,
+            DafnyOptions.O.HoleEvaluatorDepth,
+            DafnyOptions.O.MutationsFromParams,dafnyProofProgram,dafnyUnresolvedProofProgram);
+                    return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
+
+      }else{
+        var foundDesiredFunction = holeEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
+            dafnyUnresolvedProgram,
+            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.ProofLemmaName,
+            null,
+            DafnyOptions.O.HoleEvaluatorBaseFunctionName,
+            DafnyOptions.O.HoleEvaluatorDepth,
+            DafnyOptions.O.MutationsFromParams,null,null);
+                    return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
+
+        }
+
+      }
         if (DafnyOptions.O.ProofEvaluatorLemmaName != null) {
           proofEvaluator = new ProofEvaluator();
           var foundDesiredLemma = proofEvaluator.Evaluate(dafnyProgram,
