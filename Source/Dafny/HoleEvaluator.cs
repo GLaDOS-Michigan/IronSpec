@@ -476,7 +476,7 @@ namespace Microsoft.Dafny {
         }
         expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
-        if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != "") {
+        if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
           var fileLineList = DafnyOptions.O.HoleEvaluatorRemoveFileLine.Split(',');
           foreach (var fileLineString in fileLineList) {
             var fileLineArray = fileLineString.Split(':');
@@ -507,7 +507,7 @@ namespace Microsoft.Dafny {
       mergedCode.Add("");
       mergedCode.Add(String.Join('\n', workingFuncCode.Skip(workingFunc.EndToken.line)));
 
-      if (constraintFunc.BodyStartTok.Filename != workingFunc.BodyStartTok.Filename) {
+      if (constraintFunc != null && constraintFunc.BodyStartTok.Filename != workingFunc.BodyStartTok.Filename) {
         constraintFuncCode = File.ReadAllText(constraintFunc.BodyStartTok.Filename);
         constraintFuncLineCount = constraintFuncCode.Count(f => (f == '\n'));
       }
