@@ -46,6 +46,8 @@ namespace Microsoft.Dafny {
     {
       var samples = new List<string>();
       if (program.DefaultModuleDef.Includes.Count == 0) {
+        commonPrefix = Path.GetDirectoryName(program.FullName);
+        commonPrefixLength = commonPrefix.Length;
         return;
       }
       foreach (var file in program.DefaultModuleDef.Includes) {
