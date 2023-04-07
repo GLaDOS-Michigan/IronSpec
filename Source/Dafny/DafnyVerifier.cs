@@ -88,6 +88,7 @@ namespace Microsoft.Dafny {
     public Dictionary<IMessage, int> requestToPostConditionPosition = new Dictionary<IMessage, int>();
     public Dictionary<IMessage, int> requestToLemmaStartPosition = new Dictionary<IMessage, int>();
 
+    public int tasksProcessed = 0; 
     public void InitializeBaseFoldersInRemoteServers(Program program, string commonPrefix) {
       Parallel.For(0, serversList.Count, new ParallelOptions { MaxDegreeOfParallelism = -1 },
         index => {
@@ -219,7 +220,7 @@ namespace Microsoft.Dafny {
     }
 
     public async Task<int> ProcessRequestAsync(IReceivableSourceBlock<IMessage> source) {
-      int tasksProcessed = 0;
+      tasksProcessed = 0;
       while (await source.OutputAvailableAsync()) {
         if (source.TryReceive(out IMessage request)) {
           start:
@@ -227,9 +228,9 @@ namespace Microsoft.Dafny {
             if (!requestToCall.ContainsKey(request)) {
               RestartTask(request);
             }
-            Console.WriteLine($"calling await for #{requestToCnt[request]}");
+            // Console.WriteLine($"calling await for #{requestToCnt[request]}");
             VerificationResponse response = await requestToCall[request];
-            Console.WriteLine($"finished await for #{requestToCnt[request]}");
+            // Console.WriteLine($"finished await for #{requestToCnt[request]}");
             var output = response.Response;
             CheckIfCorrectAnswer(request, response);
             dafnyOutput[request] = response;
@@ -253,11 +254,21 @@ namespace Microsoft.Dafny {
     }
 
     public async Task<bool> startProofTasksAccordingToPriority() {
+       var startSize = 0;
       for (int i = 0; i < MaxDepth; i++) {
         // Console.WriteLine($"depth size = {tasksQueuePerDepth[i].Count}");
         foreach (var request in tasksQueuePerDepth[i]) {
           tasksBuffer.Post(request);
+          startSize++;
         }
+      }         
+        //  var startSize = tasksBuffer.Count;
+          // Console.WriteLine("SIZE B = " +startSize);
+
+      while (!doneWithTasks(startSize))
+      {
+          // Console.WriteLine("Still waiitng");
+          await Task.Delay(25);
       }
       tasksBuffer.Complete();
 
@@ -273,21 +284,37 @@ namespace Microsoft.Dafny {
       return true;
     }
 
+private bool doneWithTasks(int taskSize)
+{
+  try
+  {
+    // Console.WriteLine("starting = " + taskSize + " :: done = " + tasksProcessed);
+    
+    return taskSize == tasksProcessed;
+  }catch{
+    return false;
+  }
+  // return true;
+}
+
+
 public void clearTasks()
 {
-        tasksQueuePerDepth = new List<Queue<IMessage>>();
-            for (int i = 0; i < MaxDepth; i++) {
-        tasksQueuePerDepth.Add(new Queue<IMessage>());
-      }
-      tasksBuffer = new BufferBlock<IMessage>();
-      for (int i = 0; i < ConcurrentConsumerCount; i++) {
-        consumerTasks.Add(ProcessRequestAsync(tasksBuffer));
-      }
+      tasksQueuePerDepth = new List<Queue<IMessage>>();
+          for (int i = 0; i < MaxDepth; i++) {
+      tasksQueuePerDepth.Add(new Queue<IMessage>());
+    }
+
+    tasksBuffer = new BufferBlock<IMessage>();
+    for (int i = 0; i < ConcurrentConsumerCount; i++) {
+      consumerTasks.Add(ProcessRequestAsync(tasksBuffer));
+    }
+    // return true;
 }
 
 
     private void RestartTask(IMessage request) {
-      Console.WriteLine("Restart");
+      // Console.WriteLine("Restart");
       // var prevTask = requestToCall[request];
       var serverId = requestToCnt[request] % serversList.Count;
       if (request is CloneAndVerifyRequest) {
@@ -297,7 +324,7 @@ public void clearTasks()
         requestToCall[request] = task;
       }
       else if (request is VerificationRequest) {
-        Console.WriteLine($"sending request {(request as VerificationRequest).Path}");
+        // Console.WriteLine($"sending request {(request as VerificationRequest).Path}");
         AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(
           request as VerificationRequest,
           deadline: DateTime.UtcNow.AddMinutes(30000));

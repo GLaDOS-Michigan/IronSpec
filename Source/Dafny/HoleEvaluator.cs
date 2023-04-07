@@ -900,7 +900,7 @@ namespace Microsoft.Dafny {
         }
       }
       await dafnyVerifier.startProofTasksAccordingToPriority();
-     dafnyVerifier.clearTasks();
+       dafnyVerifier.clearTasks();
       Console.WriteLine("--- END Is At Least As Weak Pass  -- ");
       Console.WriteLine("--- START Vacuity Pass -- ");
         for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -926,7 +926,7 @@ namespace Microsoft.Dafny {
           }
         }
         await dafnyVerifier.startProofTasksAccordingToPriority();
-             dafnyVerifier.clearTasks();
+        dafnyVerifier.clearTasks();
 
         Console.WriteLine("--- END Vacuity Pass --");
         Console.WriteLine("--- START Full Proof Pass -- ");
