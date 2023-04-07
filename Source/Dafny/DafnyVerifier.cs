@@ -18,11 +18,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using Grpc.Core;
+using Google.Protobuf;
 
 namespace Microsoft.Dafny {
 
   public class DafnyVerifierClient {
     private const int MaxDepth = 100;
+    private int ConcurrentConsumerCount;
 
     private List<Channel> channelsList = new List<Channel>();
     private int sentRequests;
@@ -32,8 +34,11 @@ namespace Microsoft.Dafny {
     private List<TmpFolder> baseFoldersPath = new List<TmpFolder>();
     private List<List<TmpFolder>> temporaryFoldersList = new List<List<TmpFolder>>();
     private List<AsyncUnaryCall<Empty>> outstandingCleanupTasks = new List<AsyncUnaryCall<Empty>>();
-    private List<Queue<CloneAndVerifyRequest>> tasksQueuePerDepth = new List<Queue<CloneAndVerifyRequest>>();
-    private ConcurrentQueue<CloneAndVerifyRequest> workerThreadTaskQueue = new ConcurrentQueue<CloneAndVerifyRequest>();
+    private List<Queue<IMessage>> tasksQueuePerDepth = new List<Queue<IMessage>>();
+    // private ConcurrentQueue<CloneAndVerifyRequest> workerThreadTaskQueue = new ConcurrentQueue<CloneAndVerifyRequest>();
+    private BufferBlock<IMessage> tasksBuffer = new BufferBlock<IMessage>();
+    private List<Task<int>> consumerTasks = new List<Task<int>>();
+    private List<int> taskFinishedPerConsumer = new List<int>();
     private string OutputPrefix;
     private Random rand = new Random();
     public DafnyVerifierClient(string serverIpPortFileName, string outputPrefix) {
@@ -50,46 +55,56 @@ namespace Microsoft.Dafny {
       }
       Parallel.For(0, serversList.Count,
         index => {
-          Empty emptyProto = new Empty();
-          baseFoldersPath[index] = serversList[index].CreateTmpFolder(emptyProto);
+          CreateDir createDir = new CreateDir();
+          createDir.Owner = "arminvak";
+          baseFoldersPath[index] = serversList[index].CreateTmpFolder(createDir);
         }
       );
       for (int i = 0; i < serversList.Count; i++) {
         temporaryFoldersList[i].Add(baseFoldersPath[i]);
       }
       for (int i = 0; i < MaxDepth; i++) {
-        tasksQueuePerDepth.Add(new Queue<CloneAndVerifyRequest>());
+        tasksQueuePerDepth.Add(new Queue<IMessage>());
+      }
+      
+      // assuming each server has 40 cores. making double of that consumers
+      ConcurrentConsumerCount = serversList.Count * 2 * 40;
+      // setting up consumers
+      for (int i = 0; i < ConcurrentConsumerCount; i++) {
+        consumerTasks.Add(ProcessRequestAsync(tasksBuffer));
       }
     }
     public Stopwatch sw;
-    public Dictionary<CloneAndVerifyRequest, VerificationResponse> dafnyOutput = new Dictionary<CloneAndVerifyRequest, VerificationResponse>();
-    public Dictionary<int, List<CloneAndVerifyRequest>> requestsList = new Dictionary<int, List<CloneAndVerifyRequest>>();
-    public Dictionary<CloneAndVerifyRequest, Expression> requestToExpr = new Dictionary<CloneAndVerifyRequest, Expression>();
-    public Dictionary<CloneAndVerifyRequest, List<ProofEvaluator.ExprStmtUnion>> requestToStmtExprList = new Dictionary<CloneAndVerifyRequest, List<ProofEvaluator.ExprStmtUnion>>();
-    public Dictionary<CloneAndVerifyRequest, List<Expression>> requestToExprList = new Dictionary<CloneAndVerifyRequest, List<Expression>>();
-    public ConcurrentDictionary<CloneAndVerifyRequest, AsyncUnaryCall<VerificationResponse>> requestToCall =
-      new ConcurrentDictionary<CloneAndVerifyRequest, AsyncUnaryCall<VerificationResponse>>();
-    public Dictionary<CloneAndVerifyRequest, int> requestToCnt = new Dictionary<CloneAndVerifyRequest, int>();
-    public Dictionary<CloneAndVerifyRequest, int> requestToAvailableExprAIndex = new Dictionary<CloneAndVerifyRequest, int>();
-    public Dictionary<CloneAndVerifyRequest, int> requestToAvailableExprBIndex = new Dictionary<CloneAndVerifyRequest, int>();
-    public Dictionary<CloneAndVerifyRequest, int> requestToPostConditionPosition = new Dictionary<CloneAndVerifyRequest, int>();
-    public Dictionary<CloneAndVerifyRequest, int> requestToLemmaStartPosition = new Dictionary<CloneAndVerifyRequest, int>();
+    public Dictionary<IMessage, VerificationResponse> dafnyOutput = new Dictionary<IMessage, VerificationResponse>();
+    public Dictionary<int, List<IMessage>> requestsList = new Dictionary<int, List<IMessage>>();
+    public Dictionary<IMessage, Expression> requestToExpr = new Dictionary<IMessage, Expression>();
+    public Dictionary<IMessage, List<ProofEvaluator.ExprStmtUnion>> requestToStmtExprList = new Dictionary<IMessage, List<ProofEvaluator.ExprStmtUnion>>();
+    public Dictionary<IMessage, List<Expression>> requestToExprList = new Dictionary<IMessage, List<Expression>>();
+    public ConcurrentDictionary<IMessage, AsyncUnaryCall<VerificationResponse>> requestToCall =
+      new ConcurrentDictionary<IMessage, AsyncUnaryCall<VerificationResponse>>();
+    public Dictionary<IMessage, int> requestToCnt = new Dictionary<IMessage, int>();
+    public Dictionary<IMessage, int> requestToAvailableExprAIndex = new Dictionary<IMessage, int>();
+    public Dictionary<IMessage, int> requestToAvailableExprBIndex = new Dictionary<IMessage, int>();
+    public Dictionary<IMessage, int> requestToPostConditionPosition = new Dictionary<IMessage, int>();
+    public Dictionary<IMessage, int> requestToLemmaStartPosition = new Dictionary<IMessage, int>();
 
     public void InitializeBaseFoldersInRemoteServers(Program program, string commonPrefix) {
-      for (int i = 0; i < serversList.Count; i++) {
-        var ipPort = ServerIpPortList[i];
-        var ip = ipPort.Split(':')[0];
+      Parallel.For(0, serversList.Count, new ParallelOptions { MaxDegreeOfParallelism = -1 },
+        index => {
+          var ipPort = ServerIpPortList[index];
+          var ip = ipPort.Split(':')[0];
 
-        string arguments = $"-az --rsh=\" ssh -o StrictHostKeyChecking=no\" --include '*/' --include '*\\.dfy' --exclude '*' {commonPrefix}/ arminvak@{ip}:{baseFoldersPath[i].Path}/";
-        ProcessStartInfo startInfo = new ProcessStartInfo() { FileName = "/usr/bin/rsync", Arguments = arguments, };
-        Process proc = new Process() { StartInfo = startInfo, };
-        proc.Start();
-        proc.WaitForExit();
-        if (proc.ExitCode != 0) {
-          Console.WriteLine($"Unsuccessful rsync for node{i}: Confirm connection between nodes");
-          System.Environment.Exit(-1);
+          string arguments = $"-az --rsh=\" ssh -o StrictHostKeyChecking=no\" --include '*/' --include '*\\.dfy' --exclude '*' {commonPrefix}/ arminvak@{ip}:{baseFoldersPath[index].Path}/";
+          ProcessStartInfo startInfo = new ProcessStartInfo() { FileName = "/usr/bin/rsync", Arguments = arguments, };
+          Process proc = new Process() { StartInfo = startInfo, };
+          proc.Start();
+          proc.WaitForExit();
+          if (proc.ExitCode != 0) {
+            Console.WriteLine($"Unsuccessful rsync for node{index} with ip:{ip}: Confirm connection between nodes");
+            System.Environment.Exit(-1);
+          }
         }
-      }
+      );
       // var filesList = new List<string>();
       // foreach (var file in program.DefaultModuleDef.Includes) {
       //   filesList.Add(file.CanonicalPath);
@@ -166,132 +181,103 @@ namespace Microsoft.Dafny {
         });
       return true;
     }
-    public async Task<bool> startProofTasksAndWaitUntilAllProcessesFinishAndDumpTheirOutputs() {
-      await Parallel.ForEachAsync(requestsList.Values.SelectMany(x => x).ToList(),
-        async (request, tmp) => {
-        start:
-          try {
-            VerificationResponse response = await requestToCall[request];
-            var output = response.Response;
-            if (output.EndsWith("0 errors\n")) {
-              var str = $"{sw.ElapsedMilliseconds / 1000}:: correct answer #{requestToCnt[request]}: ";
-              var sep = "";
-              foreach (var stmtExpr in requestToStmtExprList[request]) {
-                if (stmtExpr.Expr != null) {
-                  str += ($"{sep}{Printer.ExprToString(stmtExpr.Expr)}");
-                } else {
-                  str += ($"{sep}{Printer.StatementToString(stmtExpr.Stmt)}");
-                }
-                sep = ", ";
-              }
-              Console.WriteLine(str);
+
+    public void CheckIfCorrectAnswer(IMessage request, VerificationResponse response) {
+      var output = response.Response;
+      if (request is CloneAndVerifyRequest) {
+        if (output.EndsWith("0 errors\n")) {
+          var str = $"{sw.ElapsedMilliseconds / 1000}:: correct answer #{requestToCnt[request]}: ";
+          var sep = "";
+          foreach (var stmtExpr in requestToStmtExprList[request]) {
+            if (stmtExpr.Expr != null) {
+              str += ($"{sep}{Printer.ExprToString(stmtExpr.Expr)}");
+            } else {
+              str += ($"{sep}{Printer.StatementToString(stmtExpr.Stmt)}");
             }
+            sep = ", ";
+          }
+          Console.WriteLine(str);
+        }
+      }
+      else if (request is VerificationRequest) {
+        // In this case, all verification requests should be considered to determine
+        // the correntness of an expression. So, we do nothing here.
+      }
+    }
+
+    public async Task<int> ProcessRequestAsync(IReceivableSourceBlock<IMessage> source) {
+      int tasksProcessed = 0;
+      while (await source.OutputAvailableAsync()) {
+        if (source.TryReceive(out IMessage request)) {
+          start:
+          try {
+            if (!requestToCall.ContainsKey(request)) {
+              RestartTask(request);
+            }
+            // Console.WriteLine($"calling await for #{requestToCnt[request]}");
+            VerificationResponse response = await requestToCall[request];
+            // Console.WriteLine($"finished await for #{requestToCnt[request]}");
+            var output = response.Response;
+            CheckIfCorrectAnswer(request, response);
             dafnyOutput[request] = response;
-            await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{requestToCnt[request]}_0.txt",
-              (requestToExpr.ContainsKey(request) ? "// " + Printer.ExprToString(requestToExpr[request]) + "\n" : "") +
-              (requestToCnt.ContainsKey(request) ? "// " + requestToCnt[request] + "\n" : "") + output + "\n");
+            if (DafnyOptions.O.HoleEvaluatorDumpOutput) {
+              await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{requestToCnt[request]}_0.txt",
+                request.ToString());
+              await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{requestToCnt[request]}_0.txt",
+                (requestToExpr.ContainsKey(request) ? "// " + Printer.ExprToString(requestToExpr[request]) + "\n" : "") +
+                (requestToCnt.ContainsKey(request) ? "// " + requestToCnt[request] + "\n" : "") + output + "\n");
+            }
             // Console.WriteLine($"finish executing {requestToCnt[request]}");
           } catch (RpcException ex) {
             Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: Restarting task #{requestToCnt[request]} {ex.Message}");
             RestartTask(request);
             goto start;
           }
-        });
-      return true;
+          tasksProcessed++;
+        }
+      }
+      return tasksProcessed;
     }
-
-    // public async Task<int> ProcessRequestAsync(IReceivableSourceBlock<CloneAndVerifyRequest> source) {
-    //   int tasksProcessed = 0;
-    //   while (await source.OutputAvailableAsync()) {
-    //     while (source.TryReceive(out CloneAndVerifyRequest request)) {
-    //       start:
-    //       try {
-    //         if (!requestToCall.ContainsKey(request)) {
-    //           RestartTask(request);
-    //         }
-    //         // Console.WriteLine($"{i}: calling await for #{requestToCnt[request]}");
-    //         VerificationResponse response = await requestToCall[request];
-    //         // Console.WriteLine($"{i}: finished await for #{requestToCnt[request]}");
-    //         var output = response.Response;
-    //         if (output.EndsWith("0 errors\n")) {
-    //           var str = $"{sw.ElapsedMilliseconds / 1000}:: correct answer #{requestToCnt[request]}: ";
-    //           var sep = "";
-    //           foreach (var stmtExpr in requestToStmtExprList[request]) {
-    //             if (stmtExpr.Expr != null) {
-    //               str += ($"{sep}{Printer.ExprToString(stmtExpr.Expr)}");
-    //             } else {
-    //               str += ($"{sep}{Printer.StatementToString(stmtExpr.Stmt)}");
-    //             }
-    //             sep = ", ";
-    //           }
-    //           Console.WriteLine(str);
-    //         }
-    //         dafnyOutput[request] = response;
-    //         await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{requestToCnt[request]}_0.txt",
-    //           (requestToExpr.ContainsKey(request) ? "// " + Printer.ExprToString(requestToExpr[request]) + "\n" : "") +
-    //           (requestToCnt.ContainsKey(request) ? "// " + requestToCnt[request] + "\n" : "") + output + "\n");
-    //         // Console.WriteLine($"finish executing {requestToCnt[request]}");
-    //       } catch (RpcException ex) {
-    //         Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: Restarting task #{requestToCnt[request]} {ex.Message}");
-    //         RestartTask(request);
-    //         goto start;
-    //       }
-    //       tasksProcessed++;
-    //     }
-    //   }
-    //   return tasksProcessed;
-    // }
 
     public async Task<bool> startProofTasksAccordingToPriority() {
       for (int i = 0; i < MaxDepth; i++) {
-        Console.WriteLine($"depth size = {tasksQueuePerDepth[i].Count}");
-        var options = new ParallelOptions {MaxDegreeOfParallelism = int.MaxValue};
-        await Parallel.ForEachAsync(tasksQueuePerDepth[i], options,
-          async (request, tmp) => {
-          start:
-            try {
-              if (!requestToCall.ContainsKey(request)) {
-                RestartTask(request);
-              }
-              // Console.WriteLine($"{i}: calling await for #{requestToCnt[request]}");
-              VerificationResponse response = await requestToCall[request];
-              // Console.WriteLine($"{i}: finished await for #{requestToCnt[request]}");
-              var output = response.Response;
-              if (output.EndsWith("0 errors\n")) {
-                var str = $"{sw.ElapsedMilliseconds / 1000}:: correct answer #{requestToCnt[request]}: ";
-                var sep = "";
-                foreach (var stmtExpr in requestToStmtExprList[request]) {
-                  if (stmtExpr.Expr != null) {
-                    str += ($"{sep}{Printer.ExprToString(stmtExpr.Expr)}");
-                  } else {
-                    str += ($"{sep}{Printer.StatementToString(stmtExpr.Stmt)}");
-                  }
-                  sep = ", ";
-                }
-                Console.WriteLine(str);
-              }
-              dafnyOutput[request] = response;
-              await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{requestToCnt[request]}_0.txt",
-                (requestToExpr.ContainsKey(request) ? "// " + Printer.ExprToString(requestToExpr[request]) + "\n" : "") +
-                (requestToCnt.ContainsKey(request) ? "// " + requestToCnt[request] + "\n" : "") + output + "\n");
-            // Console.WriteLine($"finish executing {requestToCnt[request]}");
-          } catch (RpcException ex) {
-              Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: Restarting task #{requestToCnt[request]} {ex.Message}");
-              RestartTask(request);
-              goto start;
-            }
-          });
+        // Console.WriteLine($"depth size = {tasksQueuePerDepth[i].Count}");
+        foreach (var request in tasksQueuePerDepth[i]) {
+          tasksBuffer.Post(request);
+        }
       }
+      tasksBuffer.Complete();
+
+      // waiting on consumers
+      for (int i = 0; i < ConcurrentConsumerCount; i++) {
+        taskFinishedPerConsumer.Add(await consumerTasks[i]);
+      }
+      // for (int i = 0; i < ConcurrentConsumerCount; i++) {
+      //   Console.WriteLine($"Consumer #{i} finished {taskFinishedPerConsumer[i]} tasks");
+      // }
       return true;
     }
 
 
-    private void RestartTask(CloneAndVerifyRequest request) {
+    private void RestartTask(IMessage request) {
       // var prevTask = requestToCall[request];
       var serverId = requestToCnt[request] % serversList.Count;
-      AsyncUnaryCall<VerificationResponse> task = serversList[serverId].CloneAndVerifyAsync(request,
-        deadline: DateTime.UtcNow.AddMinutes(30000));
-      requestToCall[request] = task;
+      if (request is CloneAndVerifyRequest) {
+        AsyncUnaryCall<VerificationResponse> task = serversList[serverId].CloneAndVerifyAsync(
+          request as CloneAndVerifyRequest,
+          deadline: DateTime.UtcNow.AddMinutes(30000));
+        requestToCall[request] = task;
+      }
+      else if (request is VerificationRequest) {
+        // Console.WriteLine($"sending request {(request as VerificationRequest).Path}");
+        AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(
+          request as VerificationRequest,
+          deadline: DateTime.UtcNow.AddMinutes(30000));
+        requestToCall[request] = task;
+      }
+      else {
+        throw new NotSupportedException($"invalid request type : {request.ToString()}");
+      }
     }
     public void runDafny(string code, List<string> args, ExpressionFinder.ExpressionDepth exprDepth,
         int cnt, int postConditionPos, int lemmaStartPos, string remoteFilePath) {
@@ -300,14 +286,14 @@ namespace Microsoft.Dafny {
       //   sentRequests = 0;
       //   ResetChannel();
       // }
-      CloneAndVerifyRequest request = new CloneAndVerifyRequest();
+      VerificationRequest request = new VerificationRequest();
       request.Code = code;
-      request.ModifyingFile = remoteFilePath;
+      request.Path = remoteFilePath;
       foreach (var arg in args) {
         request.Arguments.Add(arg);
       }
       if (!requestsList.ContainsKey(cnt)) {
-        requestsList.Add(cnt, new List<CloneAndVerifyRequest>());
+        requestsList.Add(cnt, new List<IMessage>());
       }
       requestsList[cnt].Add(request);
       tasksQueuePerDepth[exprDepth.depth].Enqueue(request);
@@ -333,7 +319,7 @@ namespace Microsoft.Dafny {
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].CloneAndVerifyAsync(request);
       requestToCall[request] = task;
       if (!requestsList.ContainsKey(requestsList.Count)) {
-        requestsList.Add(requestsList.Count, new List<CloneAndVerifyRequest>());
+        requestsList.Add(requestsList.Count, new List<IMessage>());
       }
       requestsList[requestsList.Count].Add(request);
       requestToAvailableExprAIndex[request] = availableExprAIndex;
@@ -355,25 +341,26 @@ namespace Microsoft.Dafny {
         request.Arguments.Add(arg);
       }
       if (!requestsList.ContainsKey(cnt)) {
-        requestsList.Add(cnt, new List<CloneAndVerifyRequest>());
+        requestsList.Add(cnt, new List<IMessage>());
       }
       requestsList[cnt].Add(request);
-      int maxDepth = 0;
-      foreach (var stmtExpr in exprStmtList) {
-        maxDepth = Math.Max(maxDepth, stmtExpr.Depth);
-      }
-      tasksQueuePerDepth[maxDepth].Enqueue(request);
-      // var serverId = cnt % serversList.Count;
-      // AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
-      //   deadline: DateTime.UtcNow.AddMinutes(30));
-      // requestToCall[request] = task;
       requestToStmtExprList[request] = exprStmtList;
       requestToCnt[request] = cnt;
       dafnyOutput[request] = new VerificationResponse();
+      if (cnt < consumerTasks.Count || (tasksBuffer.Count < consumerTasks.Count / 4)) {
+        tasksBuffer.Post(request);
+      }
+      else {
+        int maxDepth = 0;
+        foreach (var stmtExpr in exprStmtList) {
+          maxDepth = Math.Max(maxDepth, stmtExpr.Depth);
+        }
+        tasksQueuePerDepth[maxDepth].Enqueue(request);
+      }
     }
 
     public void runDafnyProofCheck(string code, List<string> args, List<ProofEvaluator.ExprStmtUnion> exprStmtList,
-        int cnt, string remoteFilePath, string lemmaName) {
+        int cnt, string filePath, string lemmaName) {
       sentRequests++;
       // if (sentRequests == 500) {
       //   sentRequests = 0;
@@ -383,26 +370,28 @@ namespace Microsoft.Dafny {
       request.Code = code;
       var serverId = cnt % serversList.Count;
       request.DirectoryPath = baseFoldersPath[serverId].Path;
-      request.ModifyingFile = remoteFilePath;
+      request.ModifyingFile = filePath;
       foreach (var arg in args) {
         request.Arguments.Add(arg);
       }
       request.Arguments.Add($"/proc:*{lemmaName}*");
       if (!requestsList.ContainsKey(cnt)) {
-        requestsList.Add(cnt, new List<CloneAndVerifyRequest>());
+        requestsList.Add(cnt, new List<IMessage>());
       }
       requestsList[cnt].Add(request);
+      requestToStmtExprList[request] = exprStmtList;
+      requestToCnt[request] = cnt;
+      dafnyOutput[request] = new VerificationResponse();
+      // if (cnt < consumerTasks.Count || (tasksBuffer.Count < consumerTasks.Count / 4)) {
+      // tasksBuffer.Post(request);
+      // }
+      // else {
       int maxDepth = 0;
       foreach (var stmtExpr in exprStmtList) {
         maxDepth = Math.Max(maxDepth, stmtExpr.Depth);
       }
       tasksQueuePerDepth[maxDepth].Enqueue(request);
-      // AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(request,
-      //   deadline: DateTime.UtcNow.AddMinutes(30));
-      // requestToCall[request] = task;
-      requestToStmtExprList[request] = exprStmtList;
-      requestToCnt[request] = cnt;
-      dafnyOutput[request] = new VerificationResponse();
+      // }
     }
   }
 }

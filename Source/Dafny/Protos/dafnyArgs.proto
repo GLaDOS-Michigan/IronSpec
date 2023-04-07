@@ -4,7 +4,7 @@ option csharp_namespace = "Microsoft.Dafny";
 
 package DafnyExecutorArguments;
 
-message VerificationTask {
+message VerificationTaskArgs {
   // Dafny code that needs to be verified
   string path = 1;
   // List of arguments to be passed to Dafny
@@ -12,5 +12,5 @@ message VerificationTask {
 }
 
 message TasksList {
-  repeated VerificationTask tasks = 1;
+  repeated VerificationTaskArgs tasks = 1;
 }

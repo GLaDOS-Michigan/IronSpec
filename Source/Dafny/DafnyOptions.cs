@@ -191,11 +191,14 @@ namespace Microsoft.Dafny {
     public bool HoleEvaluatorRunOnce = false;
     public bool HoleEvaluatorCreateAuxFiles = true;
     public bool ProofEvaluatorCollectAllTriggerMatches = false;
+    public bool HoleEvaluatorDumpOutput = false;
     public string HoleEvaluatorWorkingDirectory = "/tmp/";
     public string HoleEvaluatorServerIpPortList = null;
     public string HoleEvaluatorInvariant = null;
     public string HoleEvaluatorConstraint = null;
     public string HoleEvaluatorRemoveFileLine = null;
+    public string ProofEvaluatorRemoveFileLine = null;
+    public int ProofEvaluatorInsertionPoint = -1;
     public string HoleEvaluatorCommands = null;
 
     protected override bool ParseOption(string name, Bpl.CommandLineParseState ps) {
@@ -711,6 +714,23 @@ namespace Microsoft.Dafny {
         case "holeEvalRemoveFileLine":
           if (ps.ConfirmArgumentCount(1)) {
             HoleEvaluatorRemoveFileLine = args[ps.i];
+          }
+          return true;
+
+        case "proofEvalRemoveFileLine":
+          if (ps.ConfirmArgumentCount(1)) {
+            ProofEvaluatorRemoveFileLine = args[ps.i];
+          }
+          return true;
+
+        case "holeEvalDumpOutput":
+          HoleEvaluatorDumpOutput = true;
+          return true;
+
+        case "proofEvalInsertionPoint":
+          int insertionPoint = 0;
+          if (ps.GetIntArgument(ref insertionPoint)) {
+            ProofEvaluatorInsertionPoint = insertionPoint;
           }
           return true;
 

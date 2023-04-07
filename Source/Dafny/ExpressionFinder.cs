@@ -158,6 +158,7 @@ namespace Microsoft.Dafny {
     }
 
     public Dictionary<string, List<ExpressionDepth>> GetTypeToExpressionDict(IEnumerable<ExpressionDepth> expressionList) {
+      int maxEvalDepth = DafnyOptions.O.HoleEvaluatorExpressionDepth;
       Dictionary<string, List<ExpressionDepth>> typeToExpressionDict = new Dictionary<string, List<ExpressionDepth>>();
       foreach (var exprDepth in expressionList) {
         var expr = exprDepth.expr;
@@ -211,11 +212,13 @@ namespace Microsoft.Dafny {
         Dictionary<string, List<string>> equalExprList = GetEqualExpressionList(equalExprToCheck);
         foreach (var k in equalExprList.Keys) {
           var t = equalExprList[k][0];
-          for (int i = 1; i < equalExprList[k].Count; i++) {
-            for (int j = 0; j < typeToExpressionDict[t].Count; j++) {
-              if (Printer.ExprToString(typeToExpressionDict[t][j].expr) == equalExprList[k][i]) {
-                typeToExpressionDict[t].RemoveAt(j);
-                break;
+          if (typeToExpressionDict.ContainsKey(t)) {
+            for (int i = 1; i < equalExprList[k].Count; i++) {
+              for (int j = 0; j < typeToExpressionDict[t].Count; j++) {
+                if (Printer.ExprToString(typeToExpressionDict[t][j].expr) == equalExprList[k][i]) {
+                  typeToExpressionDict[t].RemoveAt(j);
+                  break;
+                }
               }
             }
           }
@@ -550,6 +553,9 @@ namespace Microsoft.Dafny {
 
     public IEnumerable<ExpressionDepth> TraverseFormal(Program program, ExpressionDepth exprDepth) {
       Contract.Requires(exprDepth != null);
+      var maxExpressionDepth = DafnyOptions.O.HoleEvaluatorExpressionDepth;
+      if (exprDepth.depth > maxExpressionDepth)
+        yield break;
       yield return exprDepth;
       var expr = exprDepth.expr;
       var t = expr.Type;
@@ -564,10 +570,19 @@ namespace Microsoft.Dafny {
           yield return new ExpressionDepth(zeroLiteralExpr, 1);
           var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
           yield return new ExpressionDepth(oneLiteralExpr, 1);
+          
+          if (exprDepth.depth + 1 <= maxExpressionDepth) {
+            var plusOneLiteralExpr = Expression.CreateIncrement(expr, 1);
+            yield return new ExpressionDepth(plusOneLiteralExpr, exprDepth.depth + 1);
+            var minusOneLiteralExpr = Expression.CreateDecrement(expr, 1);
+            yield return new ExpressionDepth(minusOneLiteralExpr, exprDepth.depth + 1);
+          }
         } else if (t is CollectionType) {
           // create cardinality
-          var cardinalityExpr = Expression.CreateCardinality(expr, program.BuiltIns);
-          yield return new ExpressionDepth(cardinalityExpr, exprDepth.depth + 1);
+          if (exprDepth.depth + 1 <= maxExpressionDepth) {
+            var cardinalityExpr = Expression.CreateCardinality(expr, program.BuiltIns);
+            yield return new ExpressionDepth(cardinalityExpr, exprDepth.depth + 1);
+          }
           if (t is SeqType) {
             var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
             var zerothElement = new SeqSelectExpr(expr.tok, true, expr, zeroLiteralExpr, null, null);
@@ -611,6 +626,15 @@ namespace Microsoft.Dafny {
           var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
           oneLiteralExpr.Type = t;
           yield return new ExpressionDepth(oneLiteralExpr, 1);
+
+          if (exprDepth.depth + 1 <= maxExpressionDepth) {
+            var plusOneLiteralExpr = Expression.CreateIncrement(expr, 1);
+            plusOneLiteralExpr.Type = t;
+            yield return new ExpressionDepth(plusOneLiteralExpr, exprDepth.depth + 1);
+            var minusOneLiteralExpr = Expression.CreateDecrement(expr, 1);
+            minusOneLiteralExpr.Type = t;
+            yield return new ExpressionDepth(minusOneLiteralExpr, exprDepth.depth + 1);
+          }
         } else {
           throw new NotImplementedException();
         }
@@ -634,7 +658,14 @@ namespace Microsoft.Dafny {
           var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
           oneLiteralExpr.Type = t;
           yield return new ExpressionDepth(oneLiteralExpr, 1);
-
+          if (exprDepth.depth + 1 <= maxExpressionDepth) {
+            var plusOneLiteralExpr = Expression.CreateIncrement(expr, 1);
+            plusOneLiteralExpr.Type = t;
+            yield return new ExpressionDepth(plusOneLiteralExpr, exprDepth.depth + 1);
+            var minusOneLiteralExpr = Expression.CreateDecrement(expr, 1);
+            minusOneLiteralExpr.Type = t;
+            yield return new ExpressionDepth(minusOneLiteralExpr, exprDepth.depth + 1);
+          }
         }
         // Console.WriteLine($"{variable.Name} is SubsetTypeDecl");
       } else if (cl is ClassDecl) {
@@ -642,33 +673,35 @@ namespace Microsoft.Dafny {
         // TODO traverse underlying definition as well.
         throw new NotImplementedException();
       } else if (cl is DatatypeDecl) {
-        var dt = (DatatypeDecl)cl;
-        var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
-        // Console.WriteLine($"{variable.Name} is DatatypeDecl");
-        foreach (var ctor in dt.Ctors) {
-          if (dt.Ctors.Count > 1) {
-            var exprDot = new ExprDotName(ctor.tok, expr, ctor.tok.val + "?", null);
-            exprDot.Type = Type.Bool;
-            yield return new ExpressionDepth(exprDot, exprDepth.depth + 1);
-          }
-          foreach (var formal in ctor.Formals) {
-            // Console.WriteLine($"type={formal.Type} => {Resolver.SubstType(formal.Type, subst)}");
-            // var convertedFormal = new Formal(formal.tok, formal.Name, 
-            //     Resolver.SubstType(formal.Type, subst), formal.InParam, formal.IsGhost,
-            //     formal.DefaultValue, formal.IsOld, formal.IsNameOnly, formal.NameForCompilation);
-            // var identExpr = Expression.CreateIdentExpr(convertedFormal);
-            var exprDot = new ExprDotName(formal.tok, expr, formal.tok.val, null);
-            exprDot.Type = Resolver.SubstType(formal.Type, subst);
-            foreach (var v in TraverseFormal(program, new ExpressionDepth(exprDot, exprDepth.depth + 1))) {
-              // Console.WriteLine($"aaa {v.tok.val}");
-              // // var ngv = (Formal)variable;
-              // // var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
-              // // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
-              // var e = new ExprDotName(v.tok, expr, v.tok.val, null);
-              // e.Type = v.Type;
-              yield return v;
+        if (exprDepth.depth + 1 <= maxExpressionDepth) {
+          var dt = (DatatypeDecl)cl;
+          var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
+          // Console.WriteLine($"{variable.Name} is DatatypeDecl");
+          foreach (var ctor in dt.Ctors) {
+            if (dt.Ctors.Count > 1) {
+              var exprDot = new ExprDotName(ctor.tok, expr, ctor.tok.val + "?", null);
+              exprDot.Type = Type.Bool;
+              yield return new ExpressionDepth(exprDot, exprDepth.depth + 1);
             }
-            // Console.WriteLine($"aaaa {formal.Name}");
+            foreach (var formal in ctor.Formals) {
+              // Console.WriteLine($"type={formal.Type} => {Resolver.SubstType(formal.Type, subst)}");
+              // var convertedFormal = new Formal(formal.tok, formal.Name, 
+              //     Resolver.SubstType(formal.Type, subst), formal.InParam, formal.IsGhost,
+              //     formal.DefaultValue, formal.IsOld, formal.IsNameOnly, formal.NameForCompilation);
+              // var identExpr = Expression.CreateIdentExpr(convertedFormal);
+              var exprDot = new ExprDotName(formal.tok, expr, formal.tok.val, null);
+              exprDot.Type = Resolver.SubstType(formal.Type, subst);
+              foreach (var v in TraverseFormal(program, new ExpressionDepth(exprDot, exprDepth.depth + 1))) {
+                // Console.WriteLine($"aaa {v.tok.val}");
+                // // var ngv = (Formal)variable;
+                // // var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
+                // // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
+                // var e = new ExprDotName(v.tok, expr, v.tok.val, null);
+                // e.Type = v.Type;
+                yield return v;
+              }
+              // Console.WriteLine($"aaaa {formal.Name}");
+            }
           }
         }
       }

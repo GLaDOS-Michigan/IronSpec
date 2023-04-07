@@ -331,6 +331,14 @@ namespace Microsoft.Dafny {
               DafnyOptions.O.HoleEvaluatorExpressionDepth);
           return foundDesiredLemma.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
         }
+        if (DafnyOptions.O.ProofEvaluatorRemoveFileLine != null) {
+          proofEvaluator = new ProofEvaluator();
+          var foundDesiredLemma = proofEvaluator.EvaluateAfterRemoveFileLine(dafnyProgram,
+              DafnyOptions.O.ProofEvaluatorRemoveFileLine,
+              DafnyOptions.O.HoleEvaluatorDepth,
+              DafnyOptions.O.HoleEvaluatorExpressionDepth);
+          return foundDesiredLemma.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
+        }
         if (DafnyOptions.O.HoleEvaluatorFunctionName != null) {
           holeEvaluator = new HoleEvaluator();
           var foundDesiredFunction = holeEvaluator.Evaluate(dafnyProgram,

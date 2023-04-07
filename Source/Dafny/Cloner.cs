@@ -808,8 +808,11 @@ namespace Microsoft.Dafny {
         return new GreatestLemma(Tok(m.tok), m.Name, m.HasStaticKeyword, ((GreatestLemma)m).TypeOfK, tps, ins, m.Outs.ConvertAll(CloneFormal),
           req, mod, ens, decreases, body, CloneAttributes(m.Attributes), null);
       } else if (m is Lemma) {
-        return new Lemma(Tok(m.tok), m.Name, m.HasStaticKeyword, tps, ins, m.Outs.ConvertAll(CloneFormal),
+        var lemma = new Lemma(Tok(m.tok), m.Name, m.HasStaticKeyword, tps, ins, m.Outs.ConvertAll(CloneFormal),
           req, mod, ens, decreases, body, CloneAttributes(m.Attributes), null);
+        lemma.BodyStartTok = m.BodyStartTok;
+        lemma.BodyEndTok = m.BodyEndTok;
+        return lemma;
       } else if (m is TwoStateLemma) {
         var two = (TwoStateLemma)m;
         return new TwoStateLemma(Tok(m.tok), m.Name, m.HasStaticKeyword, tps, ins, m.Outs.ConvertAll(CloneFormal),

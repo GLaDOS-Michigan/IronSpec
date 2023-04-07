@@ -30,7 +30,7 @@ namespace Microsoft.Dafny {
   public class HoleEvaluator {
     private string UnderscoreStr = "";
     private static Random random = new Random();
-
+    private Cloner cloner = new Cloner();
     public static string RandomString(int length) {
       const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
       return new string(Enumerable.Repeat(chars, length)
@@ -55,15 +55,18 @@ namespace Microsoft.Dafny {
     public DafnyVerifierClient dafnyVerifier;
 
     private TasksList tasksList = null;
-    private Dictionary<string, VerificationTask> tasksListDictionary = new Dictionary<string, VerificationTask>();
+    private Dictionary<string, VerificationTaskArgs> tasksListDictionary = new Dictionary<string, VerificationTaskArgs>();
     private IncludeParser includeParser = null;
     private List<string> affectedFiles = new List<string>();
 
     public static int validityLemmaNameStartCol = 0;
+    public static string lemmaForExprValidityString = "";
+    private static int lemmaForExprValidityLineCount = 0;
 
     private void UpdateCombinationResult(int index) {
       var requestList = dafnyVerifier.requestsList[index];
-      foreach (var request in requestList) {
+      for (int i = 0; i < requestList.Count; i++) {
+        var request = requestList[i];
         var position = dafnyVerifier.requestToPostConditionPosition[request];
         var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
         var output = dafnyVerifier.dafnyOutput[request];
@@ -369,34 +372,8 @@ namespace Microsoft.Dafny {
     }
 
     public async Task<bool> EvaluateAfterRemoveFileLine(Program program, Program unresolvedProgram, string removeFileLine, string baseFuncName, int depth) {
-      var fileLineArray = removeFileLine.Split(':');
-      var file = fileLineArray[0];
-      var line = Int32.Parse(fileLineArray[1]);
-      foreach (var kvp in program.ModuleSigs) {
-        foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
-          if (Path.GetFileName(topLevelDecl.tok.filename) == file) {
-            if (topLevelDecl.BodyStartTok.line <= line && line <= topLevelDecl.BodyEndTok.line) {
-              var exprList = Expression.Conjuncts(topLevelDecl.Body).ToList();
-              // Console.WriteLine($"topLevelDecl : {topLevelDecl.FullDafnyName}");
-              var i = -1;
-              for (i = 0; i < exprList.Count - 1; i++) {
-                if (exprList[i].tok.line <= line && line < exprList[i + 1].tok.line) {
-                  break;
-                }
-              }
-              // Console.WriteLine($"{i} {Printer.ExprToString(exprList[i])}");
-              exprList.RemoveAt(i);
-              var body = exprList[0];
-              for (int j = 1; j < exprList.Count; j++) {
-                body = Expression.CreateAnd(body, exprList[j]);
-              }
-              topLevelDecl.Body = body;
-              return await Evaluate(program, unresolvedProgram, topLevelDecl.FullDafnyName, baseFuncName, depth);
-            }
-          }
-        }
-      }
-      return false;
+      var funcName = CodeModifier.Erase(program, removeFileLine);
+      return await Evaluate(program, unresolvedProgram, funcName, baseFuncName, depth);
     }
 
     public async Task<bool> Evaluate(Program program, Program unresolvedProgram, string funcName, string baseFuncName, int depth) {
@@ -499,6 +476,15 @@ namespace Microsoft.Dafny {
         }
         expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
+        if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != "") {
+          var fileLineList = DafnyOptions.O.HoleEvaluatorRemoveFileLine.Split(',');
+          foreach (var fileLineString in fileLineList) {
+            var fileLineArray = fileLineString.Split(':');
+            var file = fileLineArray[0];
+            var line = Int32.Parse(fileLineArray[1]);
+            CodeModifier.EraseFromPredicate(desiredFunctionUnresolved as Predicate, line);
+          }
+        }
         Contract.Assert(desiredFunctionUnresolved != null);
         topLevelDeclCopy = new Function(
           desiredFunctionUnresolved.tok, desiredFunctionUnresolved.Name, desiredFunctionUnresolved.HasStaticKeyword,
@@ -512,18 +498,36 @@ namespace Microsoft.Dafny {
         return false;
       }
       Console.WriteLine($"expressionFinder.availableExpressions.Count == {expressionFinder.availableExpressions.Count}");
+
+      workingFunc = desiredFunctionUnresolved;
+      workingConstraintFunc = constraintFunc;
+      workingFuncCode = File.ReadAllLines(workingFunc.BodyStartTok.Filename);
+      mergedCode.Add(String.Join('\n', workingFuncCode.Take(workingFunc.tok.line - 1)));
+      // placeholder for workingLemma
+      mergedCode.Add("");
+      mergedCode.Add(String.Join('\n', workingFuncCode.Skip(workingFunc.EndToken.line)));
+
+      if (constraintFunc.BodyStartTok.Filename != workingFunc.BodyStartTok.Filename) {
+        constraintFuncCode = File.ReadAllText(constraintFunc.BodyStartTok.Filename);
+        constraintFuncLineCount = constraintFuncCode.Count(f => (f == '\n'));
+      }
+      
+      lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr, -1);
+      lemmaForExprValidityLineCount = lemmaForExprValidityString.Count(f => (f == '\n'));
+
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
-      // for (int i = 0; i < 1; i++) {
-        PrintExprAndCreateProcess(unresolvedProgram, desiredFunctionUnresolved, expressionFinder.availableExpressions[i], i);
+      // for (int i = 0; i < 100; i++) {
+        PrintExprAndCreateProcess(unresolvedProgram, expressionFinder.availableExpressions[i], i);
         desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
       }
-      await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
+      await dafnyVerifier.startProofTasksAccordingToPriority();
       Console.WriteLine("finish");
 
+      dafnyVerifier.Cleanup();
       // bool foundCorrectExpr = false;
       
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
-      // for (int i = 0; i < 1; i++) {
+      // for (int i = 0; i < 100; i++) {
         UpdateCombinationResult(i);
         // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
       }
@@ -536,7 +540,7 @@ namespace Microsoft.Dafny {
         expressionFinder.CalcNextDepthAvailableExpressions();
         for (int i = prevDepthExprStartIndex; i < expressionFinder.availableExpressions.Count; i++) {
           var expr = expressionFinder.availableExpressions[i];
-          PrintExprAndCreateProcess(program, desiredFunction, expr, i);
+          PrintExprAndCreateProcess(program, expr, i);
           desiredFunction.Body = topLevelDeclCopy.Body;
         }
         await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
@@ -552,12 +556,12 @@ namespace Microsoft.Dafny {
       int falsePredicateCount = 0;
       int noMatchingTriggerCount = 0;
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
-      // for (int i = 0; i < 1; i++) {
+      // for (int i = 0; i < 100; i++) {
         switch (combinationResults[i]) {
           case Result.InvalidExpr: invalidExprCount++; break;
           case Result.FalsePredicate: falsePredicateCount++; break;
-          case Result.CorrectProof: 
-            Console.WriteLine($"correct answer: {i}");
+          case Result.CorrectProof:
+            Console.WriteLine($"correct answer: {i} {Printer.ExprToString(expressionFinder.availableExpressions[i].expr)}");
             correctProofCount++; 
             break;
           case Result.CorrectProofByTimeout: 
@@ -619,6 +623,7 @@ namespace Microsoft.Dafny {
         Console.WriteLine("proof already goes through and no additional conjunction is needed!");
         return true;
       }
+      await dafnyVerifier.FinalizeCleanup();
       return true;
       List<int> correctExpressionsIndex = new List<int>();
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -811,15 +816,23 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public void PrintExprAndCreateProcess(Program program, Function func, ExpressionFinder.ExpressionDepth exprDepth, int cnt) {
+    private Function workingFunc = null;
+    private Function workingConstraintFunc = null;
+    private string[] workingFuncCode;
+    private string constraintFuncCode = "";
+    private int constraintFuncLineCount = 0;
+    private List<string> mergedCode = new List<string>();
+
+    public void PrintExprAndCreateProcess(Program program, ExpressionFinder.ExpressionDepth exprDepth, int cnt) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
-      Console.WriteLine($"{cnt} {Printer.ExprToString(exprDepth.expr)}");
-      var funcName = func.Name;
+      if (cnt % 5000 == 1) {
+        Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: {cnt}");
+      }
+      Console.WriteLine($"{cnt} {Printer.ExprToString(exprDepth.expr)}\t\t{exprDepth.depth}");
+      var funcName = workingFunc.Name;
 
-      string lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr, cnt);
-
-      int lemmaForExprValidityPosition = 0;
-      int lemmaForExprValidityStartPosition = 0;
+      int lemmaForExprValidityPosition = -1;
+      int lemmaForExprValidityStartPosition = -1;
 
       var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{funcName}_{cnt}";
       if (tasksList == null) {
@@ -828,9 +841,9 @@ namespace Microsoft.Dafny {
           var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
           pr.UniqueStringBeforeUnderscore = UnderscoreStr;
           if (exprDepth.expr.HasCardinality) {
-            func.Body = Expression.CreateAnd(exprDepth.expr, func.Body);
+            workingFunc.Body = Expression.CreateAnd(exprDepth.expr, workingFunc.Body);
           } else {
-            func.Body = Expression.CreateAnd(func.Body, exprDepth.expr);
+            workingFunc.Body = Expression.CreateAnd(workingFunc.Body, exprDepth.expr);
           }
           pr.PrintProgram(program, true);
           code = $"// #{cnt}\n";
@@ -853,39 +866,46 @@ namespace Microsoft.Dafny {
         dafnyVerifier.runDafny(code, args,
             exprDepth, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition, "");
       } else {
-        var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+        var changingFilePath = includeParser.Normalized(workingFunc.BodyStartTok.Filename);
+        var constraintFuncChangingFilePath = includeParser.Normalized(workingConstraintFunc.BodyStartTok.Filename);
         var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
 
-        Expression newFuncBody = null;
+        var clonedWorkingFunc = cloner.CloneFunction(workingFunc);
         if (exprDepth.expr.HasCardinality) {
-          newFuncBody = Expression.CreateAnd(exprDepth.expr, func.Body);
+          clonedWorkingFunc.Body = Expression.CreateAnd(clonedWorkingFunc.Body, exprDepth.expr);
         } else {
-          newFuncBody = Expression.CreateAnd(func.Body, exprDepth.expr);
+          clonedWorkingFunc.Body = Expression.CreateAnd(exprDepth.expr, clonedWorkingFunc.Body);
         }
-        var baseCode = File.ReadAllLines(func.BodyStartTok.Filename);
-        if (func.BodyStartTok.line == func.BodyEndTok.line) {
-          baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Remove(func.BodyStartTok.col, func.BodyEndTok.col - func.BodyStartTok.col);
-          baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Insert(func.BodyStartTok.col + 1, Printer.ExprToString(newFuncBody));
-        } else {
-          baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Remove(func.BodyStartTok.col);
-          for (int i = func.BodyStartTok.line; i < func.BodyEndTok.line - 1; i++) {
-            baseCode[i] = "";
-          }
-          baseCode[func.BodyEndTok.line - 1] = baseCode[func.BodyEndTok.line - 1].Remove(0, func.BodyEndTok.col - 1);
-          baseCode[func.BodyStartTok.line - 1] = baseCode[func.BodyStartTok.line - 1].Insert(func.BodyStartTok.col, Printer.ExprToString(newFuncBody));
+        using (var wr = new System.IO.StringWriter()) {
+          var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
+          pr.PrintFunction(clonedWorkingFunc, 0, false);
+          mergedCode[1] = Printer.ToStringWithoutNewline(wr);
         }
-        lemmaForExprValidityStartPosition = baseCode.Length;
-        var lemmaForExprValidityLineCount = lemmaForExprValidityString.Count(f => (f == '\n'));
-        baseCode = baseCode.Append(lemmaForExprValidityString).ToArray();
-        lemmaForExprValidityPosition = baseCode.Length + lemmaForExprValidityLineCount;
-        var newCode = String.Join('\n', baseCode);
+        var newCode = String.Join('\n', mergedCode);
 
-        dafnyVerifier.runDafny(newCode, tasksListDictionary[changingFilePath].Arguments.ToList(),
+        if (constraintFuncCode != "") {
+          lemmaForExprValidityStartPosition = constraintFuncLineCount + 2;
+          var newBaseCode = constraintFuncCode + "\n" + lemmaForExprValidityString;
+          lemmaForExprValidityPosition = lemmaForExprValidityStartPosition + lemmaForExprValidityLineCount;
+          dafnyVerifier.runDafny(newBaseCode, tasksListDictionary[constraintFuncChangingFilePath].Arguments.ToList(),
+              exprDepth, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,
+              $"{remoteFolderPath.Path}/{constraintFuncChangingFilePath}");
+
+          dafnyVerifier.runDafny(newCode, tasksListDictionary[changingFilePath].Arguments.ToList(),
+              exprDepth, cnt, -1, -1, $"{remoteFolderPath.Path}/{changingFilePath}");
+        } else {
+          var newCodeLineCount = newCode.Count(f => (f == '\n'));
+          lemmaForExprValidityStartPosition = newCodeLineCount + 2;
+          newCode += "\n" + lemmaForExprValidityString;
+          lemmaForExprValidityPosition = newCodeLineCount + lemmaForExprValidityLineCount;
+          dafnyVerifier.runDafny(newCode, tasksListDictionary[changingFilePath].Arguments.ToList(),
               exprDepth, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,
               $"{remoteFolderPath.Path}/{changingFilePath}");
+        }
+
         // File.WriteAllTextAsync($"{workingDir}/{changingFilePath}", newCode);
         foreach (var f in affectedFiles) {
-          if (f != changingFilePath) {
+          if (f != changingFilePath && f != constraintFuncChangingFilePath) {
             // var code = File.ReadAllLines($"{workingDir}/{f}");
             dafnyVerifier.runDafny("", tasksListDictionary[f].Arguments.ToList(),
               exprDepth, cnt, -1, -1, $"{remoteFolderPath.Path}/{f}");

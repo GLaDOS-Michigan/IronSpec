@@ -3939,6 +3939,20 @@ namespace Microsoft.Dafny {
       }
     }
 
+    public static IEnumerable<Lemma> AllLemmas(List<TopLevelDecl> declarations) {
+      foreach (var d in declarations) {
+        var cl = d as TopLevelDeclWithMembers;
+        if (cl != null) {
+          foreach (var member in cl.Members) {
+            var fn = member as Lemma;
+            if (fn != null) {
+              yield return fn;
+            }
+          }
+        }
+      }
+    }
+
     public static IEnumerable<Field> AllFields(List<TopLevelDecl> declarations) {
       foreach (var d in declarations) {
         var cl = d as TopLevelDeclWithMembers;
@@ -9064,7 +9078,7 @@ namespace Microsoft.Dafny {
         yield break;
 
       } else if (expr is BinaryExpr bin) {
-        if (bin.ResolvedOp == BinaryExpr.ResolvedOpcode.And) {
+        if (bin.Op == BinaryExpr.Opcode.And) {
           foreach (Expression e in Conjuncts(bin.E0)) {
             yield return e;
           }
