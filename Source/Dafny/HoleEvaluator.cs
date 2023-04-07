@@ -900,6 +900,7 @@ namespace Microsoft.Dafny {
         }
       }
       await dafnyVerifier.startProofTasksAccordingToPriority();
+     dafnyVerifier.clearTasks();
       Console.WriteLine("--- END Is At Least As Weak Pass  -- ");
       Console.WriteLine("--- START Vacuity Pass -- ");
         for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -925,6 +926,8 @@ namespace Microsoft.Dafny {
           }
         }
         await dafnyVerifier.startProofTasksAccordingToPriority();
+             dafnyVerifier.clearTasks();
+
         Console.WriteLine("--- END Vacuity Pass --");
         Console.WriteLine("--- START Full Proof Pass -- ");
         List<int> vacIndex = new List<int>();
@@ -949,6 +952,7 @@ namespace Microsoft.Dafny {
           //  var isWeaker = isDafnyVerifySuccessful(i);  
         }
         await dafnyVerifier.startProofTasksAccordingToPriority();
+        dafnyVerifier.clearTasks();
         Console.WriteLine("--- END Full Proof Pass -- ");
         }
 
