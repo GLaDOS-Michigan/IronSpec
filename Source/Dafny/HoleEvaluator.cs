@@ -31,14 +31,14 @@ namespace Microsoft.Dafny {
   public class HoleEvaluator {
     private string UnderscoreStr = "";
     private static Random random = new Random();
-
+    private Cloner cloner = new Cloner();
     public static string RandomString(int length) {
       const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
       return new string(Enumerable.Repeat(chars, length)
           .Select(s => s[random.Next(s.Length)]).ToArray());
     }
     public ExpressionFinder expressionFinder = null;
-        private Cloner cloner = new Cloner();
+        // private Cloner cloner = new Cloner();
     private List<BitArray> bitArrayList = new List<BitArray>();
     private List<float> executionTimes = new List<float>();
     private List<float> startTimes = new List<float>();
@@ -57,17 +57,20 @@ namespace Microsoft.Dafny {
     public DafnyVerifierClient dafnyVerifier;
 
     private TasksList tasksList = null;
-    private Dictionary<string, VerificationTask> tasksListDictionary = new Dictionary<string, VerificationTask>();
+    private Dictionary<string, VerificationTaskArgs> tasksListDictionary = new Dictionary<string, VerificationTaskArgs>();
     private IncludeParser includeParser = null;
     private List<string> affectedFiles = new List<string>();
 
     public static int validityLemmaNameStartCol = 0;
-
     public static string lemmaForExprValidityString = "";
     private static int lemmaForExprValidityLineCount = 0;
+
+    // public static string lemmaForExprValidityString = "";
+    // private static int lemmaForExprValidityLineCount = 0;
     private void UpdateCombinationResult(int index) {
       var requestList = dafnyVerifier.requestsList[index];
-      foreach (var request in requestList) {
+      for (int i = 0; i < requestList.Count; i++) {
+        var request = requestList[i];
         var position = dafnyVerifier.requestToPostConditionPosition[request];
         var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
         var output = dafnyVerifier.dafnyOutput[request];
@@ -115,7 +118,8 @@ namespace Microsoft.Dafny {
 
     private void UpdateCombinationResultVacAware(int index,bool vac) {
       var requestList = dafnyVerifier.requestsList[index];
-      foreach (var request in requestList) {
+      var request = requestList.Last();
+      // foreach (var request in requestList) {
         var position = dafnyVerifier.requestToPostConditionPosition[request];
         var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
         var output = dafnyVerifier.dafnyOutput[request];
@@ -125,19 +129,21 @@ namespace Microsoft.Dafny {
         var execTime = output.ExecutionTime;
         executionTimes.Add(execTime);
         startTimes.Add(startTime);
-        Result res;
-        if (position != -1) {
+        // Result res;
+        // if (position != -1) {
           var expectedOutput =
             $"{filePath}({position},0): Error: A postcondition might not hold on this return path.";
           var expectedInconclusiveOutputStart =
             $"{filePath}({lemmaStartPosition},{validityLemmaNameStartCol}): Verification inconclusive";
-          // Console.WriteLine($"{index} => {output}");
-          // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
-          // Console.WriteLine($"----------------------------------------------------------------");
-          res = DafnyVerifierClient.IsCorrectOutputForValidityCheck(response, expectedOutput, expectedInconclusiveOutputStart);
-        } else {
-          res = DafnyVerifierClient.IsCorrectOutputForNoErrors(response);
-        }
+        //   // Console.WriteLine($"{index} => {output}");
+        //   // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
+        //   // Console.WriteLine($"----------------------------------------------------------------");
+        //   res = DafnyVerifierClient.IsCorrectOutputForValidityCheck(response, expectedOutput, expectedInconclusiveOutputStart);
+        // } else {
+        //   res = DafnyVerifierClient.IsCorrectOutputForNoErrors(response);
+        // }
+        var res = DafnyVerifierClient.IsCorrectOutput(response, expectedOutput, expectedInconclusiveOutputStart);
+
         if (res != Result.IncorrectProof) {
           // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
           // Console.WriteLine(output);
@@ -154,15 +160,15 @@ namespace Microsoft.Dafny {
           Console.WriteLine("Mutation that Passes = " + index);
           combinationResults[index] = Result.FalsePredicate;
         }
-        break;
+        // break;
       }else if (response.EndsWith($"resolution/type errors detected in {Path.GetFileName(filePath)}\n")) {
           combinationResults[index] = Result.InvalidExpr;
-          break;
+          // break;
         } else {
           combinationResults[index] = Result.IncorrectProof;
-          break;
+          // break;
         }
-      }
+      // }
       expressionFinder.combinationResults[index] = combinationResults[index];
     }
 
@@ -602,34 +608,8 @@ namespace Microsoft.Dafny {
     }
 
     public async Task<bool> EvaluateAfterRemoveFileLine(Program program, Program unresolvedProgram, string removeFileLine, string baseFuncName, int depth) {
-      var fileLineArray = removeFileLine.Split(':');
-      var file = fileLineArray[0];
-      var line = Int32.Parse(fileLineArray[1]);
-      foreach (var kvp in program.ModuleSigs) {
-        foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
-          if (Path.GetFileName(topLevelDecl.tok.filename) == file) {
-            if (topLevelDecl.BodyStartTok.line <= line && line <= topLevelDecl.BodyEndTok.line) {
-              var exprList = Expression.Conjuncts(topLevelDecl.Body).ToList();
-              // Console.WriteLine($"topLevelDecl : {topLevelDecl.FullDafnyName}");
-              var i = -1;
-              for (i = 0; i < exprList.Count - 1; i++) {
-                if (exprList[i].tok.line <= line && line < exprList[i + 1].tok.line) {
-                  break;
-                }
-              }
-              // Console.WriteLine($"{i} {Printer.ExprToString(exprList[i])}");
-              exprList.RemoveAt(i);
-              var body = exprList[0];
-              for (int j = 1; j < exprList.Count; j++) {
-                body = Expression.CreateAnd(body, exprList[j]);
-              }
-              topLevelDecl.Body = body;
-              return await Evaluate(program, unresolvedProgram, topLevelDecl.FullDafnyName, baseFuncName, depth);
-            }
-          }
-        }
-      }
-      return false;
+      var funcName = CodeModifier.Erase(program, removeFileLine);
+      return await Evaluate(program, unresolvedProgram, funcName, baseFuncName, depth);
     }
 
         public void PrintAllLemmas(Program program, string lemmaName) {
@@ -799,22 +779,35 @@ namespace Microsoft.Dafny {
           }
           Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr)}");
         }
-        expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunction);
-        // Console.WriteLine(GetBaseLemmaList(baseFunc, null, constraintExpr));
+        //MERGE
+            expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunction);
+          //   // Console.WriteLine(GetBaseLemmaList(baseFunc, null, constraintExpr));
 
+          //   // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
+          //   desiredFunctionUnresolved = GetFunctionFromUnresolvedClass(unresolvedProgram, funcName);
+          //   // Console.WriteLine("BEFORE");
+          //   if(desiredFunctionUnresolved == null){
+          //     desiredFunctionUnresolved = GetFunction(program, funcName);
+          //   }
+          // //         Console.WriteLine("--Function to Mutate--");
+          // // using (var wr = new System.IO.StringWriter()) {
+          // //   var pr = new Printer(wr);
+          // //   pr.PrintFunction(desiredFunction, 0,false);
+          // //   Console.WriteLine(wr.ToString());
+          // // }
+          // // Console.WriteLine("--------------");
+      //MERGE 
         // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
-        desiredFunctionUnresolved = GetFunctionFromUnresolvedClass(unresolvedProgram, funcName);
-        // Console.WriteLine("BEFORE");
-        if(desiredFunctionUnresolved == null){
-          desiredFunctionUnresolved = GetFunction(program, funcName);
+        desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
+        if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
+          var fileLineList = DafnyOptions.O.HoleEvaluatorRemoveFileLine.Split(',');
+          foreach (var fileLineString in fileLineList) {
+            var fileLineArray = fileLineString.Split(':');
+            var file = fileLineArray[0];
+            var line = Int32.Parse(fileLineArray[1]);
+            CodeModifier.EraseFromPredicate(desiredFunctionUnresolved as Predicate, line);
+          }
         }
-      //         Console.WriteLine("--Function to Mutate--");
-      // using (var wr = new System.IO.StringWriter()) {
-      //   var pr = new Printer(wr);
-      //   pr.PrintFunction(desiredFunction, 0,false);
-      //   Console.WriteLine(wr.ToString());
-      // }
-      // Console.WriteLine("--------------");
         Contract.Assert(desiredFunctionUnresolved != null);
         
         // Console.WriteLine("AFTER");
@@ -961,6 +954,7 @@ namespace Microsoft.Dafny {
 
         for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
                 UpdateCombinationResultVacAware(i,vacIndex.Contains(i));
+                var t = isDafnyVerifySuccessful(i);
         }
     //   // bool foundCorrectExpr = false;
     //   for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -1021,7 +1015,7 @@ namespace Microsoft.Dafny {
       for (int i = 0; i < executionTimes.Count; i++) {
         executionTimesSummary += $"{i}, {executionTimes[i].ToString()}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummaryEli.txt",
             executionTimesSummary);
 
       string startTimesSummary = "";
@@ -1029,7 +1023,7 @@ namespace Microsoft.Dafny {
       for (int i = 0; i < startTimes.Count; i++) {
         startTimesSummary += $"{i}, {(startTimes[i] - startTimes[0]).ToString()}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummaryEli.txt",
             startTimesSummary);
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   var ba = bitArrayList[i];
@@ -1061,6 +1055,7 @@ namespace Microsoft.Dafny {
         Console.WriteLine("proof already goes through and no additional conjunction is needed!");
         return true;
       }
+      await dafnyVerifier.FinalizeCleanup();
       return true;
       List<int> correctExpressionsIndex = new List<int>();
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -1123,7 +1118,7 @@ namespace Microsoft.Dafny {
     }
 
 
-        public async Task<bool> Evaluate(Program program, Program unresolvedProgram, string funcName, string baseFuncName, int depth) {
+     public async Task<bool> Evaluate(Program program, Program unresolvedProgram, string funcName, string baseFuncName, int depth) {
       if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
         return false;
@@ -1223,7 +1218,7 @@ namespace Microsoft.Dafny {
         }
         expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
-        if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != "") {
+        if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
           var fileLineList = DafnyOptions.O.HoleEvaluatorRemoveFileLine.Split(',');
           foreach (var fileLineString in fileLineList) {
             var fileLineArray = fileLineString.Split(':');
@@ -1254,7 +1249,7 @@ namespace Microsoft.Dafny {
       mergedCode.Add("");
       mergedCode.Add(String.Join('\n', workingFuncCode.Skip(workingFunc.EndToken.line)));
 
-      if (constraintFunc.BodyStartTok.Filename != workingFunc.BodyStartTok.Filename) {
+      if (constraintFunc != null && constraintFunc.BodyStartTok.Filename != workingFunc.BodyStartTok.Filename) {
         constraintFuncCode = File.ReadAllText(constraintFunc.BodyStartTok.Filename);
         constraintFuncLineCount = constraintFuncCode.Count(f => (f == '\n'));
       }
@@ -1330,7 +1325,7 @@ namespace Microsoft.Dafny {
       for (int i = 0; i < executionTimes.Count; i++) {
         executionTimesSummary += $"{i}, {executionTimes[i].ToString()}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummaryEli.txt",
             executionTimesSummary);
 
       string startTimesSummary = "";
@@ -1338,7 +1333,7 @@ namespace Microsoft.Dafny {
       for (int i = 0; i < startTimes.Count; i++) {
         startTimesSummary += $"{i}, {(startTimes[i] - startTimes[0]).ToString()}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummaryEli.txt",
             startTimesSummary);
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   var ba = bitArrayList[i];
@@ -1676,9 +1671,9 @@ namespace Microsoft.Dafny {
         foreach (var arg in args) {
           // Console.WriteLine("hereerere "  + arg);
         }
-        var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
-        var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
-        var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
+        // var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+        // var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+        // var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
 
         args.Add("/compile:0");
         dafnyVerifier.runDafny(code, args,

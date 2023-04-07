@@ -21,7 +21,7 @@ namespace Microsoft.Dafny {
   public class ProofEvaluator {
     private string UnderscoreStr = "";
     private static Random random = new Random();
-
+    private Cloner cloner = new Cloner();
     public static string RandomString(int length) {
       const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
       return new string(Enumerable.Repeat(chars, length)
@@ -34,7 +34,7 @@ namespace Microsoft.Dafny {
     private Dictionary<int, Result> combinationResults = new Dictionary<int, Result>();
     public DafnyVerifierClient dafnyVerifier;
     private TasksList tasksList = null;
-    private Dictionary<string, VerificationTask> tasksListDictionary = new Dictionary<string, VerificationTask>();
+    private Dictionary<string, VerificationTaskArgs> tasksListDictionary = new Dictionary<string, VerificationTaskArgs>();
     private IncludeParser includeParser = null;
 
     public static Lemma GetLemma(Program program, string lemmaName) {
@@ -88,7 +88,7 @@ namespace Microsoft.Dafny {
           }
           sep = ", ";
         }
-        Console.WriteLine(str);
+        // Console.WriteLine(str);
       } else {
         combinationResults[index] = Result.IncorrectProof;
       }
@@ -413,34 +413,8 @@ namespace Microsoft.Dafny {
     }
 
     public async Task<bool> EvaluateAfterRemoveFileLine(Program program, string removeFileLine, int depth, int expressionDepth) {
-      var fileLineArray = removeFileLine.Split(':');
-      var file = fileLineArray[0];
-      var line = Int32.Parse(fileLineArray[1]);
-      foreach (var kvp in program.ModuleSigs) {
-        foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
-          if (Path.GetFileName(topLevelDecl.tok.filename) == file) {
-            if (topLevelDecl.BodyStartTok.line <= line && line <= topLevelDecl.BodyEndTok.line) {
-              var exprList = Expression.Conjuncts(topLevelDecl.Body).ToList();
-              // Console.WriteLine($"topLevelDecl : {topLevelDecl.FullDafnyName}");
-              var i = -1;
-              for (i = 0; i < exprList.Count - 1; i++) {
-                if (exprList[i].tok.line <= line && line < exprList[i + 1].tok.line) {
-                  break;
-                }
-              }
-              // Console.WriteLine($"{i} {Printer.ExprToString(exprList[i])}");
-              exprList.RemoveAt(i);
-              var body = exprList[0];
-              for (int j = 1; j < exprList.Count; j++) {
-                body = Expression.CreateAnd(body, exprList[j]);
-              }
-              topLevelDecl.Body = body;
-              return await Evaluate(program, topLevelDecl.FullDafnyName, depth, expressionDepth);
-            }
-          }
-        }
-      }
-      return false;
+      var erasingLemmaName = CodeModifier.Erase(program, removeFileLine);
+      return await Evaluate(program, erasingLemmaName, depth, expressionDepth);
     }
 
     public async Task<bool> Evaluate(Program program, string lemmaName, int depth, int expressionDepth) {
@@ -487,6 +461,7 @@ namespace Microsoft.Dafny {
       }
 
       includeParser = new IncludeParser(program);
+      Console.WriteLine(Printer.StatementToString(baseLemma.Body));
       var filename = includeParser.Normalized(baseLemma.BodyStartTok.Filename);
       dafnyVerifier.InitializeBaseFoldersInRemoteServers(program, includeParser.commonPrefix);
 
@@ -500,39 +475,41 @@ namespace Microsoft.Dafny {
       Dictionary<string, List<Expression>> typeToTriggerDict = new Dictionary<string, List<Expression>>();
       Dictionary<string, HashSet<string>> typeToTriggerDictHashSet = new Dictionary<string, HashSet<string>>();
       foreach (var x in allForallExists) {
-        var trigList = (x as QuantifierExpr).SplitQuantifier;
-        // Console.WriteLine(Printer.ExprToString(x));
-        foreach (var t in trigList) {
-          // Console.WriteLine($"---- {Printer.ExprToString(t)} ----");
-          var attributes = (t as ComprehensionExpr).Attributes;
-          while (attributes != null) {
-            if (attributes.Name == "trigger") {
-              foreach (var arg in attributes.Args) {
-                if (!typeToTriggerDict.ContainsKey(arg.Type.ToString())) {
-                  typeToTriggerDict[arg.Type.ToString()] = new List<Expression>();
-                  typeToTriggerDictHashSet[arg.Type.ToString()] = new HashSet<string>();
-                }
-                if (!typeToTriggerDictHashSet[arg.Type.ToString()].Contains(Printer.ExprToString(arg))) {
-                  typeToTriggerDict[arg.Type.ToString()].Add(arg);
-                  typeToTriggerDictHashSet[arg.Type.ToString()].Add(Printer.ExprToString(arg));
+        if ((x as QuantifierExpr).SplitQuantifier != null) {
+          var trigList = (x as QuantifierExpr).SplitQuantifier;
+          // Console.WriteLine(Printer.ExprToString(x));
+          foreach (var t in trigList) {
+            // Console.WriteLine($"---- {Printer.ExprToString(t)} ----");
+            var attributes = (t as ComprehensionExpr).Attributes;
+            while (attributes != null) {
+              if (attributes.Name == "trigger") {
+                foreach (var arg in attributes.Args) {
+                  if (!typeToTriggerDict.ContainsKey(arg.Type.ToString())) {
+                    typeToTriggerDict[arg.Type.ToString()] = new List<Expression>();
+                    typeToTriggerDictHashSet[arg.Type.ToString()] = new HashSet<string>();
+                  }
+                  if (!typeToTriggerDictHashSet[arg.Type.ToString()].Contains(Printer.ExprToString(arg))) {
+                    typeToTriggerDict[arg.Type.ToString()].Add(arg);
+                    typeToTriggerDictHashSet[arg.Type.ToString()].Add(Printer.ExprToString(arg));
+                  }
                 }
               }
+              attributes = attributes.Prev;
             }
-            attributes = attributes.Prev;
           }
         }
       }
-      foreach (var t in typeToTriggerDict.Keys) {
-        Console.WriteLine("--------------------------------");
-        Console.WriteLine($"{t} {typeToTriggerDict[t].Count}");
-        foreach (var trigger in typeToTriggerDict[t]) {
-          var triggerStr = Printer.ExprToString(trigger);
-          if (DafnyOptions.O.ProofEvaluatorCollectAllTriggerMatches) {
+      if (DafnyOptions.O.ProofEvaluatorCollectAllTriggerMatches) {
+        foreach (var t in typeToTriggerDict.Keys) {
+          // Console.WriteLine("--------------------------------");
+          // Console.WriteLine($"{t} {typeToTriggerDict[t].Count}");
+          foreach (var trigger in typeToTriggerDict[t]) {
+            var triggerStr = Printer.ExprToString(trigger);
             numberOfMatches.Add(triggerStr, 0);
+            // Console.WriteLine(triggerStr);
           }
-          Console.WriteLine(triggerStr);
+          // Console.WriteLine("--------------------------------");
         }
-        Console.WriteLine("--------------------------------");
       }
       // var subLemmas = GetSubLemmas(program, desiredLemma);
       // foreach (var subLemma in subLemmas) {
@@ -564,28 +541,32 @@ namespace Microsoft.Dafny {
         return false;
       }
 
-      Console.WriteLine("Type To Expression Dict:");
-      foreach (var t in typeToExpressionDict.Keys) {
-        Console.WriteLine("--------------------------------");
-        Console.WriteLine($"{t} {typeToExpressionDict[t].Count}");
-        foreach (var expr in typeToExpressionDict[t]) {
-          var exprStr = $"{Printer.ExprToString(expr.expr)}:{expr.depth}";
-          Console.WriteLine(exprStr);
-        }
-        Console.WriteLine("--------------------------------");
-      }
+      // Console.WriteLine("Type To Expression Dict:");
+      // foreach (var t in typeToExpressionDict.Keys) {
+      //   Console.WriteLine("--------------------------------");
+      //   Console.WriteLine($"{t} {typeToExpressionDict[t].Count}");
+      //   foreach (var expr in typeToExpressionDict[t]) {
+      //     var exprStr = $"{Printer.ExprToString(expr.expr)}:{expr.depth}";
+      //     Console.WriteLine(exprStr);
+      //   }
+      //   Console.WriteLine("--------------------------------");
+      // }
       // return true;
-      var revealFinder = new RevealFinder(this);
-      var revealStatements = revealFinder.GetRevealStatements(program);
+      var statements = new List<ExpressionFinder.StatementDepth>();
+      if (expressionDepth <= 1) {
+        var revealFinder = new RevealFinder(this);
+        statements.AddRange(revealFinder.GetRevealStatements(program).AsEnumerable());
+      }
       var lemmaFinder = new LemmaFinder(this);
       var lemmaStatements = lemmaFinder.GetLemmaStatements(program, typeToExpressionDict, expressionDepth);
-      var statements = new List<ExpressionFinder.StatementDepth>();
-      statements.AddRange(revealStatements.AsEnumerable());
       statements.AddRange(lemmaStatements.AsEnumerable());
       var numberOfMatchedExpressions = 0;
       var selectedExpressions = new List<ExpressionFinder.ExpressionDepth>();
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
-        // Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i])} start");
+        Console.WriteLine($"{i} {Printer.ExprToString(expressionFinder.availableExpressions[i].expr)}");
+        if (expressionFinder.availableExpressions[i].depth != expressionDepth) {
+          continue;
+        }
         var matchingTrigger = DoesMatchWithAnyTrigger(expressionFinder.availableExpressions[i].expr, typeToTriggerDict);
         if (i == 0 || matchingTrigger != null) {
           if (i != 0) {
@@ -607,7 +588,7 @@ namespace Microsoft.Dafny {
           Console.WriteLine($"{trigger.Key}\t{trigger.Value}");
         }
       }
-      Console.WriteLine($"totalExpressions: {expressionFinder.availableExpressions.Count}");
+      Console.WriteLine($"totalExpressions: {selectedExpressions.Count}");
       Console.WriteLine($"numberOfMatchedExpressions: {numberOfMatchedExpressions}");
       Console.WriteLine($"numberOfRevealAndLemmaStatements: {statements.Count}");
       // return true;
@@ -628,16 +609,10 @@ namespace Microsoft.Dafny {
       Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: start generatinng expressions and lemmas");
       workingLemma = desiredLemma;
       workingLemmaCode = File.ReadAllLines(workingLemma.BodyStartTok.Filename);
-      if (workingLemma.BodyStartTok.line - 1 != 0) {
-        mergedCode.Add(String.Join('\n', workingLemmaCode.Take(workingLemma.BodyStartTok.line - 2)));
-      }
-      else {
-        mergedCode.Add("");
-      }
-      mergedCode.Add(workingLemmaCode[workingLemma.BodyStartTok.line - 1]);
-      if (workingLemma.BodyStartTok.line < workingLemmaCode.Length) {
-        mergedCode.Add(String.Join('\n', workingLemmaCode.Skip(workingLemma.BodyStartTok.line)));
-      }
+      mergedCode.Add(String.Join('\n', workingLemmaCode.Take(workingLemma.tok.line - 1)));
+      // placeholder for workingLemma
+      mergedCode.Add("");
+      mergedCode.Add(String.Join('\n', workingLemmaCode.Skip(workingLemma.EndToken.line)));
 
       PrintExprAndCreateProcess(program, new List<ExprStmtUnion>(), 0);
       int cnt = 1;
@@ -722,6 +697,7 @@ namespace Microsoft.Dafny {
       // if that is a correct predicate, it means the proof already 
       // goes through and no additional conjunction is needed.
       if (combinationResults[0] == Result.CorrectProof || combinationResults[0] == Result.CorrectProofByTimeout) {
+        Console.WriteLine(dafnyVerifier.dafnyOutput[dafnyVerifier.requestsList[0][0]].ToString());
         Console.WriteLine("proof already goes through!");
         return true;
       }
@@ -735,49 +711,63 @@ namespace Microsoft.Dafny {
     public void PrintExprAndCreateProcess(Program program, List<ExprStmtUnion> exprStmtList, int cnt) {
       Contract.Requires(workingLemma != null);
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
+      if (cnt % 5000 == 1) {
+        Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: {cnt}");
+      }
       string signature = $"{cnt} ";
       string sep = "";
       foreach (var exprStmt in exprStmtList) {
         if (exprStmt.Expr != null) {
-          signature += sep + Printer.ExprToString(exprStmt.Expr);
+          signature += sep + $"{Printer.ExprToString(exprStmt.Expr)}:{exprStmt.Depth}";
         } else {
-          signature += sep + Printer.StatementToString(exprStmt.Stmt);
+          signature += sep + $"{Printer.StatementToString(exprStmt.Stmt)}:{exprStmt.Depth}";
         }
         sep = ", ";
       }
-      // Console.WriteLine(signature);
+      Console.WriteLine(signature);
 
       var lemmaName = workingLemma.FullDafnyName;
 
-      var varDeclStmtStringList = new List<string>();
+      var varDeclStmtList = new List<Statement>();
       for (int i = 0; i < exprStmtList.Count; i++) {
         if (exprStmtList[i].Expr != null) {
           List<LocalVariable> localVarList = new List<LocalVariable>();
           List<Expression> lhss = new List<Expression>();
           List<AssignmentRhs> rhss = new List<AssignmentRhs>();
           localVarList.Add(new LocalVariable(workingLemma.tok, workingLemma.tok, $"temp_{cnt}_{i}", new InferredTypeProxy(), true));
-          lhss.Add(new IdentifierExpr(workingLemma.tok, $"temp_{cnt}_${i}"));
+          lhss.Add(new IdentifierExpr(workingLemma.tok, $"temp_{cnt}_{i}"));
           rhss.Add(new ExprRhs(exprStmtList[i].Expr));
           UpdateStmt updateStmt = new UpdateStmt(workingLemma.tok, workingLemma.tok, lhss, rhss);
           VarDeclStmt varDeclStmt = new VarDeclStmt(workingLemma.tok, workingLemma.tok, localVarList, updateStmt);
-          varDeclStmtStringList.Add(Printer.StatementToString(varDeclStmt));
+          varDeclStmtList.Add(varDeclStmt);
         }
         else {
-          varDeclStmtStringList.Add(Printer.StatementToString(exprStmtList[i].Stmt));
+          varDeclStmtList.Add(exprStmtList[i].Stmt);
         }
       }
 
       var changingFilePath = includeParser.Normalized(workingLemma.BodyStartTok.Filename);
-      var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
+      // var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
 
-      var modifyingLineBackup = mergedCode[1];
-      mergedCode[1] = mergedCode[1].Insert(workingLemma.BodyStartTok.col, String.Join('\n', varDeclStmtStringList));
+      // add new statements to the beginning of working lemma
+      var clonedWorkingLemma = cloner.CloneMethod(workingLemma);
+      CodeModifier.InsertIntoBlockStmt((clonedWorkingLemma as Lemma).Body, varDeclStmtList, DafnyOptions.O.ProofEvaluatorInsertionPoint);
+      using (var wr = new System.IO.StringWriter()) {
+        var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
+        pr.PrintMethod(clonedWorkingLemma, 0, false);
+        mergedCode[1] = Printer.ToStringWithoutNewline(wr);
+      }
+      // mergedCode[1] = Printer
       var newCode = String.Join('\n', mergedCode);
-      mergedCode[1] = modifyingLineBackup;
+      
+      //restore workingLemma to previous state
+      // for (int i = 0; i < varDeclStmtList.Count; i++) {
+      //   workingLemma.Body.Body.RemoveAt(0);
+      // }
 
       dafnyVerifier.runDafnyProofCheck(newCode, tasksListDictionary[changingFilePath].Arguments.ToList(),
-              exprStmtList, cnt, $"{remoteFolderPath.Path}/{changingFilePath}",
-              workingLemma.CompileName);
+              exprStmtList, cnt, changingFilePath,
+              workingLemma.FullDafnyName);
     }
   }
 }
