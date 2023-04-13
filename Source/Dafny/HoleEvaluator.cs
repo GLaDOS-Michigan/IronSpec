@@ -115,7 +115,18 @@ namespace Microsoft.Dafny {
       expressionFinder.combinationResults[index] = combinationResults[index];
     }
 
-
+public async Task<bool>writeOutputs(int index)
+{
+    var requestList = dafnyVerifier.requestsList[index];
+    var request = requestList.Last();
+    var position = dafnyVerifier.requestToPostConditionPosition[request];
+    var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
+    var output = dafnyVerifier.dafnyOutput[request];
+    var response = output.Response;
+    if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
+            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
+    return true;
+}
     private void UpdateCombinationResultVacAware(int index,bool vac) {
       var requestList = dafnyVerifier.requestsList[index];
       var request = requestList.Last();
@@ -129,6 +140,7 @@ namespace Microsoft.Dafny {
         var execTime = output.ExecutionTime;
         executionTimes.Add(execTime);
         startTimes.Add(startTime);
+        
         // Result res;
         // if (position != -1) {
           var expectedOutput =
@@ -956,11 +968,17 @@ namespace Microsoft.Dafny {
         Console.WriteLine("--- END Full Proof Pass -- ");
         }
 
+
         for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
                 UpdateCombinationResultVacAware(i,vacIndex.Contains(i));
+                writeOutputs(i);
                 var t = isDafnyVerifySuccessful(i);
         }
-    //   // bool foundCorrectExpr = false;
+                Console.WriteLine("--- Finish Test -- ");
+
+            dafnyVerifier.Cleanup();
+
+      bool foundCorrectExpr = false;
     //   for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
     //     UpdateCombinationResult(i);
     //     // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
@@ -1627,6 +1645,7 @@ namespace Microsoft.Dafny {
               int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
               code = code.Insert(lemmaLoc-1,"/*"+"\n");
               code = code.Insert(code.IndexOf("}\n\n",lemmaLoc)-1,"*/"+"\n");
+              code = code.Insert(code.IndexOf("}\n\n",lemmaLoc)-1,"*/"+"\n");
             }
           }
           if(isWeaker){
@@ -1877,7 +1896,39 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       int basePredicatePosition = 0;
       int basePredicateStartPosition = 0;
       var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{lemmaName}_{cnt}";
+/// apply mutation to spec //
+    using (var wrSpec = new System.IO.StringWriter()) {
+      var prSpec = new Printer(wrSpec, DafnyOptions.PrintModes.NoIncludes);
+      prSpec.UniqueStringBeforeUnderscore = UnderscoreStr;
+            func.Body = expr.expr;
+        
+          var includesList = "";
+        foreach (var q in program.DefaultModuleDef.Includes)
+        {
+          // Console.WriteLine(includeParser.Normalized(q.IncludedFilename));
+          includesList += "include \"" +includeParser.Normalized(q.IncludedFilename) + "\"\n";
 
+        }
+          prSpec.PrintProgram(program, true);
+          code += $"// #{cnt}\n";
+          code += $"// {Printer.ExprToString(expr.expr)}\n" + Printer.ToStringWithoutNewline(wrSpec) + "\n\n";
+           int moduleIndex = code.IndexOf("module ");
+          //  code = code.Insert(moduleIndex-1,"*//");
+           code = code.Insert(moduleIndex,includesList);
+          // Console.WriteLine("code = \n" + code);
+          var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+          var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+          // var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
+          // var remoteFilePath = dafnyVerifier.baseFoldersPath[cnt % dafnyVerifier.serversList.Count].Path;
+          var serverIndex = cnt % dafnyVerifier.serversList.Count;
+          var localizedCntIndex = (cnt-serverIndex)/dafnyVerifier.serversList.Count;
+          var remoteFilePath = dafnyVerifier.getTempFilePath()[serverIndex][localizedCntIndex].Path;
+          dafnyVerifier.WriteToRemoteFile(code, cnt, $"{remoteFilePath}/{constraintFuncChangingFilePath}");
+          
+          if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
+            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}NotAtLeastAsWeak_{cnt}.dfy", code);
+    }
+/// end add mutation
         using (var wr = new System.IO.StringWriter()) {
           var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
           pr.UniqueStringBeforeUnderscore = UnderscoreStr;
@@ -1885,7 +1936,16 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       
           pr.PrintProgram(proofProg, true);
           code = $"// #{cnt}\n";
-          code += $"// {Printer.ExprToString(expr.expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+          code += $"// {Printer.ExprToString(expr.expr)}\n" +includesList +"/*"+ Printer.ToStringWithoutNewline(wr) + "\n\n";
+          // Console.WriteLine("code = \n" + code);
+          int moduleIndex = code.IndexOf("module ");
+           code = code.Insert(moduleIndex-1,"*/");
+        //   var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+        // var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+        // var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
+        //   dafnyVerifier.WriteToRemoteFile("test", 0, $"{remoteFolderPath.Path}/{constraintFuncChangingFilePath}");
+        //   int fnIndex = code.IndexOf("predicate " + funcName);
+        //   int fnIndex1 = code.IndexOf("{",fnIndex);
 
           int fnIndex = code.IndexOf("predicate " + funcName);
           int fnIndex1 = code.IndexOf("{",fnIndex);
