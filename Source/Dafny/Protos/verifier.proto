@@ -32,12 +32,17 @@ message CloneAndVerifyRequest {
   string modifyingFile = 3;
   // List of arguments to be passed to Dafny
   repeated string arguments = 4;
+  // How long should it wait for the Dafny request? 
+  // This value will be given to `timeout` command in Linux (e.g. 10s, 1m)
+  string timeout = 5;
 }
 
 message TmpFolder {
   // Path to the temporary folder
   string path = 1;
   string modifyingFile = 2;
+  // changes the owner of the created directory (if specified)
+  string owner = 3;
 }
 
 // Three modes:
@@ -59,6 +64,9 @@ message VerificationRequest {
   string path = 2;
   // List of arguments to be passed to Dafny
   repeated string arguments = 3;
+  // How long should it wait for the Dafny request? 
+  // This value will be given to `timeout` command in Linux (e.g. 10s, 1m)
+  string timeout = 4;
 }
 
 // In case the response of CloneAndVerifyRequest is not deleting the
@@ -67,7 +75,5 @@ message VerificationResponse {
   // Output of Dafny
   string response = 1;
   string fileName = 2;
-  float startTime = 3;
-  float executionTime = 4;
+  uint64 executionTimeInMs = 3;
 }
-

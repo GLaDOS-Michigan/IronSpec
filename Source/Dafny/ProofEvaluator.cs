@@ -66,10 +66,10 @@ namespace Microsoft.Dafny {
       var output = dafnyVerifier.dafnyOutput[request[0]];
       var response = output.Response;
       var filePath = output.FileName;
-      var startTime = output.StartTime;
-      var execTime = output.ExecutionTime;
-      executionTimes.Add(execTime);
-      startTimes.Add(startTime);
+      // var startTime = output.StartTime;
+var execTime = output.ExecutionTimeInMs;
+        executionTimes.Add(execTime);
+      // startTimes.Add(startTime);
       // Console.WriteLine($"{index} => {output}");
       // Console.WriteLine($"{output.EndsWith("0 errors\n")} {output.EndsWith($"resolution/type errors detected in {fileName}.dfy\n")}");
       // Console.WriteLine($"----------------------------------------------------------------");

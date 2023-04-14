@@ -76,10 +76,10 @@ namespace Microsoft.Dafny {
         var output = dafnyVerifier.dafnyOutput[request];
         var response = output.Response;
         var filePath = output.FileName;
-        var startTime = output.StartTime;
-        var execTime = output.ExecutionTime;
+        // var startTime = output.StartTime;
+var execTime = output.ExecutionTimeInMs;
         executionTimes.Add(execTime);
-        startTimes.Add(startTime);
+        // startTimes.Add(startTime);
         Result res;
         if (position != -1) {
           var expectedOutput =
@@ -136,10 +136,10 @@ public async Task<bool>writeOutputs(int index)
         var output = dafnyVerifier.dafnyOutput[request];
         var response = output.Response;
         var filePath = output.FileName;
-        var startTime = output.StartTime;
-        var execTime = output.ExecutionTime;
+        // var startTime = output.StartTime;
+var execTime = output.ExecutionTimeInMs;
         executionTimes.Add(execTime);
-        startTimes.Add(startTime);
+        // startTimes.Add(startTime);
         
         // Result res;
         // if (position != -1) {
@@ -1922,7 +1922,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           // var remoteFilePath = dafnyVerifier.baseFoldersPath[cnt % dafnyVerifier.serversList.Count].Path;
           var serverIndex = cnt % dafnyVerifier.serversList.Count;
           var localizedCntIndex = (cnt-serverIndex)/dafnyVerifier.serversList.Count;
-          var remoteFilePath = dafnyVerifier.getTempFilePath()[serverIndex][localizedCntIndex].Path;
+          var remoteFilePath = dafnyVerifier.getTempFilePath()[serverIndex][localizedCntIndex+1].Path;
           dafnyVerifier.WriteToRemoteFile(code, cnt, $"{remoteFilePath}/{constraintFuncChangingFilePath}");
           
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
@@ -1970,6 +1970,13 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         }
          args.Add("/proc:*"+lemmaName+"*");
         args.Add("/compile:0");
+          var changingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
+          var constraintFuncChangingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
+          // var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
+          var serverIndexLemma = cnt % dafnyVerifier.serversList.Count;
+          var localizedCntIndexLemma = (cnt-serverIndexLemma)/dafnyVerifier.serversList.Count;
+          var remoteFilePathLemma = dafnyVerifier.getTempFilePath()[serverIndexLemma][localizedCntIndexLemma+1].Path;
+          // Console.WriteLine("remote = " + remoteFilePathLemma);
         dafnyVerifier.runDafny(code, args,
             expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,"");
 
@@ -2086,10 +2093,10 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       var output = dafnyVerifier.dafnyOutput[request];
       var response = output.Response;
       var filePath = output.FileName;
-      var startTime = output.StartTime;
-      var execTime = output.ExecutionTime;
-      executionTimes.Add(execTime);
-      startTimes.Add(startTime);
+      // var startTime = output.StartTime;
+      var execTime = output.ExecutionTimeInMs;
+        executionTimes.Add(execTime);
+      // startTimes.Add(startTime);
       var expectedOutput =
         $"{filePath}({position},0): Error: A postcondition might not hold on this return path.";
       var expectedInconclusiveOutputStart =
@@ -2119,10 +2126,10 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       var output = dafnyVerifier.dafnyOutput[request];
       var response = output.Response;
       var filePath = output.FileName;
-      var startTime = output.StartTime;
-      var execTime = output.ExecutionTime;
-      executionTimes.Add(execTime);
-      startTimes.Add(startTime);
+      // var startTime = output.StartTime;
+      var execTime = output.ExecutionTimeInMs;
+        executionTimes.Add(execTime);
+      // startTimes.Add(startTime);
       return response.Contains("parse errors") || response.Contains("resolution/type errors") || response.Contains("Error: arguments");
   }
 
