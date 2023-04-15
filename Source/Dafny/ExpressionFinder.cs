@@ -438,6 +438,7 @@ namespace Microsoft.Dafny {
           // return forallExprs;
         }else if(equalExprToCheck is ExistsExpr){
           Console.WriteLine(" ExistsExpr = " + equalExprToCheck);
+          currentExperssions = addExistsMutations(program,decl,expressions);
           return currentExperssions;
         }else{ //Assume Binary Expr
                   Console.WriteLine(" expr = " + equalExprToCheck);
@@ -473,6 +474,29 @@ namespace Microsoft.Dafny {
           return forallExprs;
     }
 
+    public List<ExpressionDepth> addExistsMutations(Program program, MemberDecl decl, IEnumerable<ExpressionDepth> expressions)
+    {
+      List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
+      var desiredFunction = decl as Function;
+      var equalExprToCheck = desiredFunction.Body;
+      var e = equalExprToCheck as ExistsExpr;
+      Console.WriteLine(" exists Term= " + Printer.ExprToString(e.Term));
+      List<Expression> conjuncts = Expression.Conjuncts(e.Term as BinaryExpr).ToList();
+      var be = e.LogicalBody() as BinaryExpr;
+      currentExperssions = getMutatedExprs(program,desiredFunction,e.Term as BinaryExpr);
+                List<ExpressionDepth> existsExpr = new List<ExpressionDepth>();
+
+      foreach (ExpressionDepth ee in currentExperssions){
+        ExistsExpr q;
+              ResolvedCloner cloner = new ResolvedCloner();
+          var newVars = e.BoundVars.ConvertAll(cloner.CloneBoundVar);
+
+        q = new ExistsExpr(e.tok, e.BodyEndTok, newVars, e.Range, ee.expr, e.Attributes);
+        // ee = q;
+        existsExpr.Add(new ExpressionDepth(q,1));
+      }
+          return existsExpr;
+    }
 
 
     public void CalcDepthOneAvailableExpresssions(Program program, MemberDecl decl, IEnumerable<ExpressionDepth> expressions) {

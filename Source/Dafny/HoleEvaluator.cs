@@ -943,7 +943,7 @@ var execTime = output.ExecutionTimeInMs;
         Console.WriteLine("--- END Vacuity Pass --");
         Console.WriteLine("--- START Full Proof Pass -- ");
         List<int> vacIndex = new List<int>();
-        if(unresolvedProofProgram == null){
+        // if(unresolvedProofProgram == null){
         
         for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
             var isVacuous = isDafnyVerifySuccessful(i);
@@ -957,16 +957,19 @@ var execTime = output.ExecutionTimeInMs;
               Console.WriteLine("Failed Afer 2nd PASS:  Index(" + i + ") :: isVacuous");
             }else{
                desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
+                if(unresolvedProofProgram != null){
+                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
+              }else{
               // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
               PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
-          
+              }
             }
           //  var isWeaker = isDafnyVerifySuccessful(i);  
         }
         await dafnyVerifier.startProofTasksAccordingToPriority();
         dafnyVerifier.clearTasks();
         Console.WriteLine("--- END Full Proof Pass -- ");
-        }
+        // }
 
 
         for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -1543,12 +1546,21 @@ var execTime = output.ExecutionTimeInMs;
             }
           }
         }
+        if(topLevelDecl is DatatypeDecl)
+        {
+          var cd = topLevelDecl as DatatypeDecl;
+          foreach (var member in cd.Members) {
+            if ($"{cd.FullDafnyName}.{member.Name}" == funcName) {
+              return member as Function;
+            }
+          }
+        }
       }
       return null;
     }
 
     public static Function GetFunctionFromUnresolved(Program program, string funcName) {
-      int index = funcName.LastIndexOf('.');
+      int index = funcName.IndexOf('.');
       string moduleName = funcName.Remove(index);
       foreach (var topLevelDecl in program.DefaultModuleDef.TopLevelDecls) {
         if (topLevelDecl.FullDafnyName == moduleName) {
@@ -1789,7 +1801,12 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           code = $"// #{cnt}\n";
           code += $"// {Printer.ExprToString(expr.expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
           
-          int fnIndex = code.IndexOf("predicate " + funcName);
+          int fnIndex = code.IndexOf("predicate " + funcName + "(");
+          // Console.WriteLine(fnIndex);
+          if(fnIndex == -1)
+          {
+            fnIndex = code.IndexOf("predicate " + funcName);
+          }
           code = code.Insert(fnIndex-1,basePredicateString+"\n");
           // if(!includeProof){
           //   if(moduleName != null){
@@ -1886,9 +1903,9 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       }
     }else{
       Console.WriteLine("Mutation(proof) -> " + $"{cnt}" + ": " + $"{Printer.ExprToString(expr.expr)}");
-       string code = "";
-        string proofCode = "";
-          var lemmaName = lemma.Name;
+      string code = "";
+      string proofCode = "";
+      var lemmaName = lemma.Name;
       var funcName = func.Name;
 
       int lemmaForExprValidityPosition = 0;
@@ -1955,6 +1972,13 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
 
           code = code.Insert(fnIndex2-1,$"*/ \n");
             // Console.WriteLine(code);
+
+          if((vacTest && includeProof)){
+            int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
+            int lemmaLocEns = code.IndexOf("{",lemmaLoc);
+            // Console.WriteLine("here = " + lemmaLocEns);
+            code = code.Insert(lemmaLocEns-1,"ensures false;\n");
+          }
 
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
             File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{lemmaName}_{cnt}.dfy", code);
@@ -2087,7 +2111,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
 
      public Boolean isDafnyVerifySuccessful(int i)
   {
-    var request = dafnyVerifier.requestsList[i].First();
+    var request = dafnyVerifier.requestsList[i].Last();
       var position = dafnyVerifier.requestToPostConditionPosition[request];
       var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
       var output = dafnyVerifier.dafnyOutput[request];
