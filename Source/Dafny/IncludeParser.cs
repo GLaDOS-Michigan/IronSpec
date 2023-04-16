@@ -34,10 +34,16 @@ namespace Microsoft.Dafny {
       var directoryList = path.Split('/').ToList();
       for (int i = 0; i < directoryList.Count; i++) {
         if (directoryList[i] == "..") {
-          directoryList.RemoveAt(i - 1);
-          directoryList.RemoveAt(i - 1);
-          i -= 2;
+          // directoryList.RemoveAt(i - 1);
+          // directoryList.RemoveAt(i - 1);
+          // i -= 2;
         }
+       if (directoryList[i] == "..") {
+          for(int j = 0; j < i; j++){
+            directoryList.RemoveAt(0);
+          }
+          break;
+       }
       }
       return String.Join('/', directoryList);
     }

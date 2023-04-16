@@ -1949,8 +1949,39 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         using (var wr = new System.IO.StringWriter()) {
           var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
           pr.UniqueStringBeforeUnderscore = UnderscoreStr;
-          func.Body = expr.expr;
-      
+          // func.Body = expr.expr;
+      var constraintFuncChangingFilePathLemmaTest = includeParser.Normalized(lemma.BodyStartTok.Filename);
+      // var constraintFuncChangingFilePathLemmaTestList = path.Split('/').ToList();
+        var includesList = "";
+      foreach (var q in proofProg.DefaultModuleDef.Includes)
+      {
+        // Console.WriteLine(includeParser.Normalized(q.IncludedFilename));
+        var includesPath = includeParser.Normalized(q.IncludedFilename);
+        var constraintFuncChangingFilePathLemmaTestList = constraintFuncChangingFilePathLemmaTest.Split('/').ToList();
+
+        var includesPathList = includesPath.Split('/').ToList();
+        // if(includesPath)
+        var minLen = Math.Min(includesPathList.Count,constraintFuncChangingFilePathLemmaTestList.Count);
+        var normalizedval = 0;
+        for (int i = 0; i<minLen;i++){
+          if(includesPathList[i] == constraintFuncChangingFilePathLemmaTestList[i]){
+            // includesPathList.RemoveAt(i);
+            // constraintFuncChangingFilePathLemmaTestList.RemoveAt(i);
+            normalizedval++;
+          }
+        }
+        if(normalizedval > 0){
+          for(int i = 0; i < normalizedval;i++)
+          {
+            includesPathList.RemoveAt(0);
+          }
+        }
+        includesPath = String.Join('/', includesPathList);
+        includesList += "include \"" +includesPath + "\"\n";
+
+      }
+
+
           pr.PrintProgram(proofProg, true);
           code = $"// #{cnt}\n";
           code += $"// {Printer.ExprToString(expr.expr)}\n" +includesList +"/*"+ Printer.ToStringWithoutNewline(wr) + "\n\n";
