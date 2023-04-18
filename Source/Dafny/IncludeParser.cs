@@ -27,6 +27,20 @@ namespace Microsoft.Dafny {
       this.program = program;
       CreateIncludeGraph();
     }
+    public string NormalizedTo(string baseName, string path)
+    {
+      var samplesLocal = new List<string>();
+      baseName = baseName.Remove(baseName.LastIndexOf("/"));
+      var localPath = path.Remove(path.LastIndexOf("/"));
+      samplesLocal.Add(baseName);
+      samplesLocal.Add(localPath);
+      var localCommonPrefix = new string(
+        samplesLocal.First().Substring(0, samplesLocal.Min(s => s.Length))
+        .TakeWhile((c, i) => samplesLocal.All(s => s[i] == c)).ToArray());
+      // commonPrefixLength = commonPrefix.Length;
+      var updatedPath = path.Remove(0, localCommonPrefix.Length+1);
+      return updatedPath;
+    }
 
     public string Normalized(string path)
     {
@@ -34,16 +48,16 @@ namespace Microsoft.Dafny {
       var directoryList = path.Split('/').ToList();
       for (int i = 0; i < directoryList.Count; i++) {
         if (directoryList[i] == "..") {
-          // directoryList.RemoveAt(i - 1);
-          // directoryList.RemoveAt(i - 1);
-          // i -= 2;
+          directoryList.RemoveAt(i - 1);
+          directoryList.RemoveAt(i - 1);
+          i -= 2;
         }
-       if (directoryList[i] == "..") {
-          for(int j = 0; j < i; j++){
-            directoryList.RemoveAt(0);
-          }
-          break;
-       }
+      //  if (directoryList[i] == "..") {
+      //     for(int j = 0; j < i; j++){
+      //       directoryList.RemoveAt(0);
+      //     }
+      //     break;
+      //  }
       }
       return String.Join('/', directoryList);
     }
@@ -56,6 +70,13 @@ namespace Microsoft.Dafny {
         commonPrefixLength = commonPrefix.Length;
         return;
       }
+
+      if(DafnyOptions.O.ProofLocation != null)
+      {
+        Console.WriteLine(DafnyOptions.O.ProofLocation);
+        samples.Add(DafnyOptions.O.ProofLocation);
+      }
+
       foreach (var file in program.DefaultModuleDef.Includes) {
         samples.Add(file.CanonicalPath);
       }

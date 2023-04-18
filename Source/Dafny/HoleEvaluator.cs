@@ -745,10 +745,11 @@ var execTime = output.ExecutionTimeInMs;
         foreach (var file in includeParser.GetListOfAffectedFilesBy(filename)) {
           affectedFiles.Add(file);
         }
-        // dafnyVerifier.InitializeBaseFoldersInRemoteServers(program, includeParser.commonPrefix);
-        // affectedFiles.Add(filename);
-        // affectedFiles = affectedFiles.Distinct().ToList();
+
       if(proofProg != null){
+        dafnyVerifier.InitializeBaseFoldersInRemoteServers(proofProg, includeParser.commonPrefix);
+        affectedFiles.Add(filename);
+        affectedFiles = affectedFiles.Distinct().ToList();
         Lemma desiredLemmm = GetLemma(proofProg, lemmaName);
               if (desiredLemmm == null) {
         Console.WriteLine($"couldn't find function {desiredLemmm}. List of all lemmas:");
@@ -764,6 +765,10 @@ var execTime = output.ExecutionTimeInMs;
         }
 
 
+      }else{
+        dafnyVerifier.InitializeBaseFoldersInRemoteServers(program, includeParser.commonPrefix);
+        affectedFiles.Add(filename);
+        affectedFiles = affectedFiles.Distinct().ToList();
       }
 
       
@@ -1797,6 +1802,15 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         //   Console.WriteLine(wr1.ToString());
         // }
         // Console.WriteLine("--------------");
+         var includesList = "";
+      foreach (var q in program.DefaultModuleDef.Includes)
+      {
+        // Console.WriteLine(includeParser.Normalized(q.IncludedFilename));
+        includesList += "include \"" +includeParser.NormalizedTo(program.FullName,q.IncludedFilename) + "\"\n";
+        // var test = includeParser.NormalizedTo(program.FullName,q.IncludedFilename);
+
+      }
+
           pr.PrintProgram(program, true);
           code = $"// #{cnt}\n";
           code += $"// {Printer.ExprToString(expr.expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
@@ -1922,8 +1936,9 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           var includesList = "";
         foreach (var q in program.DefaultModuleDef.Includes)
         {
+          var test = includeParser.NormalizedTo(program.FullName,q.IncludedFilename);
           // Console.WriteLine(includeParser.Normalized(q.IncludedFilename));
-          includesList += "include \"" +includeParser.Normalized(q.IncludedFilename) + "\"\n";
+          includesList += "include \"" +test + "\"\n";
 
         }
           prSpec.PrintProgram(program, true);
@@ -1957,6 +1972,8 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       {
         // Console.WriteLine(includeParser.Normalized(q.IncludedFilename));
         var includesPath = includeParser.Normalized(q.IncludedFilename);
+        var test = includeParser.NormalizedTo(proofProg.FullName,q.IncludedFilename);
+
         var constraintFuncChangingFilePathLemmaTestList = constraintFuncChangingFilePathLemmaTest.Split('/').ToList();
 
         var includesPathList = includesPath.Split('/').ToList();
@@ -1976,8 +1993,10 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             includesPathList.RemoveAt(0);
           }
         }
-        includesPath = String.Join('/', includesPathList);
-        includesList += "include \"" +includesPath + "\"\n";
+        // includesPath = String.Join('/', includesPathList);
+        // includesList += "include \"" +includesPath + "\"\n";
+          includesList += "include \"" +test + "\"\n";
+
 
       }
 
