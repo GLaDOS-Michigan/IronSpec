@@ -751,7 +751,7 @@ var execTime = output.ExecutionTimeInMs;
         affectedFiles.Add(filename);
         affectedFiles = affectedFiles.Distinct().ToList();
         Lemma desiredLemmm = GetLemma(proofProg, lemmaName);
-              if (desiredLemmm == null) {
+      if (desiredLemmm == null) {
         Console.WriteLine($"couldn't find function {desiredLemmm}. List of all lemmas:");
         PrintAllLemmas(proofProg, lemmaName);
         return false;
@@ -2042,7 +2042,9 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             args.Add(arg);
           }
         }
+        if(vacTest){
          args.Add("/proc:*"+lemmaName+"*");
+        }
         args.Add("/compile:0");
           var changingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
           var constraintFuncChangingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
