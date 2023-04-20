@@ -12,6 +12,7 @@ service DafnyVerifierService {
   rpc CreateTmpFolder(CreateDir) returns (TmpFolder) {}
   rpc RemoveFolder(TmpFolder) returns (Empty) {}
   rpc DuplicateFolder(TmpFolder) returns (TmpFolder) {}
+  rpc WriteToRemoteFile(VerificationRequest) returns (Empty) {}
 }
 
 message CreateDir {

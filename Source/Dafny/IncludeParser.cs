@@ -66,11 +66,13 @@ namespace Microsoft.Dafny {
     {
       var samples = new List<string>();
       if (program.DefaultModuleDef.Includes.Count == 0) {
-        commonPrefix = Path.GetDirectoryName(program.FullName);
+        // commonPrefix = Path.GetDirectoryName(program.FullName);
+        commonPrefix = Path.GetDirectoryName(program.FullName) + "/";
         commonPrefixLength = commonPrefix.Length;
         return;
+      }else{
+            samples.Add(program.FullName);
       }
-
       if(DafnyOptions.O.ProofLocation != null)
       {
         Console.WriteLine(DafnyOptions.O.ProofLocation);

@@ -29,9 +29,9 @@ namespace Microsoft.Dafny {
     private List<Channel> channelsList = new List<Channel>();
     private int sentRequests;
     private List<string> ServerIpPortList = new List<string>();
-    private List<DafnyVerifierService.DafnyVerifierServiceClient> serversList =
+    public List<DafnyVerifierService.DafnyVerifierServiceClient> serversList =
       new List<DafnyVerifierService.DafnyVerifierServiceClient>();
-    private List<TmpFolder> baseFoldersPath = new List<TmpFolder>();
+    public List<TmpFolder> baseFoldersPath = new List<TmpFolder>();
     private List<List<TmpFolder>> temporaryFoldersList = new List<List<TmpFolder>>();
     private List<AsyncUnaryCall<Empty>> outstandingCleanupTasks = new List<AsyncUnaryCall<Empty>>();
     private List<Queue<IMessage>> tasksQueuePerDepth = new List<Queue<IMessage>>();
@@ -333,6 +333,21 @@ public void clearTasks()
       else {
         throw new NotSupportedException($"invalid request type : {request.ToString()}");
       }
+    }
+
+    public List<List<TmpFolder>> getTempFilePath()
+    {
+      return temporaryFoldersList;
+    }
+    
+    public Boolean WriteToRemoteFile(string code, int cnt, string remoteFilePath)
+    {
+      var serverId = cnt % serversList.Count;
+      VerificationRequest request = new VerificationRequest();
+      request.Code = code;
+      request.Path = remoteFilePath;
+      Empty response = serversList[serverId].WriteToRemoteFile(request);
+      return true;
     }
     public void runDafny(string code, List<string> args, ExpressionFinder.ExpressionDepth exprDepth,
         int cnt, int postConditionPos, int lemmaStartPos, string remoteFilePath) {

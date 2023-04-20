@@ -1483,7 +1483,7 @@ var execTime = output.ExecutionTimeInMs;
         foreach (var decl in moduleDef.TopLevelDecls) {
           if (decl.ToString() == type.ToString()) {
             var moduleName = GetFullModuleName(moduleDef);
-            return (moduleName == "") ? type.ToString() : (moduleName + "." + type.ToString());
+            return (moduleName == "" || moduleName == moduleDef.FullName) ? type.ToString() : (moduleName + "." + type.ToString());
           }
         }
         if (moduleDef.Name != "_module") {
@@ -1628,7 +1628,7 @@ var execTime = output.ExecutionTimeInMs;
         string code = "";
         string proofCode = "";
         using (var wr = new System.IO.StringWriter()) {
-          var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
+          var pr = new Printer(wr, DafnyOptions.PrintModes.NoIncludes);
           pr.UniqueStringBeforeUnderscore = UnderscoreStr;
           // if (expr.HasCardinality) {
           //   func.Body = Expression.CreateAnd(expr, func.Body);
@@ -1643,10 +1643,20 @@ var execTime = output.ExecutionTimeInMs;
       //   pr1.PrintFunction(func, 0,false);
       //   Console.WriteLine(wr1.ToString());
       // }
-      // Console.WriteLine("--------------");
+      var includesList = "";
+      foreach (var q in program.DefaultModuleDef.Includes)
+      {
+        // Console.WriteLine(includeParser.Normalized(q.IncludedFilename));
+        includesList += "include \"" +includeParser.Normalized(q.IncludedFilename) + "\"\n";
+
+      }
+            // Console.WriteLine("--------------\n");
+
           pr.PrintProgram(program, true);
+          // Console.WriteLine("----\n" + Printer.ModuleDefinitionToString(program.DefaultModuleDef,DafnyOptions.PrintModes.Everything));
+          // pr.PrintModuleDefinition(program.DefaultModuleDef, program.DefaultModuleDef.VisibilityScope, 0, null, null);
           code = $"// #{cnt}\n";
-          code += $"// {Printer.ExprToString(expr.expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+          code += $"// {Printer.ExprToString(expr.expr)}\n" + includesList + Printer.ToStringWithoutNewline(wr) + "\n\n";
           
           int fnIndex = code.IndexOf("predicate " + funcName);
           code = code.Insert(fnIndex-1,basePredicateString+"\n");
@@ -1661,7 +1671,6 @@ var execTime = output.ExecutionTimeInMs;
               // Console.WriteLine("=----> " + lemma.Name);
               int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
               code = code.Insert(lemmaLoc-1,"/*"+"\n");
-              code = code.Insert(code.IndexOf("}\n\n",lemmaLoc)-1,"*/"+"\n");
               code = code.Insert(code.IndexOf("}\n\n",lemmaLoc)-1,"*/"+"\n");
             }
           }
@@ -1709,15 +1718,30 @@ var execTime = output.ExecutionTimeInMs;
          }
         // args.Add("/proc:*" + lemma.CompileName );
         foreach (var arg in args) {
-          // Console.WriteLine("hereerere "  + arg);
+          // Console.WriteLine("hereerere ");
         }
-        // var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
-        // var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
-        // var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
+                  // Console.WriteLine("hereerere 1");
 
+        var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+                  // Console.WriteLine("hereerere 2");
+
+        var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+                  // Console.WriteLine("hereerere 3 " + changingFilePath + " :: " + constraintFuncChangingFilePath);
+                  foreach (var p in changingFilePath.Split("/"))
+                  {
+                    // Console.WriteLine(p);
+                  }
+
+        var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
+
+        // var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath.Split("/").Last());
+        // Console.WriteLine("Remote = " + remoteFolderPath);
         args.Add("/compile:0");
+      //  List<ProofEvaluator.ExprStmtUnion> exprStmtList = new List<ProofEvaluator.ExprStmtUnion>();
+      //   dafnyVerifier.runDafnyProofCheck(code,args,exprStmtList,0);
+      // Console.WriteLine("code = " + code);
         dafnyVerifier.runDafny(code, args,
-            expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,"");
+            expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,$"{remoteFolderPath.Path}/{constraintFuncChangingFilePath}");
        
       }
       else
@@ -1786,7 +1810,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         string code = "";
         string proofCode = "";
         using (var wr = new System.IO.StringWriter()) {
-          var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
+          var pr = new Printer(wr, DafnyOptions.PrintModes.NoIncludes);
           pr.UniqueStringBeforeUnderscore = UnderscoreStr;
           // if (expr.HasCardinality) {
           //   func.Body = Expression.CreateAnd(expr, func.Body);
@@ -1813,7 +1837,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
 
           pr.PrintProgram(program, true);
           code = $"// #{cnt}\n";
-          code += $"// {Printer.ExprToString(expr.expr)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
+          code += $"// {Printer.ExprToString(expr.expr)}\n" + includesList + Printer.ToStringWithoutNewline(wr) + "\n\n";
           
           int fnIndex = code.IndexOf("predicate " + funcName + "(");
           // Console.WriteLine(fnIndex);
@@ -1881,9 +1905,15 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         foreach (var arg in args) {
           // Console.WriteLine("hereerere "  + arg);
         }
+                  // Console.WriteLine("hereerere "  + code);
+
+        var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+        var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+        var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
+
         args.Add("/compile:0");
         dafnyVerifier.runDafny(code, args,
-            expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,"");
+            expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,$"{remoteFolderPath.Path}/{constraintFuncChangingFilePath}");
        
       }
       else
@@ -1962,7 +1992,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
     }
 /// end add mutation
         using (var wr = new System.IO.StringWriter()) {
-          var pr = new Printer(wr, DafnyOptions.PrintModes.DllEmbed);
+          var pr = new Printer(wr, DafnyOptions.PrintModes.NoIncludes);
           pr.UniqueStringBeforeUnderscore = UnderscoreStr;
           // func.Body = expr.expr;
       var constraintFuncChangingFilePathLemmaTest = includeParser.Normalized(lemma.BodyStartTok.Filename);
@@ -2014,13 +2044,10 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         //   int fnIndex = code.IndexOf("predicate " + funcName);
         //   int fnIndex1 = code.IndexOf("{",fnIndex);
 
-          int fnIndex = code.IndexOf("predicate " + funcName);
-          int fnIndex1 = code.IndexOf("{",fnIndex);
+        //   code = code.Insert(fnIndex1+1,Printer.ExprToString(expr.expr)+$"/*\n");
+        //             int fnIndex2 = code.IndexOf("}",fnIndex1);
 
-          code = code.Insert(fnIndex1+1,Printer.ExprToString(expr.expr)+$"/*\n");
-                    int fnIndex2 = code.IndexOf("}",fnIndex1);
-
-          code = code.Insert(fnIndex2-1,$"*/ \n");
+        //   code = code.Insert(fnIndex2-1,$"*/ \n");
             // Console.WriteLine(code);
 
           if((vacTest && includeProof)){
@@ -2054,7 +2081,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           var remoteFilePathLemma = dafnyVerifier.getTempFilePath()[serverIndexLemma][localizedCntIndexLemma+1].Path;
           // Console.WriteLine("remote = " + remoteFilePathLemma);
         dafnyVerifier.runDafny(code, args,
-            expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,"");
+            expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,$"{remoteFilePathLemma}/{constraintFuncChangingFilePathLemma}");
 
     }
   }
