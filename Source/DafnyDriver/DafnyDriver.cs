@@ -345,8 +345,8 @@ namespace Microsoft.Dafny {
          var test = new List<DafnyFile>();
          test.Add(df1);
         string programName1 = dafnyFileNames.Count == 1 ? dafnyFileNames[0] : "the_program";
-        string err1 = Dafny.Main.ParseCheck(test, programName, reporter, out var dafnyProofProgram);
-        Dafny.Main.Parse(test, programName, reporter, out var dafnyUnresolvedProofProgram);
+        string err1 = Dafny.Main.ParseCheck(test, df1.FilePath, reporter, out var dafnyProofProgram);
+        Dafny.Main.Parse(test, df1.FilePath, reporter, out var dafnyUnresolvedProofProgram);
         var foundDesiredFunction = holeEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
             dafnyUnresolvedProgram,
             DafnyOptions.O.HoleEvaluatorFunctionName,

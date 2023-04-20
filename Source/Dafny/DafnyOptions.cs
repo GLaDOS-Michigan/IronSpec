@@ -196,7 +196,9 @@ namespace Microsoft.Dafny {
     public bool HoleEvaluatorCreateAuxFiles = true;
     public bool ProofEvaluatorCollectAllTriggerMatches = false;
     public bool HoleEvaluatorDumpOutput = false;
-    public string HoleEvaluatorWorkingDirectory = "/tmp/";
+    // public string HoleEvaluatorWorkingDirectory = "/tmp/";
+    public string HoleEvaluatorWorkingDirectory = "./outputLogs/";
+
     public string HoleEvaluatorServerIpPortList = null;
     public string HoleEvaluatorInvariant = null;
     public string HoleEvaluatorConstraint = null;
