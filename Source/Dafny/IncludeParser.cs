@@ -42,6 +42,18 @@ namespace Microsoft.Dafny {
       return updatedPath;
     }
 
+  public string simpleNorm(string path)
+  {
+    var directoryList = path.Split('/').ToList();
+      for (int i = 0; i < directoryList.Count; i++) {
+        if (directoryList[i] == "..") {
+          directoryList.RemoveAt(i - 1);
+          directoryList.RemoveAt(i - 1);
+          i -= 2;
+        }
+      }
+      return String.Join('/', directoryList);
+  }
     public string Normalized(string path)
     {
       path = path.Remove(0, commonPrefixLength);
@@ -96,13 +108,23 @@ namespace Microsoft.Dafny {
       }
     }
 
+    public IEnumerable<string> GetListOfAffectedFiles(string file) {
+      foreach (var affected in affectedFilesList)
+      {
+
+      }
+      yield break;
+    }
+
     public IEnumerable<string> GetListOfAffectedFilesBy(string file) {
       if (!affectedFilesList.ContainsKey(file)) {
         yield break;
       }
       foreach (var affected in affectedFilesList[file]) {
+        Console.WriteLine("added(" + file + ") = " + affected);
         yield return affected;
         foreach (var x in GetListOfAffectedFilesBy(affected)) {
+          Console.WriteLine("added(" + file + ") = " + x);
           yield return x;
         }
       }

@@ -118,15 +118,78 @@ var execTime = output.ExecutionTimeInMs;
 public async Task<bool>writeOutputs(int index)
 {
     var requestList = dafnyVerifier.requestsList[index];
-    var request = requestList.Last();
-    var position = dafnyVerifier.requestToPostConditionPosition[request];
-    var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
-    var output = dafnyVerifier.dafnyOutput[request];
-    var response = output.Response;
-    if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
-            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
+    for(int i = 1; i<requestList.Count;i++){
+      var request = requestList[i];
+      var position = dafnyVerifier.requestToPostConditionPosition[request];
+      var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
+      var output = dafnyVerifier.dafnyOutput[request];
+      var response = output.Response;
+      if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
+              if(i == 1){
+                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
+              }else{
+                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
+              }
+      }
+    }
     return true;
 }
+    private void UpdateCombinationResultVacAwareList(int index,bool vac) {
+      var requestList = dafnyVerifier.requestsList[index];
+      for(int i = 2; i<requestList.Count;i++){
+          var request = requestList[i];
+          var position = dafnyVerifier.requestToPostConditionPosition[request];
+          var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
+          var output = dafnyVerifier.dafnyOutput[request];
+          var response = output.Response;
+          var filePath = output.FileName;
+          var execTime = output.ExecutionTimeInMs;
+          executionTimes.Add(execTime);
+          var expectedOutput =
+            $"{filePath}({position},0): Error: A postcondition might not hold on this return path.";
+          var expectedInconclusiveOutputStart =
+            $"{filePath}({lemmaStartPosition},{validityLemmaNameStartCol}): Verification inconclusive";
+                   var res = DafnyVerifierClient.IsCorrectOutput(response, expectedOutput, expectedInconclusiveOutputStart);
+
+        if (res != Result.IncorrectProof) {
+          // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
+          // Console.WriteLine(output);
+          combinationResults[index] = res;
+          // Console.WriteLine(p.StartInfo.Arguments);
+          // Console.WriteLine(Printer.ExprToString(dafnyVerifier.requestToExpr[request]));
+          Console.WriteLine(Printer.ExprToString(dafnyVerifier.requestToExpr[request]));
+        } else if (response.Contains(" 0 errors\n")) {
+        
+        if(vac){
+          // Console.WriteLine("Mutation that Passes = " + index + " ** is vacous!");
+          combinationResults[index] = Result.vacousProofPass;
+        }else{
+          // Console.WriteLine("Mutation that Passes = " + index);
+          combinationResults[index] = Result.FalsePredicate;
+        }
+        // break;
+      }else if (response.EndsWith($"resolution/type errors detected in {Path.GetFileName(filePath)}\n")) {
+          combinationResults[index] = Result.InvalidExpr;
+          // break;
+        } else {
+          combinationResults[index] = Result.IncorrectProof;
+          break;
+        }
+      }
+      if(requestList.Count < 2)
+      {
+          combinationResults[index] = Result.IncorrectProof;
+      }else if (requestList.Count == 2)
+      {
+                  combinationResults[index] = Result.vacousProofPass;
+
+      }
+ 
+      // }
+      expressionFinder.combinationResults[index] = combinationResults[index];
+    }
+
+
     private void UpdateCombinationResultVacAware(int index,bool vac) {
       var requestList = dafnyVerifier.requestsList[index];
       var request = requestList.Last();
@@ -137,7 +200,7 @@ public async Task<bool>writeOutputs(int index)
         var response = output.Response;
         var filePath = output.FileName;
         // var startTime = output.StartTime;
-var execTime = output.ExecutionTimeInMs;
+        var execTime = output.ExecutionTimeInMs;
         executionTimes.Add(execTime);
         // startTimes.Add(startTime);
         
@@ -660,6 +723,7 @@ var execTime = output.ExecutionTimeInMs;
 
 
     public async Task<bool> EvaluateFilterStrongerAndSame(Program program, Program unresolvedProgram, string funcName, string lemmaName, string proofModuleName, string baseFuncName, int depth, bool mutationsFromParams,Program proofProg, Program unresolvedProofProgram) {
+      // Console.WriteLine("here " + DafnyOptions.O.EvaluateAllAtOnce);
       if(proofModuleName != null)
       {
         // Console.WriteLine("MOUDLE = " + proofModuleName);
@@ -760,6 +824,11 @@ var execTime = output.ExecutionTimeInMs;
               includeParser = new IncludeParser(proofProg);
         var filenameProof = includeParser.Normalized(desiredLemmm.BodyStartTok.Filename);
         foreach (var file in includeParser.GetListOfAffectedFilesBy(filenameProof)) {
+          Console.WriteLine("file = " + filenameProof);
+          affectedFiles.Add(file);
+        }
+
+        foreach (var file in includeParser.GetListOfAffectedFiles(filenameProof)) {
           Console.WriteLine("file = " + filenameProof);
           affectedFiles.Add(file);
         }
@@ -976,17 +1045,33 @@ var execTime = output.ExecutionTimeInMs;
         Console.WriteLine("--- END Full Proof Pass -- ");
         // }
 
+      bool foundCorrectExpr = false;
 
         for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
+          if(DafnyOptions.O.EvaluateAllAtOnce || DafnyOptions.O.ProofOnly){
                 UpdateCombinationResultVacAware(i,vacIndex.Contains(i));
+                 writeOutputs(i);
+          }else{
+                UpdateCombinationResultVacAwareList(i,vacIndex.Contains(i));
+          
                 writeOutputs(i);
+                foundCorrectExpr = false;
+                foundCorrectExpr |= combinationResults[i] == Result.FalsePredicate;
+                // Console.WriteLine(foundCorrectExpr);
                 var t = isDafnyVerifySuccessful(i);
+                if(foundCorrectExpr)
+                {
+                  Console.WriteLine("Mutation that Passes = " + i);
+                }else if (combinationResults[i] == Result.vacousProofPass)
+                {
+                  Console.WriteLine("Mutation that Passes = " + i + " ** is vacous!");
+                }
+              }
         }
                 Console.WriteLine("--- Finish Test -- ");
 
             dafnyVerifier.Cleanup();
 
-      bool foundCorrectExpr = false;
     //   for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
     //     UpdateCombinationResult(i);
     //     // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
@@ -1991,6 +2076,8 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}NotAtLeastAsWeak_{cnt}.dfy", code);
     }
 /// end add mutation
+       HashSet<string> includesSet = new HashSet<string>();
+
         using (var wr = new System.IO.StringWriter()) {
           var pr = new Printer(wr, DafnyOptions.PrintModes.NoIncludes);
           pr.UniqueStringBeforeUnderscore = UnderscoreStr;
@@ -2002,7 +2089,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       {
         // Console.WriteLine(includeParser.Normalized(q.IncludedFilename));
         var includesPath = includeParser.Normalized(q.IncludedFilename);
-        var test = includeParser.NormalizedTo(proofProg.FullName,q.IncludedFilename);
+        var normalizedIncludesPath = includeParser.NormalizedTo(proofProg.FullName,q.IncludedFilename);
 
         var constraintFuncChangingFilePathLemmaTestList = constraintFuncChangingFilePathLemmaTest.Split('/').ToList();
 
@@ -2025,7 +2112,12 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         }
         // includesPath = String.Join('/', includesPathList);
         // includesList += "include \"" +includesPath + "\"\n";
-          includesList += "include \"" +test + "\"\n";
+        //only add includes if it is unique
+        if(!includesSet.Contains(normalizedIncludesPath)){
+          includesList += "include \"" +normalizedIncludesPath + "\"\n";
+          includesSet.Add(normalizedIncludesPath);
+        }
+          // includesList += "include \"" +normalizedIncludesPath + "\"\n";
 
 
       }
@@ -2069,10 +2161,9 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             args.Add(arg);
           }
         }
-        if(vacTest){
-         args.Add("/proc:*"+lemmaName+"*");
-        }
+     
         args.Add("/compile:0");
+        // args.Add("/exitAfterFirstError");
           var changingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
           var constraintFuncChangingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
           // var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
@@ -2080,6 +2171,29 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           var localizedCntIndexLemma = (cnt-serverIndexLemma)/dafnyVerifier.serversList.Count;
           var remoteFilePathLemma = dafnyVerifier.getTempFilePath()[serverIndexLemma][localizedCntIndexLemma+1].Path;
           // Console.WriteLine("remote = " + remoteFilePathLemma);
+        if(vacTest){
+         args.Add("/proc:*"+lemmaName+"*");
+        }else if(DafnyOptions.O.EvaluateAllAtOnce){
+          args.Add("/verifyAllModules");
+        }else if(DafnyOptions.O.ProofOnly){
+        }else{
+          foreach (var depn in includesSet)
+            {
+              // Console.WriteLine("HERE => " + $"{remoteFilePathLemma}/{depn}");
+              var lastDire = constraintFuncChangingFilePathLemma.LastIndexOf("/");
+              var normalizedDepn = depn;
+              if(lastDire > 0){
+                normalizedDepn =  constraintFuncChangingFilePathLemma.Substring(0,constraintFuncChangingFilePathLemma.LastIndexOf("/"))+"/./"+depn;
+              
+              }else{
+                // var test = includeParser.simpleNorm(normalizedDepn);
+                normalizedDepn = depn;
+              }
+              dafnyVerifier.runDafny("", args,
+                expr, cnt, -1, -1,$"{remoteFilePathLemma}/{normalizedDepn}");
+
+            }
+        }
         dafnyVerifier.runDafny(code, args,
             expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,$"{remoteFilePathLemma}/{constraintFuncChangingFilePathLemma}");
 

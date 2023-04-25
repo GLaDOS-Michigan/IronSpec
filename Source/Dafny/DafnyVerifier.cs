@@ -228,9 +228,9 @@ namespace Microsoft.Dafny {
             if (!requestToCall.ContainsKey(request)) {
               RestartTask(request);
             }
-            // Console.WriteLine($"calling await for #{requestToCnt[request]}");
+            Console.WriteLine($"calling await for #{requestToCnt[request]}");
             VerificationResponse response = await requestToCall[request];
-            // Console.WriteLine($"finished await for #{requestToCnt[request]}");
+            Console.WriteLine($"finished await for #{requestToCnt[request]}");
             var output = response.Response;
             CheckIfCorrectAnswer(request, response);
             dafnyOutput[request] = response;
