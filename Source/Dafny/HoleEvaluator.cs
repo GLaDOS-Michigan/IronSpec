@@ -805,13 +805,20 @@ public async Task<bool>writeOutputs(int index)
 
       if (desiredFunction != null) {
         includeParser = new IncludeParser(program);
-        var filename = includeParser.Normalized(desiredFunction.BodyStartTok.Filename);
+        var filename = "";
+        if(desiredFunction.BodyStartTok.Filename == null)
+        {
+          filename = includeParser.Normalized(program.FullName);
+        }else{
+          filename = includeParser.Normalized(desiredFunction.BodyStartTok.Filename);
+        }
         foreach (var file in includeParser.GetListOfAffectedFilesBy(filename)) {
           affectedFiles.Add(file);
+          affectedFiles = affectedFiles.Distinct().ToList();
         }
 
       if(proofProg != null){
-        dafnyVerifier.InitializeBaseFoldersInRemoteServers(proofProg, includeParser.commonPrefix);
+        // dafnyVerifier.InitializeBaseFoldersInRemoteServers(proofProg, includeParser.commonPrefix);
         affectedFiles.Add(filename);
         affectedFiles = affectedFiles.Distinct().ToList();
         Lemma desiredLemmm = GetLemma(proofProg, lemmaName);
@@ -822,7 +829,13 @@ public async Task<bool>writeOutputs(int index)
       }
       Console.WriteLine(getVacuityLemma(desiredLemmm));
               includeParser = new IncludeParser(proofProg);
-        var filenameProof = includeParser.Normalized(desiredLemmm.BodyStartTok.Filename);
+        var filenameProof = "";
+        if(desiredLemmm.BodyStartTok.Filename == null)
+        {
+          filenameProof = includeParser.Normalized(proofProg.FullName);
+        }else{
+          filenameProof = includeParser.Normalized(desiredLemmm.BodyStartTok.Filename);
+        }
         foreach (var file in includeParser.GetListOfAffectedFilesBy(filenameProof)) {
           Console.WriteLine("file = " + filenameProof);
           affectedFiles.Add(file);
@@ -833,6 +846,7 @@ public async Task<bool>writeOutputs(int index)
           affectedFiles.Add(file);
         }
 
+        dafnyVerifier.InitializeBaseFoldersInRemoteServers(proofProg, includeParser.commonPrefix);
 
       }else{
         dafnyVerifier.InitializeBaseFoldersInRemoteServers(program, includeParser.commonPrefix);
@@ -974,7 +988,17 @@ public async Task<bool>writeOutputs(int index)
       }//116
       //
       Console.WriteLine($"expressionFinder.availableExpressions.Count == {expressionFinder.availableExpressions.Count}");
-
+      // expressionFinder.availableExpressions = expressionFinder.availableExpressions.Distinct().ToList();
+      List<Microsoft.Dafny.ExpressionFinder.ExpressionDepth> availableExpressionsTemp = new List<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>();
+      foreach (var ed in expressionFinder.availableExpressions)
+      {
+        if(!availableExpressionsTemp.Contains(ed))
+        {
+          availableExpressionsTemp.Add(ed);
+        }
+      }
+      expressionFinder.availableExpressions = availableExpressionsTemp;
+      // expressionFinder.availableExpressions = expressionFinder.availableExpressions.DistinctBy(s => s.expr).ToList();
       int remainingVal = expressionFinder.availableExpressions.Count;
       Console.WriteLine("--- Begin Is At Least As Weak Pass -- " + remainingVal);
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -1557,7 +1581,7 @@ public async Task<bool>writeOutputs(int index)
       return "";
     }
 
-    public static string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
+  public static string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
       if (moduleDef is null) {
         return type.ToString();
       }
@@ -1568,7 +1592,9 @@ public async Task<bool>writeOutputs(int index)
         foreach (var decl in moduleDef.TopLevelDecls) {
           if (decl.ToString() == type.ToString()) {
             var moduleName = GetFullModuleName(moduleDef);
-            return (moduleName == "" || moduleName == moduleDef.FullName) ? type.ToString() : (moduleName + "." + type.ToString());
+            return (moduleName == "") ? type.ToString() : (moduleName + "." + type.ToString());
+          }else{
+            return udt.ToString();
           }
         }
         if (moduleDef.Name != "_module") {
@@ -1924,11 +1950,17 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           code = $"// #{cnt}\n";
           code += $"// {Printer.ExprToString(expr.expr)}\n" + includesList + Printer.ToStringWithoutNewline(wr) + "\n\n";
           
-          int fnIndex = code.IndexOf("predicate " + funcName + "(");
-          // Console.WriteLine(fnIndex);
-          if(fnIndex == -1)
-          {
-            fnIndex = code.IndexOf("predicate " + funcName);
+          int fnIndex = -1;
+          if(func.WhatKind == "predicate"){
+            fnIndex = code.IndexOf("predicate " + funcName + "(");
+
+            if(fnIndex == -1)
+            {
+              fnIndex = code.IndexOf("predicate " + funcName);
+            }
+          }else{
+            Console.WriteLine("TYPE = " + func.WhatKind);
+            fnIndex = code.IndexOf("function " + funcName + "(");
           }
           code = code.Insert(fnIndex-1,basePredicateString+"\n");
           // if(!includeProof){
@@ -1946,7 +1978,11 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           //   }
           // }
           if(isWeaker){
-            fnIndex = code.IndexOf("predicate " + funcName);
+            if(func.WhatKind == "predicate"){
+              fnIndex = code.IndexOf("predicate " + funcName);
+            }else{
+              fnIndex = code.IndexOf("function " + funcName);
+            }
             code = code.Insert(fnIndex-1,istWeakerLemma+"\n");
           }
           if((vacTest && includeProof)){
@@ -1993,6 +2029,8 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
                   // Console.WriteLine("hereerere "  + code);
 
         var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
+                // var test = includeParser.NormalizedTo(program.FullName,func.BodyStartTok.Filename);
+
         var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
         var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
 
@@ -2082,7 +2120,15 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           var pr = new Printer(wr, DafnyOptions.PrintModes.NoIncludes);
           pr.UniqueStringBeforeUnderscore = UnderscoreStr;
           // func.Body = expr.expr;
-      var constraintFuncChangingFilePathLemmaTest = includeParser.Normalized(lemma.BodyStartTok.Filename);
+        var constraintFuncChangingFilePathLemmaTest = "";
+      if(lemma.BodyStartTok.Filename == null)
+      {
+         constraintFuncChangingFilePathLemmaTest = includeParser.Normalized(proofProg.FullName);
+
+      }else{
+         constraintFuncChangingFilePathLemmaTest = includeParser.Normalized(lemma.BodyStartTok.Filename);
+     
+     }
       // var constraintFuncChangingFilePathLemmaTestList = path.Split('/').ToList();
         var includesList = "";
       foreach (var q in proofProg.DefaultModuleDef.Includes)
@@ -2164,8 +2210,20 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
      
         args.Add("/compile:0");
         // args.Add("/exitAfterFirstError");
-          var changingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
-          var constraintFuncChangingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
+         var changingFilePathLemma = "";
+         var constraintFuncChangingFilePathLemma = "";
+      if(lemma.BodyStartTok.Filename == null)
+      {
+         changingFilePathLemma = includeParser.Normalized(proofProg.FullName);
+         constraintFuncChangingFilePathLemma = includeParser.Normalized(proofProg.FullName);
+
+      }else{
+         changingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
+          constraintFuncChangingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
+     }
+
+          // var changingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
+          // var constraintFuncChangingFilePathLemma = includeParser.Normalized(lemma.BodyStartTok.Filename);
           // var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
           var serverIndexLemma = cnt % dafnyVerifier.serversList.Count;
           var localizedCntIndexLemma = (cnt-serverIndexLemma)/dafnyVerifier.serversList.Count;

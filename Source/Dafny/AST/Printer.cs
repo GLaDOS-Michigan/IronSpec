@@ -24,6 +24,8 @@ namespace Microsoft.Dafny {
     public string Prefix = "";
     public string UniqueStringBeforeUnderscore = "";
     public ModuleDefinition ModuleForTypes = null;
+    private HashSet<ModuleDefinition> seenModules = new HashSet<ModuleDefinition>();
+
     private string GetAppenededUnique(string name) {
       if (name.StartsWith("_")) {
         var tmp = name.Replace("#", "");
@@ -46,6 +48,10 @@ namespace Microsoft.Dafny {
       if (moduleDef is null) {
         return type.ToString();
       }
+      if (seenModules.Contains(moduleDef)) {
+        return "";
+      }
+      seenModules.Add(moduleDef);
       if (type is UserDefinedType) {
         foreach (var decl in ModuleDefinition.AllTypesWithMembers(moduleDef.TopLevelDecls)) {
           if (decl.ToString() == type.ToString()) {

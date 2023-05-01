@@ -9144,6 +9144,38 @@ namespace Microsoft.Dafny {
     }
 
     /// <summary>
+    /// Create a resolved expression of the form "e0 % e1"
+    /// </summary>
+    public static Expression CreateMod(Expression e0, Expression e1) {
+      Contract.Requires(e0 != null);
+      Contract.Requires(e1 != null);
+      Contract.Requires(
+        (e0.Type.IsNumericBased(Type.NumericPersuasion.Int) && e1.Type.IsNumericBased(Type.NumericPersuasion.Int)) ||
+        (e0.Type.IsNumericBased(Type.NumericPersuasion.Real) && e1.Type.IsNumericBased(Type.NumericPersuasion.Real)));
+      Contract.Ensures(Contract.Result<Expression>() != null);
+      var s = new BinaryExpr(e0.tok, BinaryExpr.Opcode.Mod, e0, e1);
+      s.ResolvedOp = BinaryExpr.ResolvedOpcode.Mod;  // resolve here
+      s.Type = e0.Type.NormalizeExpand();  // resolve here
+      return s;
+    }
+
+    /// <summary>
+    /// Create a resolved expression of the form "e0 / e1"
+    /// </summary>
+    public static Expression CreateDiv(Expression e0, Expression e1) {
+      Contract.Requires(e0 != null);
+      Contract.Requires(e1 != null);
+      Contract.Requires(
+        (e0.Type.IsNumericBased(Type.NumericPersuasion.Int) && e1.Type.IsNumericBased(Type.NumericPersuasion.Int)) ||
+        (e0.Type.IsNumericBased(Type.NumericPersuasion.Real) && e1.Type.IsNumericBased(Type.NumericPersuasion.Real)));
+      Contract.Ensures(Contract.Result<Expression>() != null);
+      var s = new BinaryExpr(e0.tok, BinaryExpr.Opcode.Div, e0, e1);
+      s.ResolvedOp = BinaryExpr.ResolvedOpcode.Div;  // resolve here
+      s.Type = e0.Type.NormalizeExpand();  // resolve here
+      return s;
+    }
+
+    /// <summary>
     /// Create a resolved expression of the form "e0 * e1"
     /// </summary>
     public static Expression CreateMul(Expression e0, Expression e1) {
