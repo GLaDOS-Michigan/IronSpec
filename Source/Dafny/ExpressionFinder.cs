@@ -468,6 +468,28 @@ namespace Microsoft.Dafny {
           currentExperssions.Add(new ExpressionDepth(Bdec,1));
 
           
+       }else if(e.expr is ForallExpr)
+       {
+        Console.WriteLine("nested forall ");
+        var eforall = e.expr as ForallExpr;
+        //Mutate Term
+        List<ExpressionDepth> forallExprs =  mutateOneExpression(program,decl,new ExpressionDepth(eforall.Term as BinaryExpr,1));
+        foreach (ExpressionDepth ee in forallExprs){
+          QuantifierExpr qe;
+          ResolvedCloner cloner = new ResolvedCloner();
+          var newVars = eforall.BoundVars.ConvertAll(cloner.CloneBoundVar);
+          qe = new ForallExpr(eforall.tok, eforall.BodyEndTok, newVars, eforall.Range, ee.expr, eforall.Attributes);
+          currentExperssions.Add(new ExpressionDepth(qe,1));
+        }
+        //Mutate Range
+        List<ExpressionDepth> forallExprsRange =  mutateOneExpression(program,decl,new ExpressionDepth(eforall.Range as BinaryExpr,1));
+        foreach (ExpressionDepth ee in forallExprsRange){
+          QuantifierExpr qe;
+          ResolvedCloner cloner = new ResolvedCloner();
+          var newVars = eforall.BoundVars.ConvertAll(cloner.CloneBoundVar);
+          qe = new ForallExpr(eforall.tok, eforall.BodyEndTok, newVars, ee.expr, eforall.Term, eforall.Attributes);
+          currentExperssions.Add(new ExpressionDepth(qe,1));
+        }
        }
 
       return currentExperssions;
@@ -525,6 +547,7 @@ namespace Microsoft.Dafny {
               //   // currentExpressions.Add(e);
               // }
               var e = conjuncts[i] as ForallExpr;
+              //Mutate Term
               List<ExpressionDepth> forallExprs =  mutateOneExpression(program,decl,new ExpressionDepth(e.Term as BinaryExpr,1));
               foreach (ExpressionDepth ee in forallExprs){
                 QuantifierExpr qe;
@@ -535,6 +558,16 @@ namespace Microsoft.Dafny {
               // ee = q;
                 mutatedExprs.Add(new ExpressionDepth(qe,1));
              }
+            //Mutate Range
+            List<ExpressionDepth> forallExprsRange =  mutateOneExpression(program,decl,new ExpressionDepth(e.Range as BinaryExpr,1));
+            foreach (ExpressionDepth ee in forallExprsRange){
+              QuantifierExpr qe;
+              ResolvedCloner cloner = new ResolvedCloner();
+              var newVars = e.BoundVars.ConvertAll(cloner.CloneBoundVar);
+              qe = new ForallExpr(e.tok, e.BodyEndTok, newVars, ee.expr, e.Term, e.Attributes);
+              mutatedExprs.Add(new ExpressionDepth(qe,1));
+            }
+
 
              }else{
               var be = conjuncts[i] as BinaryExpr;
