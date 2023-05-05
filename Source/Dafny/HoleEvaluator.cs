@@ -995,6 +995,8 @@ public async Task<bool>writeOutputs(int index)
         if(!availableExpressionsTemp.Contains(ed))
         {
           availableExpressionsTemp.Add(ed);
+        }else{
+          Console.WriteLine("Skipping = " + Printer.ExprToString(ed.expr));
         }
       }
       expressionFinder.availableExpressions = availableExpressionsTemp;

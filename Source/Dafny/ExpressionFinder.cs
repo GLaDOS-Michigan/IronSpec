@@ -329,15 +329,28 @@ namespace Microsoft.Dafny {
     public List<ExpressionDepth> mutateOneExpression(Program program, MemberDecl decl, ExpressionDepth e)
     {
       List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
-       if(e.expr is BinaryExpr && e.expr.Type is BoolType){
+      // Console.WriteLine("Checking Exper" + Printer.ExprToString(e.expr));
+      //       Console.WriteLine("Checking Type" + e.expr);
+      // if(e.expr is ParensExpression)
+      // {
+      //   var rbe =  e.expr as BinaryExpr;
+      // }
+      if (e.expr is ParensExpression)
+      {
+        var pE = e.expr as ParensExpression;
+        e.expr = pE.E as BinaryExpr;
+      }
+       if(e.expr is BinaryExpr || e.expr is ParensExpression)
+       {
+         if((e.expr as BinaryExpr).E0.Type is BoolType || (e.expr as BinaryExpr).E1.Type is BoolType){
           var be = e.expr as BinaryExpr;
-          Console.WriteLine("MUTATING = " + Printer.ExprToString(be));
+          Console.WriteLine("MUTATING One Binary Expr= " + Printer.ExprToString(be));
 
           var e0 = Printer.ExprToString(be.E0);
           var e1 = Printer.ExprToString(be.E1);
-          Console.WriteLine(be.E0);
-          Console.WriteLine(be.E1);
-          Console.WriteLine(be);
+          // Console.WriteLine(be.E0);
+          // Console.WriteLine(be.E1);
+          // Console.WriteLine(be);
           var isNE0 = IsNumericBasedExpression(be.E0);
           var isNE1 = IsNumericBasedExpression(be.E1);
           var isArith = isOpArith(be.Op);
@@ -357,20 +370,20 @@ namespace Microsoft.Dafny {
           var AndNotA = Expression.CreateAnd(Expression.CreateNot(be.tok, be.E0), be.E1,false);
           // Not B AND = (a && !b)
           var AndNotB = Expression.CreateAnd(be.E0,Expression.CreateNot(be.tok, be.E1),false);
-          // Not A Not B OR = (!a && !b)
+          // Not A Not B AND = (!a && !b)
           var AndNotANotB = Expression.CreateAnd(Expression.CreateNot(be.tok, be.E0),Expression.CreateNot(be.tok, be.E1),false);
           // Not = !(E)
           var NotE = Expression.CreateNot(be.tok, be);
           // Not Equal = !(a == b)
           var NotEquals = Expression.CreateNot(be.tok, Expression.CreateEq(be.E0, be.E1,be.Type));
-          // Lower than
-          var LessT = Expression.CreateLess(be.E0, be.E1);
-          // Lower Equal
-          var AtMost = Expression.CreateAtMost(be.E0, be.E1);
-          // Greater Than = !(Lower equal)
-          var gtExpr = Expression.CreateNot(be.tok, Expression.CreateAtMost(be.E0, be.E1));
-          // Greater Equal = !(Lower than)
-          var geExpr = Expression.CreateNot(be.tok, Expression.CreateLess(be.E0, be.E1));
+          // // Lower than
+          // var LessT = Expression.CreateLess(be.E0, be.E1);
+          // // Lower Equal
+          // var AtMost = Expression.CreateAtMost(be.E0, be.E1);
+          // // Greater Than = !(Lower equal)
+          // var gtExpr = Expression.CreateNot(be.tok, Expression.CreateAtMost(be.E0, be.E1));
+          // // Greater Equal = !(Lower than)
+          // var geExpr = Expression.CreateNot(be.tok, Expression.CreateLess(be.E0, be.E1));
           // Implies
           var implies = Expression.CreateImplies(be.E0, be.E1);
           // Not A Implies = !a ==> b
@@ -396,19 +409,19 @@ namespace Microsoft.Dafny {
           currentExperssions.Add(new ExpressionDepth(AndNotB,1));
           currentExperssions.Add(new ExpressionDepth(AndNotANotB,1));
 
-          currentExperssions.Add(new ExpressionDepth(NotE,1));
+          // currentExperssions.Add(new ExpressionDepth(NotE,1)); // Logically equivalent to OrNotANotB
           currentExperssions.Add(new ExpressionDepth(NotEquals,1));
-          currentExperssions.Add(new ExpressionDepth(LessT,1));
-          currentExperssions.Add(new ExpressionDepth(AtMost,1));
-          currentExperssions.Add(new ExpressionDepth(gtExpr,1));
-          currentExperssions.Add(new ExpressionDepth(geExpr,1));
+          // currentExperssions.Add(new ExpressionDepth(LessT,1)); // Consider moving to Arith
+          // currentExperssions.Add(new ExpressionDepth(AtMost,1)); // Consider moving to Arith
+          // currentExperssions.Add(new ExpressionDepth(gtExpr,1)); // Consider moving to Arith
+          // currentExperssions.Add(new ExpressionDepth(geExpr,1)); // Consider moving to Arith
 
-          currentExperssions.Add(new ExpressionDepth(implies,1));
-          currentExperssions.Add(new ExpressionDepth(impliesNotA,1));
-          currentExperssions.Add(new ExpressionDepth(impliesNotB,1));
-          currentExperssions.Add(new ExpressionDepth(impliesNotANotB,1));
-          currentExperssions.Add(new ExpressionDepth(impliesRev,1));
-          currentExperssions.Add(new ExpressionDepth(biConImplies,1));
+          // currentExperssions.Add(new ExpressionDepth(implies,1)); // Logically equivalent to OrNotA
+          // currentExperssions.Add(new ExpressionDepth(impliesNotA,1)); // Logically equivalent to OR
+          // currentExperssions.Add(new ExpressionDepth(impliesNotB,1)); // Logically equivalent to OrNotANotB
+          // currentExperssions.Add(new ExpressionDepth(impliesNotANotB,1)); // Logically equivalent to OrNotB
+          // currentExperssions.Add(new ExpressionDepth(impliesRev,1));   // Logically equivalent to OrNotB
+          // currentExperssions.Add(new ExpressionDepth(biConImplies,1));  // Logically equivalent to equalityExpr
           
           // if(be.E0 is BinaryExpr)
           // {
@@ -416,7 +429,6 @@ namespace Microsoft.Dafny {
             foreach (var subE0 in subExperssionsE0)
             {
               var sube0_new = new BinaryExpr(be.tok, be.Op, subE0.expr, be.E1);
-              // Console.WriteLine("asdfadsf + " + Printer.ExprToString(sube0_new));
               currentExperssions.Add(new ExpressionDepth(sube0_new,1));
             }
             // currentExperssions.AddRange(mutateOneExpression(program,decl,new ExpressionDepth(be.E0,1)));
@@ -427,16 +439,22 @@ namespace Microsoft.Dafny {
             foreach (var subE1 in subExperssionsE1)
             {
               var sube1_new = new BinaryExpr(be.tok, be.Op, be.E0, subE1.expr);
-              // Console.WriteLine("asdfadsf + " + Printer.ExprToString(sube0_new));
               currentExperssions.Add(new ExpressionDepth(sube1_new,1));
             }
           // }
-
-       }else if(e.expr is BinaryExpr && e.expr.Type is IntType )
+         }
+       
+       
+          if ((e.expr.Type.IsNumericBased(Type.NumericPersuasion.Int) 
+              || e.expr.Type.IsNumericBased(Type.NumericPersuasion.Real))
+              || (e.expr as BinaryExpr).E0.Type.IsNumericBased(Type.NumericPersuasion.Int)
+              || (e.expr as BinaryExpr).E0.Type.IsNumericBased(Type.NumericPersuasion.Int)
+              || (e.expr as BinaryExpr).E1.Type.IsNumericBased(Type.NumericPersuasion.Real)
+              || (e.expr as BinaryExpr).E1.Type.IsNumericBased(Type.NumericPersuasion.Real)) // what if it is a numeric data type? 
        {
           Console.WriteLine(Printer.ExprToString(e.expr) + " :: " + e.expr);
           var be = e.expr as BinaryExpr;
-          Console.WriteLine("MUTATING = " + Printer.ExprToString(be));
+          Console.WriteLine("MUTATING Algebraic= " + Printer.ExprToString(be));
          // var Ae = e.expr as ParensExpression;
           //Add
           var AddExpr = Expression.CreateAdd(be.E0, be.E1);
@@ -457,6 +475,17 @@ namespace Microsoft.Dafny {
           //BDec
           var Bdec = new BinaryExpr(be.tok, be.Op,be.E1, Expression.CreateDecrement(be.E1, 1));
 
+          // Lower than
+          var LessT = Expression.CreateLess(be.E0, be.E1);
+          // Lower Equal
+          var AtMost = Expression.CreateAtMost(be.E0, be.E1);
+          // Greater Than = !(Lower equal)
+          var gtExpr = Expression.CreateNot(be.tok, Expression.CreateAtMost(be.E0, be.E1));
+          // Greater Equal = !(Lower than)
+          var geExpr = Expression.CreateNot(be.tok, Expression.CreateLess(be.E0, be.E1));
+
+
+
           currentExperssions.Add(new ExpressionDepth(AddExpr,1));
           currentExperssions.Add(new ExpressionDepth(SubExpr,1));
           currentExperssions.Add(new ExpressionDepth(MultExpr,1));
@@ -466,8 +495,12 @@ namespace Microsoft.Dafny {
           currentExperssions.Add(new ExpressionDepth(Binc,1));
           currentExperssions.Add(new ExpressionDepth(Adec,1));
           currentExperssions.Add(new ExpressionDepth(Bdec,1));
+          currentExperssions.Add(new ExpressionDepth(LessT,1)); // Consider moving to Arith
+          currentExperssions.Add(new ExpressionDepth(AtMost,1)); // Consider moving to Arith
+          currentExperssions.Add(new ExpressionDepth(gtExpr,1)); // Consider moving to Arith
+          currentExperssions.Add(new ExpressionDepth(geExpr,1)); // Consider moving to Arith
 
-          
+        } 
        }else if(e.expr is ForallExpr)
        {
         Console.WriteLine("nested forall ");
@@ -515,8 +548,8 @@ namespace Microsoft.Dafny {
           }
          if(conjuncts.Count > 1){
           for (int i = 0; i < conjuncts.Count; i++) {
-            Console.WriteLine("EXPRESSION To Mutate= " + Printer.ExprToString(conjuncts[i]));
-             Console.WriteLine("EXPRESSION To Mutate= " +conjuncts[i]);
+            Console.WriteLine("Whole EXPRESSION To Mutate= " + Printer.ExprToString(conjuncts[i]));
+            //  Console.WriteLine("EXPRESSION To Mutate= " +conjuncts[i]);
             
             // Keep all other expersions the same
             Expression remainder; 
