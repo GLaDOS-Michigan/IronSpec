@@ -988,19 +988,21 @@ public async Task<bool>writeOutputs(int index)
       }//116
       //
       Console.WriteLine($"expressionFinder.availableExpressions.Count == {expressionFinder.availableExpressions.Count}");
-      // expressionFinder.availableExpressions = expressionFinder.availableExpressions.Distinct().ToList();
-      List<Microsoft.Dafny.ExpressionFinder.ExpressionDepth> availableExpressionsTemp = new List<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>();
+      // List<Microsoft.Dafny.ExpressionFinder.ExpressionDepth> availableExpressionsTemp = new List<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>();
+      Hashtable hashtable = new Hashtable();
       foreach (var ed in expressionFinder.availableExpressions)
       {
-        if(!availableExpressionsTemp.Contains(ed))
+        if(!hashtable.ContainsKey(Printer.ExprToString(ed.expr)))
         {
-          availableExpressionsTemp.Add(ed);
+          // availableExpressionsTemp.Add(ed);
+          hashtable.Add(Printer.ExprToString(ed.expr),ed);
         }else{
           Console.WriteLine("Skipping = " + Printer.ExprToString(ed.expr));
         }
       }
-      expressionFinder.availableExpressions = availableExpressionsTemp;
-      // expressionFinder.availableExpressions = expressionFinder.availableExpressions.DistinctBy(s => s.expr).ToList();
+      // expressionFinder.availableExpressions = availableExpressionsTemp;
+      expressionFinder.availableExpressions = hashtable.Values.Cast<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>().ToList();
+
       int remainingVal = expressionFinder.availableExpressions.Count;
       Console.WriteLine("--- Begin Is At Least As Weak Pass -- " + remainingVal);
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {

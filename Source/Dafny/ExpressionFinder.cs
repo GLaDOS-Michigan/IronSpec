@@ -65,7 +65,11 @@ namespace Microsoft.Dafny {
         if (Object.ReferenceEquals(x, null))
             return false;
         
-        return Printer.ExprToString(x.expr) == Printer.ExprToString(expr) && x.depth == depth;
+        int hashExpressionExpr = Printer.ExprToString(expr).GetHashCode();
+        int xhashExpressionExpr = Printer.ExprToString(x.expr).GetHashCode();
+        return hashExpressionExpr == xhashExpressionExpr;
+        //  return Printer.ExprToString(expr).GetHashCode() == Printer.ExprToString(expr).GetHashCode();
+        // return Printer.ExprToString(x.expr) == Printer.ExprToString(expr) && x.depth == depth;
       }
 
     }
@@ -469,11 +473,11 @@ namespace Microsoft.Dafny {
           //AInc
           var Ainc = new BinaryExpr(be.tok, be.Op, Expression.CreateIncrement(be.E0, 1), be.E1);
           //BInc
-          var Binc = new BinaryExpr(be.tok, be.Op,be.E1, Expression.CreateIncrement(be.E1, 1));
+          var Binc = new BinaryExpr(be.tok, be.Op,be.E0, Expression.CreateIncrement(be.E1, 1));
           //ADec
           var Adec = new BinaryExpr(be.tok, be.Op, Expression.CreateDecrement(be.E0, 1), be.E1);
           //BDec
-          var Bdec = new BinaryExpr(be.tok, be.Op,be.E1, Expression.CreateDecrement(be.E1, 1));
+          var Bdec = new BinaryExpr(be.tok, be.Op,be.E0, Expression.CreateDecrement(be.E1, 1));
 
           // Lower than
           var LessT = Expression.CreateLess(be.E0, be.E1);
@@ -530,12 +534,19 @@ namespace Microsoft.Dafny {
 // Mutate the body and params
     public List<ExpressionDepth> getMutatedExprs(Program program, Function decl, BinaryExpr expression){
       List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
+      List<List<ExpressionDepth>> combinations = new List<List<ExpressionDepth>>();
+      List<List<String>> testS = new List<List<String>>();  
       Console.WriteLine("Full Expresion -> "+ Printer.ExprToString(expression));
       // Console.WriteLine("Expresion type = " + expression);
       var trueExpr = Expression.CreateBoolLiteral(decl.tok, true);
       var falseExpr = Expression.CreateBoolLiteral(decl.tok, false);
       IEnumerable<ExpressionDepth> q = TraverseFormal(program,new ExpressionDepth(expression,1));
       currentExperssions.AddRange(mutateOneExpression(program,decl,q.ElementAt(0)));
+      // foreach (var e in currentExperssions)
+      // {
+      //   Console.WriteLine("initial= " + Printer.ExprToString(e.expr));
+
+      // }
               List<Expression> conjuncts = Expression.Conjuncts(expression).ToList();
           if(conjuncts.Count == 1)
           {
@@ -607,11 +618,30 @@ namespace Microsoft.Dafny {
               IEnumerable<ExpressionDepth> exprs = new List<ExpressionDepth>() {new ExpressionDepth(be,1)};
               
               mutatedExprs =  mutateOneExpression(program,decl,new ExpressionDepth(be,1));
+              List<ExpressionDepth> remainderTest =  mutateOneExpression(program,decl,new ExpressionDepth(remainder as BinaryExpr,1));
+              // combinations.Add(mutatedExprs);
+              mutatedExprs.Add(new ExpressionDepth(conjuncts[i],1));
+              // if(mutatedExprs.Count == 0){
+              //    combinations.Add(new List<ExpressionDepth>(){new ExpressionDepth(conjuncts[i],1)});
+              // }else{
+                combinations.Add(mutatedExprs);
+              // testS.Add(mutatedExprs.Select(x => Printer.ExprToString(x.expr)).ToList());
+              
              }
             //put mutations back together with remainder
 
             foreach(ExpressionDepth e in mutatedExprs)
             {
+
+            // Rather than add the to remiander, lets try all combos
+            // for(int ii = 0; ii< combinations.Count; ii++){
+            //     for(int j = 0; j< combinations[i].Count; j++){
+            //       for(int k = ii; kk< combinations.Count; kk++){
+
+            //       }  
+            //   }
+            // }
+            //
             var allTogether = Expression.CreateAnd(remainder, e.expr);
             if(Printer.ExprToString(allTogether) == Printer.ExprToString(expression)){
                 // Console.WriteLine("SAME CHECK  = " + Printer.ExprToString(allTogether) );
@@ -624,11 +654,68 @@ namespace Microsoft.Dafny {
           
           }
          }
+    if(DafnyOptions.O.AllMutations){
+      IEnumerable<IEnumerable<ExpressionDepth>> collections = CartesianProductMutations(combinations);
+
+      foreach (var a in collections)
+      {
+        var comb = a.ToList();
+        if(comb.Count >= 2)
+        {
+          var allTogether = Expression.CreateAnd(comb[0].expr,comb[1].expr);
+          for(var exprI = 2; exprI < comb.Count; exprI++)
+          {
+            allTogether = Expression.CreateAnd(allTogether,comb[exprI].expr);
+          }
+            // Console.WriteLine("---> " + Printer.ExprToString(allTogether));
+            currentExperssions.Add(new ExpressionDepth(allTogether,1));
+        }
+    }
+  
+
+  // var allTogether = Expression.CreateAnd(remainder, e.expr);
+}
         currentExperssions.Add(new ExpressionDepth(trueExpr,1));
         currentExperssions.Add(new ExpressionDepth(falseExpr,1));
         return currentExperssions;
     }
 
+    public  IEnumerable<IEnumerable<ExpressionDepth>> CartesianProductMutations(
+    IEnumerable<IEnumerable<ExpressionDepth>> sequences)
+{
+    var accum = new List<ExpressionDepth[]>();
+    var list = sequences.ToList();
+    if (list.Count > 0)
+    {
+        var enumStack = new Stack<IEnumerator<ExpressionDepth>>();
+        var itemStack = new Stack<ExpressionDepth>();
+        int index = list.Count - 1;
+        var enumerator = list[index].GetEnumerator();
+        while (true)
+            if (enumerator.MoveNext())
+            {
+                itemStack.Push(enumerator.Current);
+                if (index == 0)
+                {
+                    accum.Add(itemStack.ToArray());
+                    itemStack.Pop();
+                }
+                else
+                {
+                    enumStack.Push(enumerator);
+                    enumerator = list[--index].GetEnumerator();
+                }
+            }
+            else
+            {
+                if (++index == list.Count)
+                    break;
+                itemStack.Pop();
+                enumerator = enumStack.Pop();
+            }
+    }
+    return accum;
+}
 
     public List<ExpressionDepth> mutatePredidateHelper(Program program, MemberDecl decl, IEnumerable<ExpressionDepth> expressions){
         List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
@@ -670,6 +757,8 @@ namespace Microsoft.Dafny {
           return getMutatedExprs(program,desiredFunction,equalExprToCheck as BinaryExpr);
         }
     }
+
+    
 
     public List<ExpressionDepth> addForAllMutations(Program program, MemberDecl decl, IEnumerable<ExpressionDepth> expressions)
     {
@@ -1262,5 +1351,7 @@ namespace Microsoft.Dafny {
       // }
       // }
     }
+    
   }
+
 }
