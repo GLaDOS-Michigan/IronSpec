@@ -134,6 +134,27 @@ public async Task<bool>writeOutputs(int index)
     }
     return true;
 }
+
+public async Task<bool>writeFailedOutputs(int index)
+{
+    var requestList = dafnyVerifier.requestsList[index];
+    for(int i = 0; i<requestList.Count;i++){
+      var request = requestList[i];
+      var position = dafnyVerifier.requestToPostConditionPosition[request];
+      var lemmaStartPosition = dafnyVerifier.requestToLemmaStartPosition[request];
+      var output = dafnyVerifier.dafnyOutput[request];
+      var response = output.Response;
+      if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
+              if(i == 1){
+                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
+              }else{
+                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
+              }
+      }
+    }
+    return true;
+}
+
     private void UpdateCombinationResultVacAwareList(int index,bool vac) {
       var requestList = dafnyVerifier.requestsList[index];
       for(int i = 2; i<requestList.Count;i++){
@@ -1034,9 +1055,11 @@ public async Task<bool>writeOutputs(int index)
           Console.WriteLine("Failed Afer 1st PASS:  Index(" + i + ") :: IsWeaker = " + isWeaker + " :: ResolutionError= " + resolutionError);
             remainingVal = remainingVal - 1;
             var requestList = dafnyVerifier.requestsList[i];
+            writeFailedOutputs(i);
             foreach (var request in requestList){
             dafnyVerifier.dafnyOutput[request].Response = "isAtLeastAsWeak";
             }
+            
           }
         }
         await dafnyVerifier.startProofTasksAccordingToPriority();
@@ -1762,7 +1785,8 @@ public async Task<bool>writeOutputs(int index)
       foreach (var q in program.DefaultModuleDef.Includes)
       {
         // Console.WriteLine(includeParser.Normalized(q.IncludedFilename));
-        includesList += "include \"" +includeParser.Normalized(q.IncludedFilename) + "\"\n";
+        // includesList += "include \"" +includeParser.Normalized(q.IncludedFilename) + "\"\n";
+        includesList += "include \"" +includeParser.NormalizedTo(program.FullName,q.IncludedFilename) + "\"\n";
 
       }
             // Console.WriteLine("--------------\n");
@@ -1784,9 +1808,13 @@ public async Task<bool>writeOutputs(int index)
             }else{
               //Comment out single 'proof' lemma
               // Console.WriteLine("=----> " + lemma.Name);
-              int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-              code = code.Insert(lemmaLoc-1,"/*"+"\n");
-              code = code.Insert(code.IndexOf("}\n\n",lemmaLoc)-1,"*/"+"\n");
+              // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
+              // if(lemmaLoc == -1 )
+              // {
+              //   lemmaLoc = code.IndexOf("lemma " +lemma.Name);
+              // }
+              // code = code.Insert(lemmaLoc-1,"/*"+"\n");
+              // code = code.Insert(code.IndexOf("}\n\n",lemmaLoc)-1,"*/"+"\n");
             }
           }
           if(isWeaker){
@@ -1795,6 +1823,10 @@ public async Task<bool>writeOutputs(int index)
           }
           if((vacTest && includeProof)){
             int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
+            if (lemmaLoc == -1)
+            {
+              lemmaLoc = code.IndexOf(lemma.Name+"(");
+            }
             int lemmaLocEns = code.IndexOf("{",lemmaLoc);
             // Console.WriteLine("here = " + lemmaLocEns);
             code = code.Insert(lemmaLocEns-1,"ensures false;\n");

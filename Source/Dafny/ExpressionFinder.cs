@@ -655,6 +655,10 @@ namespace Microsoft.Dafny {
           }
          }
     if(DafnyOptions.O.AllMutations){
+      foreach (var r in combinations[0])
+      {
+        Console.WriteLine(Printer.ExprToString(r.expr));
+      }
       IEnumerable<IEnumerable<ExpressionDepth>> collections = CartesianProductMutations(combinations);
 
       foreach (var a in collections)
