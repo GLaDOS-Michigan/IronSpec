@@ -1100,8 +1100,22 @@ public async Task<bool>writeFailedOutputs(int index)
 
         for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
           if(DafnyOptions.O.EvaluateAllAtOnce || DafnyOptions.O.ProofOnly){
-                UpdateCombinationResultVacAware(i,vacIndex.Contains(i));
-                 writeOutputs(i);
+                // UpdateCombinationResultVacAware(i,vacIndex.Contains(i));
+                //  writeOutputs(i);
+                UpdateCombinationResultVacAwareList(i,vacIndex.Contains(i));
+          
+                writeOutputs(i);
+                foundCorrectExpr = false;
+                foundCorrectExpr |= combinationResults[i] == Result.FalsePredicate;
+                // Console.WriteLine(foundCorrectExpr);
+                var t = isDafnyVerifySuccessful(i);
+                if(foundCorrectExpr)
+                {
+                  Console.WriteLine("Mutation that Passes = " + i);
+                }else if (combinationResults[i] == Result.vacousProofPass)
+                {
+                  Console.WriteLine("Mutation that Passes = " + i + " ** is vacous!");
+                }
           }else{
                 UpdateCombinationResultVacAwareList(i,vacIndex.Contains(i));
           
@@ -2062,8 +2076,6 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         foreach (var arg in args) {
           // Console.WriteLine("hereerere "  + arg);
         }
-                  // Console.WriteLine("hereerere "  + code);
-
         var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
                 // var test = includeParser.NormalizedTo(program.FullName,func.BodyStartTok.Filename);
 
@@ -2269,7 +2281,13 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
          args.Add("/proc:*"+lemmaName+"*");
         }else if(DafnyOptions.O.EvaluateAllAtOnce){
           args.Add("/verifyAllModules");
-        }else if(DafnyOptions.O.ProofOnly){
+        }else if(DafnyOptions.O.ProofOnly){ // maybe at least add the spec file? 
+          var changingFilePathSpec = includeParser.Normalized(func.BodyStartTok.Filename);
+          var constraintFuncChangingFilePathSpec = includeParser.Normalized(func.BodyStartTok.Filename);
+          var remoteFilePathSpec = dafnyVerifier.getTempFilePath()[serverIndexLemma][localizedCntIndexLemma+1].Path;
+          dafnyVerifier.runDafny("", args,
+            expr, cnt, -1, -1,$"{remoteFilePathSpec}/{constraintFuncChangingFilePathSpec}");
+
         }else{
           foreach (var depn in includesSet)
             {
