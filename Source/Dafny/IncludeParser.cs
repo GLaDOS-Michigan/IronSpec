@@ -98,7 +98,9 @@ namespace Microsoft.Dafny {
         samples.First().Substring(0, samples.Min(s => s.Length))
         .TakeWhile((c, i) => samples.All(s => s[i] == c)).ToArray());
       //removeAnything after last occurance of / to avoid files with the same prefix to conflict
-      commonPrefix = commonPrefix.Substring(0,commonPrefix.LastIndexOf("/"));
+      if (!commonPrefix.EndsWith("/")){
+        commonPrefix = commonPrefix.Substring(0,commonPrefix.LastIndexOf("/"));
+      }
       commonPrefixLength = commonPrefix.Length;
       foreach (var includePair in program.DefaultModuleDef.Includes) {
         var includedFilename = Normalized(includePair.IncludedFilename);

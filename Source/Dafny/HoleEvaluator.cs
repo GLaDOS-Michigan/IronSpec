@@ -601,11 +601,56 @@ public async Task<bool>writeFailedOutputs(int index)
         // res += "  ensures forall " + p + " :: "+ fn.Name+"_BASE("+p+") ==> " + fn.Name+"("+p+")\n{}";
         res += "ensures " + fn.Name+"("+p+")\n{}\n";
       }else{
-        res += "  ensures BASE_" + fn.Name+" ==> " + fn.Name+"()\n{}";
+        res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
 
       }
       return res;
     }
+
+    public static string getVacuityLemmaRevised(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
+      string res = "lemma isVac";
+       foreach (var nwPair in path) {
+        res += "_" + nwPair.Item1.Name;
+      
+      }
+      foreach(var t in fn.TypeArgs)
+      {
+        res += "<"+t+"(0,!new)>";
+        // Console.WriteLine("a = " + t);
+      }
+      res += "(";
+      var sep = "";
+      var p = "";
+      Tuple<string, string> x = new Tuple<string, string>(null, null);
+
+      foreach (var nwPair in path) {
+        res += sep + " ";
+        sep = "";
+        x = GetFunctionParamList(nwPair.Item1);
+        res += x.Item2;
+        p += "" + x.Item1; 
+        sep = ", ";
+      }
+      res += ")\n";
+      // if(p != ""){
+      //   res += "requires " + fn.Name+"_BASE("+p+")\n";
+      // }
+      foreach (var req in path[0].Item1.Req) {
+        // res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
+        
+        if(isQuantifier){
+          res += "  requires forall " + x.Item2 + " :: "+ GetNonPrefixedString(req.E, currentModuleDef) + "\n";
+        }else{
+          res += "  requires " + GetNonPrefixedString(req.E, currentModuleDef) + "\n";
+        }
+      }
+      if(p != ""){
+        res += "\t requires " + fn.Name+"("+p+")\n";
+      }
+      res += "\t ensures false;\n{}";
+      return res;
+    }
+
     public static string GetIsStronger(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
       string res = "lemma isStronger";
        foreach (var nwPair in path) {
@@ -849,6 +894,7 @@ public async Task<bool>writeFailedOutputs(int index)
         return false;
       }
       Console.WriteLine(getVacuityLemma(desiredLemmm));
+      Console.WriteLine("-----\n------\n");
               includeParser = new IncludeParser(proofProg);
         var filenameProof = "";
         if(desiredLemmm.BodyStartTok.Filename == null)
@@ -1045,9 +1091,9 @@ public async Task<bool>writeFailedOutputs(int index)
           if(!isWeaker && !resolutionError){
             desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
             if(unresolvedProofProgram != null){
-                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
+                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,false,true);
             }else{
-              PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
+              PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,false,true);
             }
             // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
           }else{
@@ -1079,7 +1125,15 @@ public async Task<bool>writeFailedOutputs(int index)
               vacIndex.Add(i);
               // var request = dafnyVerifier.requestsList[i];
               // dafnyVerifier.dafnyOutput[request].Response = "isVacuous";
-              Console.WriteLine("Failed Afer 2nd PASS:  Index(" + i + ") :: isVacuous");
+              Console.WriteLine("Failed Afer 2nd PASS:  Index(" + i + ") :: isVacuous"); // Note that it is vacous, but still check
+                desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
+                if(unresolvedProofProgram != null){
+                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
+              }else{
+              // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
+              PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
+              }
+
             }else{
                desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
                 if(unresolvedProofProgram != null){
@@ -1835,15 +1889,29 @@ public async Task<bool>writeFailedOutputs(int index)
             fnIndex = code.IndexOf("predicate " + funcName);
             code = code.Insert(fnIndex-1,istWeakerLemma+"\n");
           }
-          if((vacTest && includeProof)){
-            int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-            if (lemmaLoc == -1)
-            {
-              lemmaLoc = code.IndexOf(lemma.Name+"(");
+          // if((vacTest && includeProof)){
+          //   int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
+          //   if (lemmaLoc == -1)
+          //   {
+          //     lemmaLoc = code.IndexOf(lemma.Name+"(");
+          //   }
+          //   int lemmaLocEns = code.IndexOf("{",lemmaLoc);
+          //   // Console.WriteLine("here = " + lemmaLocEns);
+          //   code = code.Insert(lemmaLocEns-1,"ensures false;\n");
+          // }
+
+            if((vacTest)){
+            string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, constraintExpr,false);
+            if(func.WhatKind == "predicate"){
+              fnIndex = code.IndexOf("predicate " + funcName);
+            }else{
+              fnIndex = code.IndexOf("function " + funcName);
             }
-            int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-            // Console.WriteLine("here = " + lemmaLocEns);
-            code = code.Insert(lemmaLocEns-1,"ensures false;\n");
+            code = code.Insert(fnIndex-1,revisedVac+"\n");
+            // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
+            // int lemmaLocEns = code.IndexOf("{",lemmaLoc);
+            // // Console.WriteLine("here = " + lemmaLocEns);
+            // code = code.Insert(lemmaLocEns-1,"ensures false;\n");
           }
           
           // fnIndex = code.IndexOf("predicate " + funcName);
@@ -1950,6 +2018,10 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       string isSameLemma = "";
       string isStrongerLemma = "";
       string istWeakerLemma = "";
+      // if(cnt == 0)
+      // {
+      //   Console.WriteLine(getVacuityLemmaRevised(func,Paths[0], null, constraintExpr,false));
+      // }
 
       if(expr.expr is QuantifierExpr){
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr,true);
@@ -2035,11 +2107,18 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             }
             code = code.Insert(fnIndex-1,istWeakerLemma+"\n");
           }
-          if((vacTest && includeProof)){
-            int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-            int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-            // Console.WriteLine("here = " + lemmaLocEns);
-            code = code.Insert(lemmaLocEns-1,"ensures false;\n");
+          if((vacTest)){
+            string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, constraintExpr,false);
+            if(func.WhatKind == "predicate"){
+              fnIndex = code.IndexOf("predicate " + funcName);
+            }else{
+              fnIndex = code.IndexOf("function " + funcName);
+            }
+            code = code.Insert(fnIndex-1,revisedVac+"\n");
+            // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
+            // int lemmaLocEns = code.IndexOf("{",lemmaLoc);
+            // // Console.WriteLine("here = " + lemmaLocEns);
+            // code = code.Insert(lemmaLocEns-1,"ensures false;\n");
           }
           
           // fnIndex = code.IndexOf("predicate " + funcName);
