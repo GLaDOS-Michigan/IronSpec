@@ -28,7 +28,15 @@ namespace Microsoft.Dafny {
       this.proofEval = proofEval;
     }
 
-    public List<ExpressionFinder.StatementDepth> GetLemmaStatements(Program program, Dictionary<string, List<ExpressionFinder.ExpressionDepth>> typeToExpressionDict, int maxLeastOneOccurenceDepth) {
+    public bool ShouldExcludeLemma(Lemma lemma) {
+      // if (DafnyOptions.O.ProofEvaluatorExcludeDir != null) {
+      //   var lemmaPath = Path.GetFullPath(lemma.tok.filename);
+      //   return lemmaPath.StartsWith(DafnyOptions.O.ProofEvaluatorExcludeDir);
+      // }
+      return false;
+    }
+
+    public List<ExpressionFinder.StatementDepth> GetLemmaStatements(Program program, Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDict, int maxLeastOneOccurenceDepth) {
       var result = new List<ExpressionFinder.StatementDepth>();
       foreach (var kvp in program.ModuleSigs) {
         foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
@@ -36,8 +44,13 @@ namespace Microsoft.Dafny {
           if (cl != null) {
             foreach (var member in cl.Members) {
               if (member is Lemma) {
+                if (ShouldExcludeLemma(member as Lemma)) {
+                  continue;
+                }
                 var lemmaExprs = GetAllPossibleLemmaInvocations(program, member as Lemma, typeToExpressionDict, maxLeastOneOccurenceDepth);
-                // Console.WriteLine($"{member.Name} -> {lemmaExprs.Count}");
+                if (lemmaExprs.Count > 0) {
+                  Console.WriteLine($"{member.Name} generating {lemmaExprs.Count} invocations");
+                }
                 foreach (var expr in lemmaExprs) {
                   List<LocalVariable> localVarList = new List<LocalVariable>();
                   List<Expression> lhss = new List<Expression>();
@@ -73,9 +86,24 @@ namespace Microsoft.Dafny {
       Console.WriteLine($"result.size = {result.Count}");
       return result;
     }
+    public static Type SubstituteTypeWithSynonyms(Type t) {
+      if (t.AsTypeSynonym != null) {
+        return SubstituteTypeWithSynonyms(t.AsTypeSynonym.Rhs);
+      }
+      else if (t is UserDefinedType) {
+        var udt = (UserDefinedType)t;
+        for (int i = 0; i < udt.TypeArgs.Count; i++) {
+          var changedType = SubstituteTypeWithSynonyms(udt.TypeArgs[i]);
+          if (changedType != udt.TypeArgs[i]) {
+            udt.TypeArgs[i] = changedType;
+          }
+        }
+      }
+      return t;
+    }
     public IEnumerable<ExpressionFinder.ExpressionDepth> ListInvocations(
         Lemma lemma,
-        Dictionary<string, List<ExpressionFinder.ExpressionDepth>> typeToExpressionDict,
+        Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDict,
         List<Expression> arguments,
         int currentMaxDepth,
         int maxLeastOneOccurenceDepth,
@@ -91,7 +119,7 @@ namespace Microsoft.Dafny {
         foreach (var arg in arguments) {
           bindings.Add(new ActualBinding(null, arg));
         }
-        var lemmaCallExpr = new ApplySuffix(lemma.tok, null, new NameSegment(lemma.tok, lemma.Name, new List<Type>()), bindings, lemma.tok);
+        var lemmaCallExpr = new ApplySuffix(lemma.tok, null, new NameSegment(lemma.tok, lemma.Name, new List<Type>()), bindings,null);
         yield return new ExpressionFinder.ExpressionDepth(lemmaCallExpr, currentMaxDepth);
         yield break;
       }
@@ -105,8 +133,11 @@ namespace Microsoft.Dafny {
           t = Resolver.SubstType(t, subst);
         }
       }
+      t = SubstituteTypeWithSynonyms(t);
       if (typeToExpressionDict.ContainsKey(t.ToString())) {
         foreach (var expr in typeToExpressionDict[t.ToString()]) {
+          if (expr.expr is FunctionCallExpr || expr.expr is ApplySuffix)
+            continue;
           arguments.Add(expr.expr);
           foreach (var ans in ListInvocations(lemma, typeToExpressionDict, arguments, Math.Max(currentMaxDepth, expr.depth),
           maxLeastOneOccurenceDepth, shouldFillIndex + 1)) {
@@ -119,7 +150,7 @@ namespace Microsoft.Dafny {
 
     public List<ExpressionFinder.ExpressionDepth> GetAllPossibleLemmaInvocations(Program program,
         Lemma lemma,
-        Dictionary<string, List<ExpressionFinder.ExpressionDepth>> typeToExpressionDict,
+        Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDict,
         int maxLeastOneOccurenceDepth) {
       List<ExpressionFinder.ExpressionDepth> result = new List<ExpressionFinder.ExpressionDepth>();
       List<Expression> workingList = new List<Expression>();

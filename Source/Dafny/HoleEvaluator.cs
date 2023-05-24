@@ -42,7 +42,7 @@ namespace Microsoft.Dafny {
     private List<BitArray> bitArrayList = new List<BitArray>();
     private List<float> executionTimes = new List<float>();
     private List<float> startTimes = new List<float>();
-    private Expression constraintExpr = null;
+    private ExpressionFinder.ExpressionDepth constraintExpr = null;
 
     public static bool IsGoodResult(Result result) {
       return (result == Result.CorrectProof ||
@@ -689,7 +689,7 @@ public async Task<bool>writeFailedOutputs(int index)
     }
 
 
-    public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, int cnt) {
+ public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, int cnt) {
       string res = "lemma {:timeLimitMultiplier 2} validityCheck";
       if (cnt != -1) {
         res += "_" + cnt.ToString();
@@ -719,20 +719,24 @@ public async Task<bool>writeFailedOutputs(int index)
       for (int i = 0; i < path.Count - 1; i++) {
         var callExpr = path[i + 1].Item2;
         var condExpr = path[i + 1].Item3;
+        var requiresOrAndSep = "requires";
         if (condExpr != null) {
+          if (condExpr is BinaryExpr && (condExpr as BinaryExpr).E1 is LetExpr) {
+            requiresOrAndSep = "  &&";
+          }
           currentModuleDef = path[i].Item1.EnclosingClass.EnclosingModuleDefinition;
-          res += "  requires " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) + "\n";
+          res += $"  {requiresOrAndSep} " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) + "\n";
         }
         for (int j = 0; j < callExpr.Args.Count; j++) {
-          res += "  requires ";
+          res += $"  {requiresOrAndSep} ";
           res += GetPrefixedString(path[i].Item1.Name + "_", callExpr.Args[j], currentModuleDef);
           res += " == ";
           res += path[i + 1].Item1.Name + "_" + path[i + 1].Item1.Formals[j].Name + "\n";
         }
         foreach (var req in callExpr.Function.Req) {
-          res += "  requires " + GetPrefixedString(path[i + 1].Item1.Name + "_", req.E, currentModuleDef) + "\n";
+          res += $"  {requiresOrAndSep} " + GetPrefixedString(path[i + 1].Item1.Name + "_", req.E, currentModuleDef) + "\n";
         }
-        res += "  requires " + callExpr.Function.FullDafnyName + "(";
+        res += $"  {requiresOrAndSep} " + callExpr.Function.FullDafnyName + "(";
         sep = "";
         foreach (var arg in callExpr.Args) {
           res += sep + GetPrefixedString(path[i].Item1.Name + "_", arg, currentModuleDef);
@@ -747,7 +751,6 @@ public async Task<bool>writeFailedOutputs(int index)
       res += "  ensures false\n{}";
       return res;
     }
-
     public async Task<bool> EvaluateAfterRemoveFileLine(Program program, Program unresolvedProgram, string removeFileLine, string baseFuncName, int depth) {
       var funcName = CodeModifier.Erase(program, removeFileLine);
       return await Evaluate(program, unresolvedProgram, funcName, baseFuncName, depth);
@@ -924,14 +927,14 @@ public async Task<bool>writeFailedOutputs(int index)
       
         // calculate holeEvaluatorConstraint Invocation
         if (constraintFunc != null) {
-          Dictionary<string, List<Expression>> typeToExpressionDictForInputs = new Dictionary<string, List<Expression>>();
+          Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDictForInputs = new Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>>();
           foreach (var formal in baseFunc.Formals) {
-            var identExpr = Expression.CreateIdentExpr(formal);
+            var identExpr = new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(formal), 1);
             var typeString = formal.Type.ToString();
             if (typeToExpressionDictForInputs.ContainsKey(typeString)) {
               typeToExpressionDictForInputs[typeString].Add(identExpr);
             } else {
-              var lst = new List<Expression>();
+              var lst = new HashSet<ExpressionFinder.ExpressionDepth>();
               lst.Add(identExpr);
               typeToExpressionDictForInputs.Add(typeString, lst);
             }
@@ -939,12 +942,12 @@ public async Task<bool>writeFailedOutputs(int index)
           var funcCalls = ExpressionFinder.GetAllPossibleFunctionInvocations(program, constraintFunc, typeToExpressionDictForInputs);
           foreach (var funcCall in funcCalls) {
             if (constraintExpr == null) {
-              constraintExpr = funcCall;
+              constraintExpr = new ExpressionFinder.ExpressionDepth(funcCall.expr, 1);
             } else {
-              constraintExpr = Expression.CreateAnd(constraintExpr, funcCall);
+              constraintExpr.expr = Expression.CreateAnd(constraintExpr.expr, funcCall.expr);
             }
           }
-          Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr)}");
+          Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr.expr)}");
         }
         //MERGE
             expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunction);
@@ -1006,6 +1009,9 @@ public async Task<bool>writeFailedOutputs(int index)
         return false;
       }
       // Console.WriteLine(getVacuityLemma(baseLemma));
+            lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1);
+      lemmaForExprValidityLineCount = lemmaForExprValidityString.Count(f => (f == '\n'));
+      Console.WriteLine("VALIDITYLEMMA \n" + lemmaForExprValidityString + " \n --");
       }
       using (var wr1 = new System.IO.StringWriter()) {
         var pr1 = new Printer(wr1);
@@ -1021,7 +1027,7 @@ public async Task<bool>writeFailedOutputs(int index)
         expressionFindeTest.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         for (int i = 0; i < expressionFindeTest.availableExpressions.Count; i++) {
           Expression simpleAdditiveMutation = Expression.CreateAnd(expressionFindeTest.availableExpressions[i].expr, desiredFunctionUnresolved.Body);
-          Console.WriteLine("mutated = " +  Printer.ExprToString(simpleAdditiveMutation));
+          Console.WriteLine("mutated (from params) = " +  Printer.ExprToString(simpleAdditiveMutation));
           expressionFinder.availableExpressions.Add(new ExpressionFinder.ExpressionDepth(simpleAdditiveMutation,1));
         }
                 foreach (ExpressionFinder.ExpressionDepth e in expressionFindeTest.availableExpressions){
@@ -1041,10 +1047,10 @@ public async Task<bool>writeFailedOutputs(int index)
               // Console.WriteLine("Combo ("+ i +","+ j + ") " + Printer.ExprToString(disjunctExpr));
               
               Expression disjunctDepth2 = Expression.CreateAnd(disjunctExpr, desiredFunctionUnresolved.Body);
-              Console.WriteLine("mutated = " +  Printer.ExprToString(disjunctDepth2));
+              Console.WriteLine("mutated (from params d > 1) = " +  Printer.ExprToString(disjunctDepth2));
               expressionFinder.availableExpressions.Add(new ExpressionFinder.ExpressionDepth(disjunctDepth2,1));
               Expression conjunctDepth2 = Expression.CreateAnd(conjunctExpr, desiredFunctionUnresolved.Body);
-              Console.WriteLine("mutated = " +  Printer.ExprToString(conjunctDepth2));
+              Console.WriteLine("mutated (from params d > 1) = " +  Printer.ExprToString(conjunctDepth2));
               expressionFinder.availableExpressions.Add(new ExpressionFinder.ExpressionDepth(conjunctDepth2,1));
               comboCount = comboCount + 2;
             }
@@ -1351,8 +1357,7 @@ public async Task<bool>writeFailedOutputs(int index)
       return null;
     }
 
-
-     public async Task<bool> Evaluate(Program program, Program unresolvedProgram, string funcName, string baseFuncName, int depth) {
+public async Task<bool> Evaluate(Program program, Program unresolvedProgram, string funcName, string baseFuncName, int depth) {
       if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
         return false;
@@ -1419,7 +1424,7 @@ public async Task<bool>writeFailedOutputs(int index)
       desiredFunction = GetFunction(program, funcName);
       if (desiredFunction != null) {
         includeParser = new IncludeParser(program);
-        var filename = includeParser.Normalized(desiredFunction.BodyStartTok.Filename);
+        var filename = includeParser.Normalized(desiredFunction.BodyStartTok.filename);
         foreach (var file in includeParser.GetListOfAffectedFilesBy(filename)) {
           affectedFiles.Add(file);
         }
@@ -1428,14 +1433,14 @@ public async Task<bool>writeFailedOutputs(int index)
         affectedFiles = affectedFiles.Distinct().ToList();
         // calculate holeEvaluatorConstraint Invocation
         if (constraintFunc != null) {
-          Dictionary<string, List<Expression>> typeToExpressionDictForInputs = new Dictionary<string, List<Expression>>();
+          Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDictForInputs = new Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>>();
           foreach (var formal in baseFunc.Formals) {
-            var identExpr = Expression.CreateIdentExpr(formal);
+            var identExpr = new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(formal), 1);
             var typeString = formal.Type.ToString();
             if (typeToExpressionDictForInputs.ContainsKey(typeString)) {
               typeToExpressionDictForInputs[typeString].Add(identExpr);
             } else {
-              var lst = new List<Expression>();
+              var lst = new HashSet<ExpressionFinder.ExpressionDepth>();
               lst.Add(identExpr);
               typeToExpressionDictForInputs.Add(typeString, lst);
             }
@@ -1443,12 +1448,12 @@ public async Task<bool>writeFailedOutputs(int index)
           var funcCalls = ExpressionFinder.GetAllPossibleFunctionInvocations(program, constraintFunc, typeToExpressionDictForInputs);
           foreach (var funcCall in funcCalls) {
             if (constraintExpr == null) {
-              constraintExpr = funcCall;
+              constraintExpr = new ExpressionFinder.ExpressionDepth(funcCall.expr, 1);
             } else {
-              constraintExpr = Expression.CreateAnd(constraintExpr, funcCall);
+              constraintExpr.expr = Expression.CreateAnd(constraintExpr.expr, funcCall.expr);
             }
           }
-          Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr)}");
+          Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr.expr)}");
         }
         expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
@@ -1477,27 +1482,28 @@ public async Task<bool>writeFailedOutputs(int index)
 
       workingFunc = desiredFunctionUnresolved;
       workingConstraintFunc = constraintFunc;
-      workingFuncCode = File.ReadAllLines(workingFunc.BodyStartTok.Filename);
+      workingFuncCode = File.ReadAllLines(workingFunc.BodyStartTok.filename);
       mergedCode.Add(String.Join('\n', workingFuncCode.Take(workingFunc.tok.line - 1)));
       // placeholder for workingLemma
       mergedCode.Add("");
-      mergedCode.Add(String.Join('\n', workingFuncCode.Skip(workingFunc.EndToken.line)));
+      mergedCode.Add(String.Join('\n', workingFuncCode.Skip(workingFunc.BodyEndTok.line)));
 
-      if (constraintFunc != null && constraintFunc.BodyStartTok.Filename != workingFunc.BodyStartTok.Filename) {
-        constraintFuncCode = File.ReadAllText(constraintFunc.BodyStartTok.Filename);
+      if (constraintFunc != null && constraintFunc.BodyStartTok.filename != workingFunc.BodyStartTok.filename) {
+        constraintFuncCode = File.ReadAllText(constraintFunc.BodyStartTok.filename);
         constraintFuncLineCount = constraintFuncCode.Count(f => (f == '\n'));
       }
       
-      lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr, -1);
+      lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1);
       lemmaForExprValidityLineCount = lemmaForExprValidityString.Count(f => (f == '\n'));
-
+      Console.WriteLine("VALIDITYLEMMA \n" + lemmaForExprValidityString + " \n --");
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
       // for (int i = 0; i < 100; i++) {
         PrintExprAndCreateProcess(unresolvedProgram, expressionFinder.availableExpressions[i], i);
         desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
       }
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish generatinng expressions and lemmas");
       await dafnyVerifier.startProofTasksAccordingToPriority();
-      Console.WriteLine("finish");
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish exploring");
 
       dafnyVerifier.Cleanup();
       // bool foundCorrectExpr = false;
@@ -1557,18 +1563,11 @@ public async Task<bool>writeFailedOutputs(int index)
       string executionTimesSummary = "";
       // executionTimes.Sort();
       for (int i = 0; i < executionTimes.Count; i++) {
-        executionTimesSummary += $"{i}, {executionTimes[i].ToString()}\n";
+        executionTimesSummary += $"{i}, {executionTimes[i]}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummaryEli.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
             executionTimesSummary);
 
-      string startTimesSummary = "";
-      // startTimes.Sort();
-      for (int i = 0; i < startTimes.Count; i++) {
-        startTimesSummary += $"{i}, {(startTimes[i] - startTimes[0]).ToString()}\n";
-      }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummaryEli.txt",
-            startTimesSummary);
       // for (int i = 0; i < bitArrayList.Count; i++) {
       //   var ba = bitArrayList[i];
       //   Console.WriteLine("------------------------------");
@@ -1809,19 +1808,19 @@ public async Task<bool>writeFailedOutputs(int index)
       var funcName = func.Name;
 
       string lemmaForExprValidityString = ""; // remove validityCheck
-      string basePredicateString = GetBaseLemmaList(func,null, constraintExpr);
+      string basePredicateString = GetBaseLemmaList(func,null, constraintExpr.expr);
       string isSameLemma = "";
       string isStrongerLemma = "";
       string istWeakerLemma = "";
 
       if(expr.expr is QuantifierExpr){
-        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr,true);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr,true);
-        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr,true);
+        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
+        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
+        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,true);
       }else{
-        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr,false);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr,false);
-        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr,false);
+        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,false);
+        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
+        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,false);
       }
 
       int lemmaForExprValidityPosition = 0;
@@ -1901,7 +1900,7 @@ public async Task<bool>writeFailedOutputs(int index)
           // }
 
             if((vacTest)){
-            string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, constraintExpr,false);
+            string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, constraintExpr.expr,false);
             if(func.WhatKind == "predicate"){
               fnIndex = code.IndexOf("predicate " + funcName);
             }else{
@@ -2012,26 +2011,50 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine("Mutation -> " + $"{cnt}" + ": " + $"{Printer.ExprToString(expr.expr)}");
       var funcName = func.Name;
-
+      string basePredicateString = "";    
       string lemmaForExprValidityString = ""; // remove validityCheck
-      string basePredicateString = GetBaseLemmaList(func,null, constraintExpr);
-      string isSameLemma = "";
+        string isSameLemma = "";
       string isStrongerLemma = "";
       string istWeakerLemma = "";
+      if(constraintExpr == null)
+      {
+         basePredicateString = GetBaseLemmaList(func,null, null);
+       if(expr.expr is QuantifierExpr){
+        isStrongerLemma = GetIsStronger(func,Paths[0], null, null,true);
+        istWeakerLemma = GetIsWeaker(func,Paths[0], null, null,true);
+        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, null,true);
+      }else{
+        isStrongerLemma = GetIsStronger(func,Paths[0], null, null,false);
+        istWeakerLemma = GetIsWeaker(func,Paths[0], null, null,false);
+        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, null,false);
+      }
+      }else{
+         basePredicateString = GetBaseLemmaList(func,null, constraintExpr.expr);
+         if(expr.expr is QuantifierExpr){
+        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
+        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
+        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,true);
+      }else{
+        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,false);
+        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
+        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,false);
+      }
+      }
+    
       // if(cnt == 0)
       // {
       //   Console.WriteLine(getVacuityLemmaRevised(func,Paths[0], null, constraintExpr,false));
       // }
 
-      if(expr.expr is QuantifierExpr){
-        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr,true);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr,true);
-        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr,true);
-      }else{
-        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr,false);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr,false);
-        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr,false);
-      }
+      // if(expr.expr is QuantifierExpr){
+      //   isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
+      //   istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
+      //   isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,true);
+      // }else{
+      //   isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,false);
+      //   istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
+      //   isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,false);
+      // }
 
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
@@ -2108,7 +2131,8 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             code = code.Insert(fnIndex-1,istWeakerLemma+"\n");
           }
           if((vacTest)){
-            string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, constraintExpr,false);
+            // string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, constraintExpr.expr,false);
+            string revisedVac = getVacuityLemmaRevised(func,Paths[0], null,null,false);
             if(func.WhatKind == "predicate"){
               fnIndex = code.IndexOf("predicate " + funcName);
             }else{

@@ -29,7 +29,7 @@ namespace Microsoft.Dafny {
     }
 
     private HoleFinderExecutor holeFinderExecutor = new HoleFinderExecutor();
-    private Expression constraintExpr = null;
+    private ExpressionFinder.ExpressionDepth constraintExpr = null;
 
     public HoleFinder() { }
 
@@ -200,14 +200,14 @@ namespace Microsoft.Dafny {
         }
       }
       if (constraintFunc != null) {
-        Dictionary<string, List<Expression>> typeToExpressionDictForInputs = new Dictionary<string, List<Expression>>();
+        Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDictForInputs = new Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>>();
         foreach (var formal in func.Formals) {
-          var identExpr = Expression.CreateIdentExpr(formal);
+          var identExpr = new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(formal), 1);
           var typeString = formal.Type.ToString();
           if (typeToExpressionDictForInputs.ContainsKey(typeString)) {
             typeToExpressionDictForInputs[typeString].Add(identExpr);
           } else {
-            var lst = new List<Expression>();
+            var lst = new HashSet<ExpressionFinder.ExpressionDepth>();
             lst.Add(identExpr);
             typeToExpressionDictForInputs.Add(typeString, lst);
           }
@@ -217,10 +217,10 @@ namespace Microsoft.Dafny {
           if (constraintExpr == null) {
             constraintExpr = funcCall;
           } else {
-            constraintExpr = Expression.CreateAnd(constraintExpr, funcCall);
+            constraintExpr.expr = Expression.CreateAnd(constraintExpr.expr, funcCall.expr);
           }
         }
-        Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr)}");
+        Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr.expr)}");
       }
       var CG = HoleEvaluator.GetCallGraph(func);
       Function nullFunc = new Function(
@@ -229,12 +229,12 @@ namespace Microsoft.Dafny {
         func.Req, func.Reads, func.Ens, func.Decreases,
         func.Body, func.ByMethodTok, func.ByMethodBody,
         func.Attributes, func.SignatureEllipsis);
-      PrintWithFuncFalse(program, func, nullFunc, constraintExpr);
+      PrintWithFuncFalse(program, func, nullFunc, constraintExpr.expr);
       foreach (var kvp in program.ModuleSigs) {
         foreach (var topLevelDecl in ModuleDefinition.AllFunctions(kvp.Value.ModuleDef.TopLevelDecls)) {
           if (topLevelDecl.Body != null && CG.AdjacencyWeightList.ContainsKey(topLevelDecl)) {
             Console.WriteLine(topLevelDecl.FullDafnyName);
-            PrintWithFuncFalse(program, func, topLevelDecl, constraintExpr);
+            PrintWithFuncFalse(program, func, topLevelDecl, constraintExpr.expr);
           }
         }
       }
