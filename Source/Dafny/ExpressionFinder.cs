@@ -446,7 +446,238 @@ namespace Microsoft.Dafny {
     }
 
 
+public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberDecl decl, ExpressionDepth e)
+    {
+      Console.Write(" pp = " + e.expr + "( " + Printer.ExprToString(e.expr) + ") \n");
+      List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
+      if(e.expr is LiteralExpr)
+      {
+        currentExperssions.Add(e);
+      }
+      if(e.expr is LetExpr)
+      {
+        var le = e.expr as LetExpr;
+        Console.WriteLine( Printer.ExprToString(le.Body));
+        List<ExpressionDepth> Rhs = mutateOneExpressionRevised(program, decl, new ExpressionDepth(le.RHSs[0],1));
+        List<ExpressionDepth> bdy = mutateOneExpressionRevised(program, decl, new ExpressionDepth(le.Body,1));
+        foreach (var rs in Rhs)
+        {
+          List<Expression> r = new List<Expression>();
+          r.Add(rs.expr);
+          foreach (var b in bdy)
+          {
+            var nleExpr = new LetExpr(e.expr.tok,le.LHSs,r,b.expr,true);
+            currentExperssions.Add(new ExpressionDepth(nleExpr,1));
+          }
+        }
+        Console.WriteLine( Printer.ExprToString(le.Body));
+      }
+      if (e.expr is ParensExpression)
+      {
+        var pE = e.expr as ParensExpression;
+        e.expr = pE.E as BinaryExpr;
+      }
+      if(e.expr is BinaryExpr)
+      {
+        var be = e.expr as BinaryExpr;
+        //logical
+        if(be.Op == BinaryExpr.Opcode.Iff
+           || be.Op == BinaryExpr.Opcode.Imp
+           || be.Op == BinaryExpr.Opcode.And
+           || be.Op == BinaryExpr.Opcode.Or)
+        {
+          // Console.WriteLine("logical");
+          //LOR (Logical Operator Replacement)
+          // OR = (a || b)
+          var Or = Expression.CreateOr(be.E0, be.E1,false);
+          // Not A OR = (!a || b)
+          var OrNotA = Expression.CreateOr(Expression.CreateNot(be.tok, be.E0), be.E1,false);
+          // Not B OR = (a || !b)
+          var OrNotB = Expression.CreateOr(be.E0,Expression.CreateNot(be.tok, be.E1),false);
+           // Not A Not B OR = (!a || !b)
+          var OrNotANotB = Expression.CreateOr(Expression.CreateNot(be.tok, be.E0),Expression.CreateNot(be.tok, be.E1),false);
+          // AND = (a && b)
+          var And = Expression.CreateAnd(be.E0, be.E1,false);
+          // Not A AND = (!a && b)
+          var AndNotA = Expression.CreateAnd(Expression.CreateNot(be.tok, be.E0), be.E1,false);
+          // Not B AND = (a && !b)
+          var AndNotB = Expression.CreateAnd(be.E0,Expression.CreateNot(be.tok, be.E1),false);
+          // Not A Not B AND = (!a && !b)
+          var AndNotANotB = Expression.CreateAnd(Expression.CreateNot(be.tok, be.E0),Expression.CreateNot(be.tok, be.E1),false);
+         
+          currentExperssions.Add(new ExpressionDepth(Or,1));
+          currentExperssions.Add(new ExpressionDepth(OrNotA,1));
+          currentExperssions.Add(new ExpressionDepth(OrNotB,1));
+          currentExperssions.Add(new ExpressionDepth(OrNotANotB,1));
 
+          currentExperssions.Add(new ExpressionDepth(And,1));
+          currentExperssions.Add(new ExpressionDepth(AndNotA,1));
+          currentExperssions.Add(new ExpressionDepth(AndNotB,1));
+          currentExperssions.Add(new ExpressionDepth(AndNotANotB,1));
+        }
+        //Relational
+        if(be.Op == BinaryExpr.Opcode.Lt
+           || be.Op == BinaryExpr.Opcode.Le
+           || be.Op == BinaryExpr.Opcode.Ge
+           || be.Op == BinaryExpr.Opcode.Gt
+           || be.Op == BinaryExpr.Opcode.Eq)
+        {
+          // Console.WriteLine("Relational Expr");
+          //RORB (Binary Relational Replacemnt)
+          // Lower than
+          var LessT = Expression.CreateLess(be.E0, be.E1);
+          // Lower Equal
+          var AtMost = Expression.CreateAtMost(be.E0, be.E1);
+          // Greater Than = !(Lower equal)
+          var gtExpr = Expression.CreateNot(be.tok, Expression.CreateAtMost(be.E0, be.E1));
+          // Greater Equal = !(Lower than)
+          var geExpr = Expression.CreateNot(be.tok, Expression.CreateLess(be.E0, be.E1));
+          //Equal
+          var equalityExpr = Expression.CreateEq(be.E0, be.E1,be.Type);
+           // Not Equal = !(a == b)
+          var NotEquals = Expression.CreateNot(be.tok, Expression.CreateEq(be.E0, be.E1,be.Type));
+
+          currentExperssions.Add(new ExpressionDepth(LessT,1)); 
+          currentExperssions.Add(new ExpressionDepth(AtMost,1)); 
+          currentExperssions.Add(new ExpressionDepth(gtExpr,1)); 
+          currentExperssions.Add(new ExpressionDepth(geExpr,1));
+          currentExperssions.Add(new ExpressionDepth(equalityExpr,1));
+          currentExperssions.Add(new ExpressionDepth(NotEquals,1));
+
+        }
+        //Arith
+      if(be.Op == BinaryExpr.Opcode.Add
+           || be.Op == BinaryExpr.Opcode.Sub
+           || be.Op == BinaryExpr.Opcode.Div
+           || be.Op == BinaryExpr.Opcode.Mod)
+        {
+          // Console.WriteLine("Arith");
+          //AORB (Binary Arithmatic Operator Replacement)
+          //Add
+          var AddExpr = Expression.CreateAdd(be.E0, be.E1);
+          //Sub
+          var SubExpr = Expression.CreateSubtract(be.E0, be.E1);
+          //Mult
+          var MultExpr = Expression.CreateMul(be.E0, be.E1);
+          //Div
+          var DivExpr = Expression.CreateDiv(be.E0, be.E1);
+          //Mod
+          var ModExpr = Expression.CreateMod(be.E0, be.E1);
+          currentExperssions.Add(new ExpressionDepth(AddExpr,1));
+          currentExperssions.Add(new ExpressionDepth(SubExpr,1));
+          currentExperssions.Add(new ExpressionDepth(MultExpr,1));
+          currentExperssions.Add(new ExpressionDepth(DivExpr,1));
+          currentExperssions.Add(new ExpressionDepth(ModExpr,1));
+        }
+      if ((be.Type.IsNumericBased(Type.NumericPersuasion.Int) 
+              || be.Type.IsNumericBased(Type.NumericPersuasion.Real))
+              || (be).E0.Type.IsNumericBased(Type.NumericPersuasion.Int)
+              || (be).E0.Type.IsNumericBased(Type.NumericPersuasion.Int)
+              || (be).E1.Type.IsNumericBased(Type.NumericPersuasion.Real)
+              || (be).E1.Type.IsNumericBased(Type.NumericPersuasion.Real))
+        {
+          //CRCR (Integer Constant Replacement)
+          //AInc
+          var Ainc = new BinaryExpr(be.tok, be.Op, Expression.CreateIncrement(be.E0, 1), be.E1);
+          //BInc
+          var Binc = new BinaryExpr(be.tok, be.Op,be.E0, Expression.CreateIncrement(be.E1, 1));
+          //ADec
+          var Adec = new BinaryExpr(be.tok, be.Op, Expression.CreateDecrement(be.E0, 1), be.E1);
+          //BDec
+          var Bdec = new BinaryExpr(be.tok, be.Op,be.E0, Expression.CreateDecrement(be.E1, 1));
+          currentExperssions.Add(new ExpressionDepth(Ainc,1));
+          currentExperssions.Add(new ExpressionDepth(Binc,1));
+          currentExperssions.Add(new ExpressionDepth(Adec,1));
+          currentExperssions.Add(new ExpressionDepth(Bdec,1));
+        }
+
+      //Set
+      if(be.Op == BinaryExpr.Opcode.In)
+        {
+          // Console.WriteLine("SET Expr");
+          // NotIn
+          var NotIn = Expression.CreateNot(be.tok, be);
+          currentExperssions.Add(new ExpressionDepth(NotIn,1));
+        } 
+
+        List<ExpressionDepth> subExperssionsE0 = mutateOneExpressionRevised(program,decl,new ExpressionDepth(be.E0,1));
+        foreach (var subE0 in subExperssionsE0)
+        {
+          var sube0_new = new BinaryExpr(be.tok, be.Op, subE0.expr, be.E1);
+          currentExperssions.Add(new ExpressionDepth(sube0_new,1));
+        }
+
+        List<ExpressionDepth> subExperssionsE1 = mutateOneExpressionRevised(program,decl,new ExpressionDepth(be.E1,1));
+        foreach (var subE1 in subExperssionsE1)
+        {
+          var sube1_new = new BinaryExpr(be.tok, be.Op, be.E0, subE1.expr);
+          currentExperssions.Add(new ExpressionDepth(sube1_new,1));
+        }
+
+
+      }else if(e.expr is ForallExpr)
+      {
+        // Console.WriteLine("Forall Expr");
+         var eforall = e.expr as ForallExpr;
+        //Mutate Term
+        List<ExpressionDepth> forallExprs =  mutateOneExpressionRevised(program,decl,new ExpressionDepth(eforall.Term,1));
+        foreach (ExpressionDepth ee in forallExprs){
+          QuantifierExpr qe;
+          ResolvedCloner cloner = new ResolvedCloner();
+          var newVars = eforall.BoundVars.ConvertAll(cloner.CloneBoundVar);
+          qe = new ForallExpr(eforall.tok, eforall.BodyEndTok, newVars, eforall.Range, ee.expr, eforall.Attributes);
+          currentExperssions.Add(new ExpressionDepth(qe,1));
+        }
+        //Mutate Range
+        List<ExpressionDepth> forallExprsRange =  mutateOneExpressionRevised(program,decl,new ExpressionDepth(eforall.Range,1));
+        foreach (ExpressionDepth ee in forallExprsRange){
+          QuantifierExpr qe;
+          ResolvedCloner cloner = new ResolvedCloner();
+          var newVars = eforall.BoundVars.ConvertAll(cloner.CloneBoundVar);
+          qe = new ForallExpr(eforall.tok, eforall.BodyEndTok, newVars, ee.expr, eforall.Term, eforall.Attributes);
+          currentExperssions.Add(new ExpressionDepth(qe,1));
+        }
+
+      }else if(e.expr is ExistsExpr)
+      {
+        // Console.WriteLine("Exists Expr");
+        var existsE = e.expr as ExistsExpr;
+        // var be = e.LogicalBody() as BinaryExpr;
+        List<ExpressionDepth> existsExprTerm = mutateOneExpressionRevised(program,decl,new ExpressionDepth(existsE.Term,1));
+        List<ExpressionDepth> existsExpr = new List<ExpressionDepth>();
+
+        foreach (ExpressionDepth ee in existsExprTerm){
+          ExistsExpr q;
+          ResolvedCloner cloner = new ResolvedCloner();
+          var newVars = existsE.BoundVars.ConvertAll(cloner.CloneBoundVar);
+
+          q = new ExistsExpr(existsE.tok, existsE.BodyEndTok, newVars, existsE.Range, ee.expr, existsE.Attributes);
+          // ee = q;
+          currentExperssions.Add(new ExpressionDepth(q,1));
+        }
+        // return existsExpr;
+
+      }
+      else if(e.expr is UnaryOpExpr)
+      {
+        // Console.WriteLine("Unary Expr");
+        var ue = e.expr as UnaryOpExpr;
+        if(ue.Op == UnaryOpExpr.Opcode.Not) // NOT
+        {
+            //DeleteNot
+            currentExperssions.Add(new ExpressionDepth(ue.E,1));
+        }
+      }
+        
+
+      // Console.WriteLine("--REVISED-- "+ Printer.ExprToString(e.expr));
+      // foreach (ExpressionDepth ed in currentExperssions)
+      // {
+      //   Console.WriteLine(Printer.ExprToString(ed.expr));
+      // }
+      // Console.WriteLine("---------");
+      return currentExperssions;
+    }
     public List<ExpressionDepth> mutateOneExpression(Program program, MemberDecl decl, ExpressionDepth e)
     {
       List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
@@ -456,6 +687,7 @@ namespace Microsoft.Dafny {
       // {
       //   var rbe =  e.expr as BinaryExpr;
       // }
+      List<ExpressionDepth> currentExperssions2 = mutateOneExpressionRevised(program,decl,e);
       if (e.expr is ParensExpression)
       {
         var pE = e.expr as ParensExpression;
@@ -466,6 +698,7 @@ namespace Microsoft.Dafny {
          if((e.expr as BinaryExpr).E0.Type is BoolType || (e.expr as BinaryExpr).E1.Type is BoolType){
           var be = e.expr as BinaryExpr;
           Console.WriteLine("MUTATING One Binary Expr= " + Printer.ExprToString(be));
+                    // Console.WriteLine(" Binary OP = " + be.Op);
 
           var e0 = Printer.ExprToString(be.E0);
           var e1 = Printer.ExprToString(be.E1);
@@ -576,6 +809,8 @@ namespace Microsoft.Dafny {
           Console.WriteLine(Printer.ExprToString(e.expr) + " :: " + e.expr);
           var be = e.expr as BinaryExpr;
           Console.WriteLine("MUTATING Algebraic= " + Printer.ExprToString(be));
+                    // Console.WriteLine(" Algebraic OP = " + be.Op);
+
          // var Ae = e.expr as ParensExpression;
           //Add
           var AddExpr = Expression.CreateAdd(be.E0, be.E1);
@@ -621,6 +856,24 @@ namespace Microsoft.Dafny {
           currentExperssions.Add(new ExpressionDepth(gtExpr,1)); // Consider moving to Arith
           currentExperssions.Add(new ExpressionDepth(geExpr,1)); // Consider moving to Arith
 
+          List<ExpressionDepth> subExperssionsE0 = mutateOneExpression(program,decl,new ExpressionDepth(be.E0,1));
+            foreach (var subE0 in subExperssionsE0)
+            {
+              var sube0_new = new BinaryExpr(be.tok, be.Op, subE0.expr, be.E1);
+              currentExperssions.Add(new ExpressionDepth(sube0_new,1));
+            }
+            // currentExperssions.AddRange(mutateOneExpression(program,decl,new ExpressionDepth(be.E0,1)));
+          // }
+          // if(be.E1 is BinaryExpr)
+          // {
+            List<ExpressionDepth> subExperssionsE1 = mutateOneExpression(program,decl,new ExpressionDepth(be.E1,1));
+            foreach (var subE1 in subExperssionsE1)
+            {
+              var sube1_new = new BinaryExpr(be.tok, be.Op, be.E0, subE1.expr);
+              currentExperssions.Add(new ExpressionDepth(sube1_new,1));
+            }
+
+
         } 
        }else if(e.expr is ForallExpr)
        {
@@ -649,7 +902,7 @@ namespace Microsoft.Dafny {
       return currentExperssions;
     }
 // Mutate the body and params
-    public List<ExpressionDepth> getMutatedExprs(Program program, Function decl, BinaryExpr expression){
+    public List<ExpressionDepth> getMutatedExprs(Program program, Function decl, Expression expression){
       List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
       List<List<ExpressionDepth>> combinations = new List<List<ExpressionDepth>>();
       List<List<String>> testS = new List<List<String>>();  
@@ -658,138 +911,127 @@ namespace Microsoft.Dafny {
       var trueExpr = Expression.CreateBoolLiteral(decl.tok, true);
       var falseExpr = Expression.CreateBoolLiteral(decl.tok, false);
       IEnumerable<ExpressionDepth> q = TraverseFormal(program,new ExpressionDepth(expression,1));
-      currentExperssions.AddRange(mutateOneExpression(program,decl,q.ElementAt(0)));
+      // currentExperssions.AddRange(mutateOneExpression(program,decl,q.ElementAt(0)));
+      // List<ExpressionDepth> aaa =  mutateOneExpressionRevised(program,decl,new ExpressionDepth(expression,1));
+      // currentExperssions.AddRange(mutateOneExpressionRevised(program,decl,new ExpressionDepth(expression,1)));
+
       // foreach (var e in currentExperssions)
       // {
       //   Console.WriteLine("initial= " + Printer.ExprToString(e.expr));
 
       // }
-              List<Expression> conjuncts = Expression.Conjuncts(expression).ToList();
-          if(conjuncts.Count == 1)
-          {
-            Console.WriteLine("HERE 1-> "+ conjuncts.Count);
-            var be = expression as BinaryExpr;
-            // Console.WriteLine("here = " + expression);
-            // Console.WriteLine("HERE 2-> "+ Printer.ExprToString(be));
-            currentExperssions = mutateOneExpression(program,decl,new ExpressionDepth(be,1));
+            List<Expression> conjuncts = Expression.Conjuncts(expression).ToList();
+        if(conjuncts.Count == 1)
+        {
+          Console.WriteLine("Single Conjunct => "+ conjuncts.Count);
+          // var be = expression as BinaryExpr;
+          // Console.WriteLine("here = " + expression);
+          // Console.WriteLine("HERE 2-> "+ Printer.ExprToString(be));
+          // currentExperssions = mutateOneExpression(program,decl,new ExpressionDepth(be,1));
+          currentExperssions = mutateOneExpressionRevised(program,decl,new ExpressionDepth(expression,1));
 
-          }
-         if(conjuncts.Count > 1){
-          for (int i = 0; i < conjuncts.Count; i++) {
-            Console.WriteLine("Whole EXPRESSION To Mutate= " + Printer.ExprToString(conjuncts[i]));
-            //  Console.WriteLine("EXPRESSION To Mutate= " +conjuncts[i]);
-            
-            // Keep all other expersions the same
-            Expression remainder; 
-            if(i > 0){
-               remainder = conjuncts[0];
-               for (int j = 1; j < conjuncts.Count; j++)
-              {
-                if(j != i){
-                  remainder = Expression.CreateAnd(remainder, conjuncts[j]);
-                }
+        }
+        if(conjuncts.Count > 1){
+        for (int i = 0; i < conjuncts.Count; i++) {
+          Console.WriteLine("Whole EXPRESSION To Mutate= " + Printer.ExprToString(conjuncts[i]));
+          //  Console.WriteLine("EXPRESSION To Mutate= " +conjuncts[i]);
+          
+          // Keep all other expersions the same
+          Expression remainder; 
+          if(i > 0){
+              remainder = conjuncts[0];
+              for (int j = 1; j < conjuncts.Count; j++)
+            {
+              if(j != i){
+                remainder = Expression.CreateAnd(remainder, conjuncts[j]);
               }
-            }else{
-               remainder = conjuncts[1];
-               for (int j = 2; j < conjuncts.Count; j++)
-              {
-                if(j != i){
-                  remainder = Expression.CreateAnd(remainder, conjuncts[j]);
-                }
             }
-            }
-            Console.WriteLine("EXPRESSION To KeepSame = " + Printer.ExprToString(remainder));
-                          List<ExpressionDepth> mutatedExprs = new List<ExpressionDepth>();
-
-             if( conjuncts[i] is ForallExpr ){
-              // List<Expression> forallExpresions = addForAllMutations(program,decl,conjuncts[i]);
-              // foreach (Expression e in forallExpresions)
-              // {
-              //   // currentExpressions.Add(e);
-              // }
-              var e = conjuncts[i] as ForallExpr;
-              //Mutate Term
-              List<ExpressionDepth> forallExprs =  mutateOneExpression(program,decl,new ExpressionDepth(e.Term as BinaryExpr,1));
-              foreach (ExpressionDepth ee in forallExprs){
-                QuantifierExpr qe;
-                  ResolvedCloner cloner = new ResolvedCloner();
-                var newVars = e.BoundVars.ConvertAll(cloner.CloneBoundVar);
-
-              qe = new ForallExpr(e.tok, e.BodyEndTok, newVars, e.Range, ee.expr, e.Attributes);
-              // ee = q;
-                mutatedExprs.Add(new ExpressionDepth(qe,1));
-             }
-            //Mutate Range
-            List<ExpressionDepth> forallExprsRange =  mutateOneExpression(program,decl,new ExpressionDepth(e.Range as BinaryExpr,1));
-            foreach (ExpressionDepth ee in forallExprsRange){
-              QuantifierExpr qe;
-              ResolvedCloner cloner = new ResolvedCloner();
-              var newVars = e.BoundVars.ConvertAll(cloner.CloneBoundVar);
-              qe = new ForallExpr(e.tok, e.BodyEndTok, newVars, ee.expr, e.Term, e.Attributes);
-              mutatedExprs.Add(new ExpressionDepth(qe,1));
-            }
+          }else{
+              remainder = conjuncts[1];
+              for (int j = 2; j < conjuncts.Count; j++)
+            {
+              if(j != i){
+                remainder = Expression.CreateAnd(remainder, conjuncts[j]);
+              }
+          }
+          }
+          Console.WriteLine("EXPRESSION To KeepSame = " + Printer.ExprToString(remainder));
+                        List<ExpressionDepth> mutatedExprs = new List<ExpressionDepth>();
 
 
-             }else{
-              var be = conjuncts[i] as BinaryExpr;
-              IEnumerable<ExpressionDepth> exprs = new List<ExpressionDepth>() {new ExpressionDepth(be,1)};
-              
-              mutatedExprs =  mutateOneExpression(program,decl,new ExpressionDepth(be,1));
-              List<ExpressionDepth> remainderTest =  mutateOneExpression(program,decl,new ExpressionDepth(remainder as BinaryExpr,1));
-              // combinations.Add(mutatedExprs);
-              mutatedExprs.Add(new ExpressionDepth(conjuncts[i],1));
-              // if(mutatedExprs.Count == 0){
-              //    combinations.Add(new List<ExpressionDepth>(){new ExpressionDepth(conjuncts[i],1)});
-              // }else{
-                combinations.Add(mutatedExprs);
-              // testS.Add(mutatedExprs.Select(x => Printer.ExprToString(x.expr)).ToList());
-              
-             }
-            //put mutations back together with remainder
+          //   }else{
+            // var be = conjuncts[i] as BinaryExpr;
+            var be = conjuncts[i];
 
+            Console.WriteLine("conjunt[i] == " + conjuncts[i]);
+            IEnumerable<ExpressionDepth> exprs = new List<ExpressionDepth>() {new ExpressionDepth(be,1)};
+            
+            mutatedExprs =  mutateOneExpressionRevised(program,decl,new ExpressionDepth(be,1));
+            ////!!!!!
+            // List<ExpressionDepth> remainderTest =  mutateOneExpression(program,decl,new ExpressionDepth(remainder as BinaryExpr,1));
+              ////!!!!!
+            // combinations.Add(mutatedExprs);
+            mutatedExprs.Add(new ExpressionDepth(conjuncts[i],1));
+            // if(mutatedExprs.Count == 0){
+            //    combinations.Add(new List<ExpressionDepth>(){new ExpressionDepth(conjuncts[i],1)});
+            // }else{
+              combinations.Add(mutatedExprs);
+            // testS.Add(mutatedExprs.Select(x => Printer.ExprToString(x.expr)).ToList());
+            
+            // }
+          //put mutations back together with remainder
+          if(!DafnyOptions.O.AllMutations){
             foreach(ExpressionDepth e in mutatedExprs)
             {
 
-            // Rather than add the to remiander, lets try all combos
-            // for(int ii = 0; ii< combinations.Count; ii++){
-            //     for(int j = 0; j< combinations[i].Count; j++){
-            //       for(int k = ii; kk< combinations.Count; kk++){
-
-            //       }  
-            //   }
-            // }
-            //
             var allTogether = Expression.CreateAnd(remainder, e.expr);
-            if(Printer.ExprToString(allTogether) == Printer.ExprToString(expression)){
-                // Console.WriteLine("SAME CHECK  = " + Printer.ExprToString(allTogether) );
+            foreach (var allTgether in logicalMutationSimpleList(remainder,e.expr))
+            {
+              currentExperssions.Add(new ExpressionDepth(allTgether,1));
+              Console.WriteLine("mutated  = " + Printer.ExprToString(allTgether) );
 
             }
-            currentExperssions.Add(new ExpressionDepth(allTogether,1));
-            Console.WriteLine("mutated  = " + Printer.ExprToString(allTogether) );
+            // currentExperssions.Add(new ExpressionDepth(allTogether,1));
+            // Console.WriteLine("mutated  = " + Printer.ExprToString(allTogether) );
 
             }
-          
           }
-         }
+        
+        }
+        }
     if(DafnyOptions.O.AllMutations){
-      foreach (var r in combinations[0])
-      {
-        Console.WriteLine(Printer.ExprToString(r.expr));
-      }
       IEnumerable<IEnumerable<ExpressionDepth>> collections = CartesianProductMutations(combinations);
+      List<Expression> mutatedLogicalE = new List<Expression>();
+      List<Expression> mutatedLogicalETwo = new List<Expression>();
 
       foreach (var a in collections)
       {
         var comb = a.ToList();
         if(comb.Count >= 2)
         {
-          var allTogether = Expression.CreateAnd(comb[0].expr,comb[1].expr);
+          mutatedLogicalE = logicalMutationSimpleList(comb[0].expr,comb[1].expr);
+          // var allTogether = Expression.CreateAnd(comb[0].expr,comb[1].expr);
+          // var allTogetherOr = Expression.CreateOr(comb[0].expr,comb[1].expr);
+          // mutatedLogicalE.Add(allTogether);
+          // mutatedLogicalE.Add(allTogetherOr);
+         
           for(var exprI = 2; exprI < comb.Count; exprI++)
           {
-            allTogether = Expression.CreateAnd(allTogether,comb[exprI].expr);
+            foreach (var mle in mutatedLogicalE)
+            {
+              mutatedLogicalETwo.AddRange(logicalMutationSimpleList(mle,comb[exprI].expr));
+            }
+            mutatedLogicalE = mutatedLogicalETwo;
+            // allTogether = Expression.CreateAnd(allTogether,comb[exprI].expr);
           }
+          mutatedLogicalETwo = new List<Expression>();
+            foreach (var newMutations in mutatedLogicalE)
+            {
+              Console.WriteLine("---> " + Printer.ExprToString(newMutations));
+              currentExperssions.Add(new ExpressionDepth(newMutations,1));
+            } 
             // Console.WriteLine("---> " + Printer.ExprToString(allTogether));
-            currentExperssions.Add(new ExpressionDepth(allTogether,1));
+            // currentExperssions.Add(new ExpressionDepth(allTogether,1));
         }
     }
   
@@ -801,7 +1043,17 @@ namespace Microsoft.Dafny {
         return currentExperssions;
     }
 
-    public  IEnumerable<IEnumerable<ExpressionDepth>> CartesianProductMutations(
+public List<Expression> logicalMutationSimpleList(Expression a,Expression b)
+{
+  List<Expression> mutatedEs = new List<Expression>();
+  Expression eAnd = Expression.CreateAnd(a,b);
+  Expression eOr = Expression.CreateOr(a,b);
+  mutatedEs.Add(eAnd);
+  mutatedEs.Add(eOr);
+  return mutatedEs;
+}
+
+public  IEnumerable<IEnumerable<ExpressionDepth>> CartesianProductMutations(
     IEnumerable<IEnumerable<ExpressionDepth>> sequences)
 {
     var accum = new List<ExpressionDepth[]>();
@@ -842,41 +1094,7 @@ namespace Microsoft.Dafny {
         List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
         var desiredFunction = decl as Function;
         var equalExprToCheck = desiredFunction.Body;
-        if( equalExprToCheck is ForallExpr ){
-          currentExperssions = addForAllMutations(program,decl,expressions);
-          return currentExperssions;
-          // var e = equalExprToCheck as ForallExpr;
-          // // Console.WriteLine(" ForallExpr = " + e.LogicalBody());
-          // // Console.WriteLine(" ForallExpr Range= " + Printer.ExprToString(e.Range));
-          // Console.WriteLine(" ForallExpr Term= " + Printer.ExprToString(e.Term));
-          // List<Expression> conjuncts = Expression.Conjuncts(e.Term as BinaryExpr).ToList();
-          // Console.WriteLine("HERE 1-> "+ conjuncts.Count);
-          // var be = e.LogicalBody() as BinaryExpr;
-          // // Console.WriteLine("HERE Forall-> "+ Printer.ExprToString(be));
-          // currentExperssions = getMutatedExprs(program,desiredFunction,e.Term as BinaryExpr);
-          // List<Expression> forallExprs = new List<Expression>();
-          // foreach (Expression ee in currentExperssions){
-          //   QuantifierExpr q;
-          //         ResolvedCloner cloner = new ResolvedCloner();
-          //     var newVars = e.BoundVars.ConvertAll(cloner.CloneBoundVar);
-
-          //   q = new ForallExpr(e.tok, e.BodyEndTok, newVars, e.Range, ee, e.Attributes);
-          //   // ee = q;
-          //   forallExprs.Add(q);
-          // }
-          // return forallExprs;
-        }else if(equalExprToCheck is ExistsExpr){
-          Console.WriteLine(" ExistsExpr = " + equalExprToCheck);
-          currentExperssions = addExistsMutations(program,decl,expressions);
-          return currentExperssions;
-        }else if(equalExprToCheck is ParensExpression){
-          Console.WriteLine(" ParensExpr = " + equalExprToCheck);
-           return currentExperssions;
-        }else{ //Assume Binary Expr
-            Console.WriteLine(" expr = " + equalExprToCheck);
-
-          return getMutatedExprs(program,desiredFunction,equalExprToCheck as BinaryExpr);
-        }
+        return getMutatedExprs(program,desiredFunction,equalExprToCheck);
     }
 
     
