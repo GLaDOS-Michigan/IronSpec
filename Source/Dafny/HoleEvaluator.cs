@@ -41,6 +41,8 @@ namespace Microsoft.Dafny {
         // private Cloner cloner = new Cloner();
     private List<BitArray> bitArrayList = new List<BitArray>();
     private List<float> executionTimes = new List<float>();
+    private Dictionary<String,float> verboseExecTimes = new Dictionary<string, float>();
+    private Dictionary<int,float> verboseExecTimesTotal = new Dictionary<int, float>();
     private List<float> startTimes = new List<float>();
     private ExpressionFinder.ExpressionDepth constraintExpr = null;
 
@@ -77,7 +79,7 @@ namespace Microsoft.Dafny {
         var response = output.Response;
         var filePath = output.FileName;
         // var startTime = output.StartTime;
-var execTime = output.ExecutionTimeInMs;
+        var execTime = output.ExecutionTimeInMs;
         executionTimes.Add(execTime);
         // startTimes.Add(startTime);
         Result res;
@@ -166,6 +168,12 @@ public async Task<bool>writeFailedOutputs(int index)
           var filePath = output.FileName;
           var execTime = output.ExecutionTimeInMs;
           executionTimes.Add(execTime);
+          verboseExecTimes.Add("(" + index + ") "+ filePath,execTime);
+          if(verboseExecTimesTotal.ContainsKey(index)){
+            verboseExecTimesTotal[index] = verboseExecTimesTotal[index] + execTime;
+          }else{
+            verboseExecTimesTotal.Add(index,execTime);
+          }
           var expectedOutput =
             $"{filePath}({position},0): Error: A postcondition might not hold on this return path.";
           var expectedInconclusiveOutputStart =
@@ -1090,6 +1098,8 @@ public async Task<bool>writeFailedOutputs(int index)
        dafnyVerifier.clearTasks();
       Console.WriteLine("--- END Is At Least As Weak Pass  -- ");
       Console.WriteLine("--- START Vacuity Pass -- ");
+        Stopwatch VacStopwatch = new Stopwatch();
+        VacStopwatch.Start();
         for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
           var isWeaker = isDafnyVerifySuccessful(i);  
           var resolutionError = isResolutionError(i);
@@ -1118,7 +1128,12 @@ public async Task<bool>writeFailedOutputs(int index)
         dafnyVerifier.clearTasks();
 
         Console.WriteLine("--- END Vacuity Pass --");
+        VacStopwatch.Stop();
+        Console.WriteLine("Elapsed Time is {0} ms", VacStopwatch.ElapsedMilliseconds);
+
         Console.WriteLine("--- START Full Proof Pass -- ");
+        Stopwatch FullStopWatch = new Stopwatch();
+        FullStopWatch.Start();
         List<int> vacIndex = new List<int>();
         // if(unresolvedProofProgram == null){
         
@@ -1155,6 +1170,8 @@ public async Task<bool>writeFailedOutputs(int index)
         dafnyVerifier.clearTasks();
         Console.WriteLine("--- END Full Proof Pass -- ");
         // }
+        FullStopWatch.Stop();
+        Console.WriteLine("Elapsed Time is {0} ms", FullStopWatch.ElapsedMilliseconds);
 
       bool foundCorrectExpr = false;
 
@@ -1172,9 +1189,13 @@ public async Task<bool>writeFailedOutputs(int index)
                 if(foundCorrectExpr)
                 {
                   Console.WriteLine("Mutation that Passes = " + i);
+                  Console.WriteLine("\t ==> " + Printer.ExprToString(expressionFinder.availableExpressions[i].expr));
+
                 }else if (combinationResults[i] == Result.vacousProofPass)
                 {
                   Console.WriteLine("Mutation that Passes = " + i + " ** is vacous!");
+                  Console.WriteLine("\t ==> " +  Printer.ExprToString(expressionFinder.availableExpressions[i].expr));
+
                 }
           }else{
                 UpdateCombinationResultVacAwareList(i,vacIndex.Contains(i));
@@ -1187,9 +1208,12 @@ public async Task<bool>writeFailedOutputs(int index)
                 if(foundCorrectExpr)
                 {
                   Console.WriteLine("Mutation that Passes = " + i);
+                  Console.WriteLine("\t ==> " +  Printer.ExprToString(expressionFinder.availableExpressions[i].expr));
                 }else if (combinationResults[i] == Result.vacousProofPass)
                 {
                   Console.WriteLine("Mutation that Passes = " + i + " ** is vacous!");
+                  Console.WriteLine("\t ==> " +  Printer.ExprToString(expressionFinder.availableExpressions[i].expr));
+
                 }
               }
         }
@@ -1251,7 +1275,22 @@ public async Task<bool>writeFailedOutputs(int index)
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25}",
         invalidExprCount, incorrectProofCount, falsePredicateCount, vacousProofPass, expressionFinder.availableExpressions.Count);
       string executionTimesSummary = "";
+      string verboseExecTimesSummary = "";
       // executionTimes.Sort();
+      foreach (var pair in verboseExecTimes)
+        {
+            string key = pair.Key;
+            string value = pair.Value.ToString();
+            verboseExecTimesSummary += key + " :: " + value + "\n";
+        }
+      foreach (var pair in verboseExecTimesTotal)
+      {
+            string key = pair.Key.ToString();
+            string value = pair.Value.ToString();
+            verboseExecTimesSummary +="( " + key + ") :: " + value + "\n";
+      }
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummaryVerboseEli.txt",
+      verboseExecTimesSummary);
       for (int i = 0; i < executionTimes.Count; i++) {
         executionTimesSummary += $"{i}, {executionTimes[i].ToString()}\n";
       }
