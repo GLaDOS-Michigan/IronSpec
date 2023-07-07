@@ -358,19 +358,24 @@ public async Task<bool>writeFailedOutputs(int index)
             // } else {
             //   Console.WriteLine($"condition : null");
             // }
-            queue.Enqueue(new Tuple<Expression, Expression, Function>(
-              (currExprCondParentTuple.Item1 as FunctionCallExpr).Function.Body,
-              null,
-              (currExprCondParentTuple.Item1 as FunctionCallExpr).Function));
-            G.AddVertex((currExprCondParentTuple.Item1 as FunctionCallExpr).Function);
-            G.AddEdge(
-              currExprCondParentTuple.Item3,
-              (currExprCondParentTuple.Item1 as FunctionCallExpr).Function,
-              currExprCondParentTuple.Item1 as FunctionCallExpr,
-              currExprCondParentTuple.Item2);
-            // Console.WriteLine("-------------------------------------");
-            // keys.Add(Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body) + ":" + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body);
+            // if ((currExprCondParentTuple.Item1 as FunctionCallExpr).Function.ToString() == ) {
+
             // }
+            if (currExprCondParentTuple.Item3 != (currExprCondParentTuple.Item1 as FunctionCallExpr).Function) {
+              // Console.WriteLine("Here => "+ Printer.ExprToString((currExprCondParentTuple.Item1 as FunctionCallExpr).Function.Body));
+              queue.Enqueue(new Tuple<Expression, Expression, Function>(
+                (currExprCondParentTuple.Item1 as FunctionCallExpr).Function.Body,
+                null,
+                (currExprCondParentTuple.Item1 as FunctionCallExpr).Function));
+              G.AddVertex((currExprCondParentTuple.Item1 as FunctionCallExpr).Function);
+              G.AddEdge(
+                currExprCondParentTuple.Item3,
+                (currExprCondParentTuple.Item1 as FunctionCallExpr).Function,
+                currExprCondParentTuple.Item1 as FunctionCallExpr,
+                currExprCondParentTuple.Item2);
+              // Console.WriteLine("-------------------------------------");
+              // keys.Add(Printer.ExprToString((currExprParentTuple.Item1 as FunctionCallExpr).Function.Body) + ":" + (currExprParentTuple.Item1 as FunctionCallExpr).Function.Body);
+            }
           }
         }
         if (currExprCondParentTuple.Item1 is ITEExpr) {
@@ -421,13 +426,38 @@ public async Task<bool>writeFailedOutputs(int index)
           var rhss = new List<Expression>();
           foreach (var bv in existsExpr.BoundVars) {
             lhss.Add(new CasePattern<BoundVar>(bv.Tok,
-              new BoundVar(bv.Tok, currExprCondParentTuple.Item3.Name + "_" + bv.Name, bv.Type)));
+              new BoundVar(bv.Tok, bv.Name, bv.Type)));
           }
           rhss.Add(existsExpr.Term);
-          var cond = Expression.CreateLet(existsExpr.BodyStartTok, lhss, rhss,
-            Expression.CreateBoolLiteral(existsExpr.BodyStartTok, true), false);
+        var prevCond= currExprCondParentTuple.Item2 != null ?
+            Expression.CreateAnd(currExprCondParentTuple.Item2, existsExpr) :
+            existsExpr;
+          var cond = Expression.CreateAnd(prevCond, Expression.StripParens(Expression.CreateLet(existsExpr.BodyStartTok, lhss, rhss,
+            Expression.CreateBoolLiteral(existsExpr.BodyStartTok, true), false)));
 
           queue.Enqueue(new Tuple<Expression, Expression, Function>(existsExpr.Term, cond, currExprCondParentTuple.Item3));
+          G.AddVertex(currExprCondParentTuple.Item3);
+        }
+        else if(currExprCondParentTuple.Item1 is ForallExpr) {
+          var forallExpr = currExprCondParentTuple.Item1 as ForallExpr;
+          var lhss = new List<CasePattern<BoundVar>>();
+          var rhss = new List<Expression>();
+           foreach (var bv in forallExpr.BoundVars) {
+            lhss.Add(new CasePattern<BoundVar>(bv.Tok,
+              new BoundVar(bv.Tok, bv.Name, bv.Type)));
+          }
+          // rhss.Add(forallExpr.Term);
+          if(forallExpr.Range == null){
+            rhss.Add(Expression.CreateBoolLiteral(forallExpr.BodyStartTok, true));
+          }else{
+            rhss.Add(forallExpr.Range);
+          }
+           var prevCond= currExprCondParentTuple.Item2 != null ?
+            Expression.CreateAnd(currExprCondParentTuple.Item2, forallExpr) :
+            forallExpr;
+           var cond = Expression.CreateAnd(prevCond, Expression.CreateLet(forallExpr.BodyStartTok, lhss, rhss,
+            forallExpr.Term, false));
+          queue.Enqueue(new Tuple<Expression, Expression, Function>(forallExpr.Term, cond, currExprCondParentTuple.Item3));
           G.AddVertex(currExprCondParentTuple.Item3);
         } else {
           foreach (var e in currExprCondParentTuple.Item1.SubExpressions) {
@@ -567,10 +597,10 @@ public async Task<bool>writeFailedOutputs(int index)
 
     public static string GetIsWeaker(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
       string res = "lemma isAtLeastAsWeak";
-       foreach (var nwPair in path) {
-        res += "_" + nwPair.Item1.Name;
-      
-      }
+      //  foreach (var nwPair in path) {
+      //   res += "_" + nwPair.Item1.Name;
+      // }
+       res += "_" + path.Last().Item1.Name;
       foreach(var t in fn.TypeArgs)
       {
         res += "<"+t+"(0,!new)>";
@@ -581,19 +611,25 @@ public async Task<bool>writeFailedOutputs(int index)
       var p = "";
       Tuple<string, string> x = new Tuple<string, string>(null, null);
 
-      foreach (var nwPair in path) {
+      // foreach (var nwPair in path) {
+      //   res += sep + " ";
+      //   sep = "";
+      //   x = GetFunctionParamList(nwPair.Item1);
+      //   res += x.Item2;
+      //   p += "" + x.Item1; 
+      //   sep = ", ";
+      // }
         res += sep + " ";
         sep = "";
-        x = GetFunctionParamList(nwPair.Item1);
+        x = GetFunctionParamList(path.Last().Item1);
         res += x.Item2;
         p += "" + x.Item1; 
         sep = ", ";
-      }
       res += ")\n";
       // if(p != ""){
       //   res += "requires " + fn.Name+"_BASE("+p+")\n";
       // }
-      foreach (var req in path[0].Item1.Req) {
+      foreach (var req in path.Last().Item1.Req) {
         // res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
         
         if(isQuantifier){
@@ -617,10 +653,11 @@ public async Task<bool>writeFailedOutputs(int index)
 
     public static string getVacuityLemmaRevised(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
       string res = "lemma isVac";
-       foreach (var nwPair in path) {
-        res += "_" + nwPair.Item1.Name;
+      //  foreach (var nwPair in path) {
+      //   res += "_" + nwPair.Item1.Name;
       
-      }
+      // }
+       res += "_" + path.Last().Item1.Name;
       foreach(var t in fn.TypeArgs)
       {
         res += "<"+t+"(0,!new)>";
@@ -631,19 +668,25 @@ public async Task<bool>writeFailedOutputs(int index)
       var p = "";
       Tuple<string, string> x = new Tuple<string, string>(null, null);
 
-      foreach (var nwPair in path) {
+      // foreach (var nwPair in path) {
+      //   res += sep + " ";
+      //   sep = "";
+      //   x = GetFunctionParamList(nwPair.Item1);
+      //   res += x.Item2;
+      //   p += "" + x.Item1; 
+      //   sep = ", ";
+      // }
         res += sep + " ";
         sep = "";
-        x = GetFunctionParamList(nwPair.Item1);
+        x = GetFunctionParamList(path.Last().Item1);
         res += x.Item2;
         p += "" + x.Item1; 
         sep = ", ";
-      }
       res += ")\n";
       // if(p != ""){
       //   res += "requires " + fn.Name+"_BASE("+p+")\n";
       // }
-      foreach (var req in path[0].Item1.Req) {
+      foreach (var req in path.Last().Item1.Req) {
         // res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
         
         if(isQuantifier){
@@ -831,7 +874,7 @@ public async Task<bool>writeFailedOutputs(int index)
       if (baseFuncName == null) {
         baseFuncName = funcName;
       }
-      Function baseFunc = GetFunction(program, baseFuncName);
+      Function baseFunc = GetFunction(proofProg, baseFuncName);
 
 
       if (baseFunc == null) {
@@ -847,7 +890,7 @@ public async Task<bool>writeFailedOutputs(int index)
 
       Function constraintFunc = null;
       if (DafnyOptions.O.HoleEvaluatorConstraint != null) {
-        constraintFunc = GetFunction(program, DafnyOptions.O.HoleEvaluatorConstraint);
+        constraintFunc = GetFunction(proofProg, DafnyOptions.O.HoleEvaluatorConstraint);
         if (constraintFunc == null) {
           Console.WriteLine($"constraint function {DafnyOptions.O.HoleEvaluatorConstraint} not found!");
           return false;
@@ -947,7 +990,7 @@ public async Task<bool>writeFailedOutputs(int index)
               typeToExpressionDictForInputs.Add(typeString, lst);
             }
           }
-          var funcCalls = ExpressionFinder.GetAllPossibleFunctionInvocations(program, constraintFunc, typeToExpressionDictForInputs);
+          var funcCalls = ExpressionFinder.GetAllPossibleFunctionInvocations(proofProg, constraintFunc, typeToExpressionDictForInputs);
           foreach (var funcCall in funcCalls) {
             if (constraintExpr == null) {
               constraintExpr = new ExpressionFinder.ExpressionDepth(funcCall.expr, 1);
@@ -955,7 +998,9 @@ public async Task<bool>writeFailedOutputs(int index)
               constraintExpr.expr = Expression.CreateAnd(constraintExpr.expr, funcCall.expr);
             }
           }
+          if (funcCalls.Count > 0) {
           Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr.expr)}");
+          }
         }
         //MERGE
             expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunction);
@@ -1107,7 +1152,7 @@ public async Task<bool>writeFailedOutputs(int index)
           if(!isWeaker && !resolutionError){
             desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
             if(unresolvedProofProgram != null){
-                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,false,true);
+                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
             }else{
               PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,false,true);
             }
@@ -1124,6 +1169,30 @@ public async Task<bool>writeFailedOutputs(int index)
             
           }
         }
+        // for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
+        //   var isWeaker = isDafnyVerifySuccessful(i);  
+        //   var resolutionError = isResolutionError(i);
+        //   // Console.WriteLine("----THIRD PASS " + i + " :: " + !isSame);
+        //   if(!isWeaker && !resolutionError){
+        //     desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
+        //     if(unresolvedProofProgram != null){
+        //         PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,false,true);
+        //     }else{
+        //       PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,false,true);
+        //     }
+        //     // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
+        //   }else{
+        //     // if(isSame){Console.WriteLine("Failed Afer 2nd PASS:  Index(" + i + ") :: IsSame = " + isSame);}
+        //   Console.WriteLine("Failed Afer 1st PASS:  Index(" + i + ") :: IsWeaker = " + isWeaker + " :: ResolutionError= " + resolutionError);
+        //     remainingVal = remainingVal - 1;
+        //     var requestList = dafnyVerifier.requestsList[i];
+        //     writeFailedOutputs(i);
+        //     foreach (var request in requestList){
+        //     dafnyVerifier.dafnyOutput[request].Response = "isAtLeastAsWeak";
+        //     }
+            
+        //   }
+        // }
         await dafnyVerifier.startProofTasksAccordingToPriority();
         dafnyVerifier.clearTasks();
 
@@ -1714,52 +1783,52 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       return "";
     }
 
-  public static string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
-      if (moduleDef is null) {
-        return type.ToString();
-      }
-      if (type is UserDefinedType) {
-        var udt = type as UserDefinedType;
-        if (udt.Name == "nat" || udt.Name == "object?")
-          return udt.ToString();
-        foreach (var decl in moduleDef.TopLevelDecls) {
-          if (decl.ToString() == type.ToString()) {
-            var moduleName = GetFullModuleName(moduleDef);
-            return (moduleName == "") ? type.ToString() : (moduleName + "." + type.ToString());
-          }else{
-            return udt.ToString();
-          }
-        }
-        if (moduleDef.Name != "_module") {
-          foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
-            if (imp is ModuleDecl) {
-              var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type);
-              if (result != "") {
-                return result;
-              }
-            }
-          }
-        }
-        // couldn't find the type definition here, so we should search the parent
-        if (moduleDef.EnclosingModule != moduleDef) {
-          return GetFullTypeString(moduleDef.EnclosingModule, type);
-        } else {
-          return type.ToString();
-        }
-      } else if (type is CollectionType) {
-        var ct = type as CollectionType;
-        var result = ct.CollectionTypeName + "<";
-        var sep = "";
-        foreach (var typeArg in ct.TypeArgs) {
-          result += sep + GetFullTypeString(moduleDef, typeArg);
-          sep = ",";
-        }
-        result += ">";
-        return result;
-      } else {
-        return type.ToString();
-      }
-    }
+  // public static string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
+  //     if (moduleDef is null) {
+  //       return type.ToString();
+  //     }
+  //     if (type is UserDefinedType) {
+  //       var udt = type as UserDefinedType;
+  //       if (udt.Name == "nat" || udt.Name == "object?")
+  //         return udt.ToString();
+  //       foreach (var decl in moduleDef.TopLevelDecls) {
+  //         if (decl.ToString() == type.ToString()) {
+  //           var moduleName = GetFullModuleName(moduleDef);
+  //           return (moduleName == "") ? type.ToString() : (moduleName + "." + type.ToString());
+  //         }else{
+  //           return udt.ToString();
+  //         }
+  //       }
+  //       if (moduleDef.Name != "_module") {
+  //         foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
+  //           if (imp is ModuleDecl) {
+  //             var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type);
+  //             if (result != "") {
+  //               return result;
+  //             }
+  //           }
+  //         }
+  //       }
+  //       // couldn't find the type definition here, so we should search the parent
+  //       if (moduleDef.EnclosingModule != moduleDef) {
+  //         return GetFullTypeString(moduleDef.EnclosingModule, type);
+  //       } else {
+  //         return type.ToString();
+  //       }
+  //     } else if (type is CollectionType) {
+  //       var ct = type as CollectionType;
+  //       var result = ct.CollectionTypeName + "<";
+  //       var sep = "";
+  //       foreach (var typeArg in ct.TypeArgs) {
+  //         result += sep + GetFullTypeString(moduleDef, typeArg);
+  //         sep = ",";
+  //       }
+  //       result += ">";
+  //       return result;
+  //     } else {
+  //       return type.ToString();
+  //     }
+  //   }
 
     public static Tuple<string, string> GetFunctionParamList(Function func, string namePrefix = "") {
       var funcName = func.FullDafnyName;
@@ -1767,7 +1836,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       string paramNames = "";
       var sep = "";
       foreach (var param in func.Formals) {
-        parameterNameTypes += sep + namePrefix + param.Name + ":" + GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type);
+        parameterNameTypes += sep + namePrefix + param.Name + ":" + Printer.GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type, new HashSet<ModuleDefinition>());
         paramNames += sep + namePrefix + param.Name;
         sep = ", ";
       }
@@ -2262,6 +2331,11 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       Console.WriteLine("Mutation(proof) -> " + $"{cnt}" + ": " + $"{Printer.ExprToString(expr.expr)}");
       string code = "";
       string proofCode = "";
+      string validityCheck = "";
+      if(vacTest)
+      {
+        validityCheck = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1);
+      }
       var lemmaName = lemma.Name;
       var funcName = func.Name;
 
@@ -2382,7 +2456,8 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
             int lemmaLocEns = code.IndexOf("{",lemmaLoc);
             // Console.WriteLine("here = " + lemmaLocEns);
-            code = code.Insert(lemmaLocEns-1,"ensures false;\n");
+            // code = code.Insert(lemmaLocEns-1,"ensures false;\n");
+            code = code.Insert(lemmaLoc-1,validityCheck+"\n");
           }
 
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
@@ -2420,7 +2495,9 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           var remoteFilePathLemma = dafnyVerifier.getTempFilePath()[serverIndexLemma][localizedCntIndexLemma+1].Path;
           // Console.WriteLine("remote = " + remoteFilePathLemma);
         if(vacTest){
-         args.Add("/proc:*"+lemmaName+"*");
+        //  args.Add("/proc:*"+lemmaName+"*");
+        var validCheckString = "validityCheck";
+        args.Add("/proc:*"+validCheckString+"*");
         }else if(DafnyOptions.O.EvaluateAllAtOnce){
           args.Add("/verifyAllModules");
         }else if(DafnyOptions.O.ProofOnly){ // maybe at least add the spec file? 
