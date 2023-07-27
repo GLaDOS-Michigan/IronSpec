@@ -47,7 +47,7 @@ namespace Microsoft.Dafny {
             func.Attributes, func.SignatureEllipsis);
       List<Tuple<Function, FunctionCallExpr, Expression>> p = new List<Tuple<Function, FunctionCallExpr, Expression>>();
       p.Add(new Tuple<Function, FunctionCallExpr, Expression>(rootFunc, null, null));
-      string lemmaForExprValidityString = HoleEvaluator.GetValidityLemma(p, null, constraintExpr, -1);
+      string lemmaForExprValidityString = HoleEvaluator.GetValidityLemma(p, null, constraintExpr, -1,0);
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
 

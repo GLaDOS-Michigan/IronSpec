@@ -387,17 +387,34 @@ public async Task<bool>writeFailedOutputs(int index)
             iteExpr.Test, currExprCondParentTuple.Item2, currExprCondParentTuple.Item3));
 
           // add then path
-          var thenCond = currExprCondParentTuple.Item2 != null ?
-            Expression.CreateAnd(currExprCondParentTuple.Item2, iteExpr.Test) :
-            iteExpr.Test;
+          	          Expression thenCond;
+          if (currExprCondParentTuple.Item2 != null && currExprCondParentTuple.Item2 is LetExpr) {
+            var prevLet = currExprCondParentTuple.Item2 as LetExpr;
+            thenCond = Expression.CreateLet(prevLet.tok, prevLet.LHSs, prevLet.RHSs, 
+              Expression.CreateAnd(prevLet.Body, iteExpr.Test), prevLet.Exact);
+          }
+          else {
+            thenCond = currExprCondParentTuple.Item2 != null ?
+              Expression.CreateAnd(currExprCondParentTuple.Item2, iteExpr.Test) :
+              iteExpr.Test;
+          }
           queue.Enqueue(new Tuple<Expression, Expression, Function>(
             iteExpr.Thn, thenCond, currExprCondParentTuple.Item3));
-
           // add else path
-          var elseCond = currExprCondParentTuple.Item2 != null ?
-            Expression.CreateAnd(currExprCondParentTuple.Item2,
-                                 Expression.CreateNot(iteExpr.Test.tok, iteExpr.Test)) :
-            Expression.CreateNot(iteExpr.Test.tok, iteExpr.Test);
+          Expression elseCond;
+          if (currExprCondParentTuple.Item2 != null && currExprCondParentTuple.Item2 is LetExpr) {
+            var prevLet = currExprCondParentTuple.Item2 as LetExpr;
+            elseCond = Expression.CreateLet(prevLet.tok, prevLet.LHSs, prevLet.RHSs, 
+              Expression.CreateAnd(prevLet.Body, 
+                Expression.CreateNot(iteExpr.Test.tok, iteExpr.Test)
+              ), prevLet.Exact);
+          }
+          else {
+            elseCond = currExprCondParentTuple.Item2 != null ?
+              Expression.CreateAnd(currExprCondParentTuple.Item2,
+                                   Expression.CreateNot(iteExpr.Test.tok, iteExpr.Test)) :
+              Expression.CreateNot(iteExpr.Test.tok, iteExpr.Test);
+          }
           queue.Enqueue(new Tuple<Expression, Expression, Function>(
             iteExpr.Els, elseCond, currExprCondParentTuple.Item3));
 
@@ -412,9 +429,17 @@ public async Task<bool>writeFailedOutputs(int index)
           // Console.WriteLine(Printer.ExprToString(matchExpr));
           foreach (var c in matchExpr.Cases) {
             // Console.WriteLine($"{c.Ctor} -> {c.Ctor.Name}");
-            var cond = currExprCondParentTuple.Item2 != null ?
-              Expression.CreateAnd(currExprCondParentTuple.Item2, new MemberSelectExpr(c.Ctor.tok, matchExpr.Source, c.Ctor.Name)) :
-              new MemberSelectExpr(c.Ctor.tok, matchExpr.Source, c.Ctor.Name + "?");
+            Expression cond;
+            if (currExprCondParentTuple.Item2 != null && currExprCondParentTuple.Item2 is LetExpr) {
+              var prevLet = currExprCondParentTuple.Item2 as LetExpr;
+              cond = new LetExpr(prevLet.tok, prevLet.LHSs, prevLet.RHSs, 
+                Expression.CreateAnd(prevLet.Body, new MemberSelectExpr(c.Ctor.tok, matchExpr.Source, c.Ctor.Name)), prevLet.Exact);
+            }
+            else {
+              cond = currExprCondParentTuple.Item2 != null ?
+                Expression.CreateAnd(currExprCondParentTuple.Item2, new MemberSelectExpr(c.Ctor.tok, matchExpr.Source, c.Ctor.Name)) :
+                new MemberSelectExpr(c.Ctor.tok, matchExpr.Source, c.Ctor.Name + "?");
+          }
             queue.Enqueue(new Tuple<Expression, Expression, Function>(
               c.Body, cond, currExprCondParentTuple.Item3));
           }
@@ -429,13 +454,51 @@ public async Task<bool>writeFailedOutputs(int index)
               new BoundVar(bv.Tok, bv.Name, bv.Type)));
           }
           rhss.Add(existsExpr.Term);
-        var prevCond= currExprCondParentTuple.Item2 != null ?
-            Expression.CreateAnd(currExprCondParentTuple.Item2, existsExpr) :
-            existsExpr;
-          var cond = Expression.CreateAnd(prevCond, Expression.StripParens(Expression.CreateLet(existsExpr.BodyStartTok, lhss, rhss,
-            Expression.CreateBoolLiteral(existsExpr.BodyStartTok, true), false)));
+        Expression prevCond;
+          if (currExprCondParentTuple.Item2 != null && currExprCondParentTuple.Item2 is LetExpr) {
+            var prevLet = currExprCondParentTuple.Item2 as LetExpr;
+            prevCond = Expression.CreateLet(prevLet.tok, prevLet.LHSs, prevLet.RHSs, 
+              Expression.CreateAnd(prevLet.Body, existsExpr), prevLet.Exact);
+          }
+          else {
+            prevCond = currExprCondParentTuple.Item2 != null ?
+              Expression.CreateAnd(currExprCondParentTuple.Item2, existsExpr) :
+              existsExpr;
+          }
+          var cond = Expression.CreateAnd(prevCond, Expression.CreateLet(existsExpr.BodyStartTok, lhss, rhss,
+            Expression.CreateBoolLiteral(existsExpr.BodyStartTok, true), false));
 
           queue.Enqueue(new Tuple<Expression, Expression, Function>(existsExpr.Term, cond, currExprCondParentTuple.Item3));
+          G.AddVertex(currExprCondParentTuple.Item3);
+        }
+        else if (currExprCondParentTuple.Item1 is LetExpr) {
+          var letExpr = currExprCondParentTuple.Item1 as LetExpr;
+          var currLetExpr = letExpr;
+          var lhss = new List<CasePattern<BoundVar>>();
+          var rhss = new List<Expression>();
+          while (true) {
+            for (int i = 0; i < currLetExpr.LHSs.Count; i++) {
+              var lhs = currLetExpr.LHSs[i];
+              var rhs = currLetExpr.RHSs[0];
+              // lhss.Add(new CasePattern<BoundVar>(bv.Tok,
+              //   new BoundVar(bv.Tok, currExprCondParentTuple.Item3.Name + "_" + bv.Name, bv.Type)));
+              lhss.Add(new CasePattern<BoundVar>(lhs.tok,
+                new BoundVar(lhs.tok, lhs.Id, lhs.Expr != null ? lhs.Expr.Type : lhs.Var.Type)));
+              rhss.Add(rhs);
+            }
+            if (currLetExpr.Body is LetExpr) {
+              currLetExpr = currLetExpr.Body as LetExpr;
+            }
+            else {
+              break;
+            }
+          }
+          // var cond = currExprCondParentTuple.Item2 != null ?
+          //   Expression.CreateAnd(currExprCondParentTuple.Item2, letExpr) :
+          //   letExpr;
+          var cond = Expression.CreateLet(letExpr.Body.tok, lhss, rhss,
+            Expression.CreateBoolLiteral(letExpr.BodyStartTok, true), letExpr.Exact);
+          queue.Enqueue(new Tuple<Expression, Expression, Function>(letExpr.Body, cond, currExprCondParentTuple.Item3));
           G.AddVertex(currExprCondParentTuple.Item3);
         }
         else if(currExprCondParentTuple.Item1 is ForallExpr) {
@@ -519,7 +582,7 @@ public async Task<bool>writeFailedOutputs(int index)
       }
     }
 
-   public static string GetBaseLemmaList(Function fn, ModuleDefinition currentModuleDef, Expression constraintExpr) {
+   public static string GetBaseLemmaList(Function fn, ModuleDefinition currentModuleDef) {
       string res = "";
       // res += RemoveWhitespace(Printer.FunctionSignatureToString(fn));
       res += "\n{\n";
@@ -621,7 +684,8 @@ public async Task<bool>writeFailedOutputs(int index)
       // }
         res += sep + " ";
         sep = "";
-        x = GetFunctionParamList(path.Last().Item1);
+        x = GetFunctionParamListSpec(path.Last().Item1);
+        
         res += x.Item2;
         p += "" + x.Item1; 
         sep = ", ";
@@ -740,7 +804,7 @@ public async Task<bool>writeFailedOutputs(int index)
     }
 
 
- public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, int cnt) {
+ public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, int cnt, int id) {
       string res = "lemma {:timeLimitMultiplier 2} validityCheck";
       if (cnt != -1) {
         res += "_" + cnt.ToString();
@@ -748,6 +812,7 @@ public async Task<bool>writeFailedOutputs(int index)
       foreach (var nwPair in path) {
         res += "_" + nwPair.Item1.Name;
       }
+      res += "_" + id;
       res += "(";
       var sep = "";
       foreach (var nwPair in path) {
@@ -874,8 +939,12 @@ public async Task<bool>writeFailedOutputs(int index)
       if (baseFuncName == null) {
         baseFuncName = funcName;
       }
-      Function baseFunc = GetFunction(proofProg, baseFuncName);
-
+      Function baseFunc = null;
+      if(proofProg != null){
+       baseFunc = GetFunction(proofProg, baseFuncName);
+      }else{
+       baseFunc = GetFunction(program, baseFuncName);
+      }
 
       if (baseFunc == null) {
         Console.WriteLine($"couldn't find function {baseFuncName}. List of all functions:");
@@ -944,7 +1013,7 @@ public async Task<bool>writeFailedOutputs(int index)
         Lemma desiredLemmm = GetLemma(proofProg, lemmaName);
       if (desiredLemmm == null) {
         Console.WriteLine($"couldn't find function {desiredLemmm}. List of all lemmas:");
-        PrintAllLemmas(proofProg, lemmaName);
+      PrintAllLemmas(proofProg, lemmaName);
         return false;
       }
       Console.WriteLine(getVacuityLemma(desiredLemmm));
@@ -1061,8 +1130,14 @@ public async Task<bool>writeFailedOutputs(int index)
         PrintAllLemmas(program, lemmaName);
         return false;
       }
+      var id = 0;
+      foreach (var p in Paths)
+      {
+        var singleValidityLemma = GetValidityLemma(p, null, constraintExpr == null ? null : constraintExpr.expr, -1,id);
+        id++;
+      }
       // Console.WriteLine(getVacuityLemma(baseLemma));
-            lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1);
+            lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1,0);
       lemmaForExprValidityLineCount = lemmaForExprValidityString.Count(f => (f == '\n'));
       Console.WriteLine("VALIDITYLEMMA \n" + lemmaForExprValidityString + " \n --");
       }
@@ -1225,6 +1300,10 @@ public async Task<bool>writeFailedOutputs(int index)
               }
 
             }else{
+              // if(Printer.ExprToString(expressionFinder.availableExpressions[i].expr) == "pred_axiom_is_my_attestation_2(dv, process, block) && forall a1: Attestation, a2: Attestation | ((a1 in block.body.attestations && DVC_Spec_NonInstr.isMyAttestation(a1, process.bn, block, bn_get_validator_index(process.bn, block.body.state_root, process.dv_pubkey))) || !(a2 in block.body.attestations)) && DVC_Spec_NonInstr.isMyAttestation(a2, process.bn, block, bn_get_validator_index(process.bn, block.body.state_root, process.dv_pubkey)) :: a1.data.slot == a2.data.slot ==> a1 == a2")
+              // {
+                Console.WriteLine("here");
+              
                desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
                 if(unresolvedProofProgram != null){
                 PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
@@ -1232,8 +1311,9 @@ public async Task<bool>writeFailedOutputs(int index)
               // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
               PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
               }
+              // } 
             }
-          //  var isWeaker = isDafnyVerifySuccessful(i);  
+           var isWeaker = isDafnyVerifySuccessful(i);  
         }
         await dafnyVerifier.startProofTasksAccordingToPriority();
         dafnyVerifier.clearTasks();
@@ -1314,7 +1394,7 @@ public async Task<bool>writeFailedOutputs(int index)
       //     UpdateCombinationResult(i);
       //   }
       // }
-      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish exploring, try to calculate implies graph");
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000} :: finish exploring, try to calculate implies graph");
       int correctProofCount = 0;
       int correctProofByTimeoutCount = 0;
       int incorrectProofCount = 0;
@@ -1601,7 +1681,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
         constraintFuncLineCount = constraintFuncCode.Count(f => (f == '\n'));
       }
       
-      lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1);
+      lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1,0);
       lemmaForExprValidityLineCount = lemmaForExprValidityString.Count(f => (f == '\n'));
       Console.WriteLine("VALIDITYLEMMA \n" + lemmaForExprValidityString + " \n --");
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -1830,13 +1910,28 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
   //     }
   //   }
 
+    public static Tuple<string, string> GetFunctionParamListSpec(Function func, string namePrefix = "") {
+      var funcName = func.FullDafnyName;
+      string parameterNameTypes = "";
+      string paramNames = "";
+      var sep = "";
+      foreach (var param in func.Formals) {
+        parameterNameTypes += sep + namePrefix + param.Name + ":" + Printer.GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type, new HashSet<ModuleDefinition>(),true);
+            // parameterNameTypes += sep + namePrefix + param.Name + ":" + Printer.GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type, new HashSet<ModuleDefinition>());
+        paramNames += sep + namePrefix + param.Name;
+        sep = ", ";
+      }
+      return new Tuple<string, string>(paramNames, parameterNameTypes);
+    }
+
     public static Tuple<string, string> GetFunctionParamList(Function func, string namePrefix = "") {
       var funcName = func.FullDafnyName;
       string parameterNameTypes = "";
       string paramNames = "";
       var sep = "";
       foreach (var param in func.Formals) {
-        parameterNameTypes += sep + namePrefix + param.Name + ":" + Printer.GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type, new HashSet<ModuleDefinition>());
+        // parameterNameTypes += sep + namePrefix + param.Name + ":" + Printer.GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type, new HashSet<ModuleDefinition>(),true);
+            parameterNameTypes += sep + namePrefix + param.Name + ":" + Printer.GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type, new HashSet<ModuleDefinition>());
         paramNames += sep + namePrefix + param.Name;
         sep = ", ";
       }
@@ -1916,7 +2011,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       var funcName = func.Name;
 
       string lemmaForExprValidityString = ""; // remove validityCheck
-      string basePredicateString = GetBaseLemmaList(func,null, constraintExpr.expr);
+      string basePredicateString = GetBaseLemmaList(func,null);
       string isSameLemma = "";
       string isStrongerLemma = "";
       string istWeakerLemma = "";
@@ -1926,9 +2021,9 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
         istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
         isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,true);
       }else{
-        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,false);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
-        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,false);
+        isStrongerLemma = GetIsStronger(func,Paths[0], null, null,false);
+        istWeakerLemma = GetIsWeaker(func,Paths[0], null, null,false);
+        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, null,false);
       }
 
       int lemmaForExprValidityPosition = 0;
@@ -2008,7 +2103,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
           // }
 
             if((vacTest)){
-            string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, constraintExpr.expr,false);
+            string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, null,false);
             if(func.WhatKind == "predicate"){
               fnIndex = code.IndexOf("predicate " + funcName);
             }else{
@@ -2126,7 +2221,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       string istWeakerLemma = "";
       if(constraintExpr == null)
       {
-         basePredicateString = GetBaseLemmaList(func,null, null);
+         basePredicateString = GetBaseLemmaList(func,null);
        if(expr.expr is QuantifierExpr){
         isStrongerLemma = GetIsStronger(func,Paths[0], null, null,true);
         istWeakerLemma = GetIsWeaker(func,Paths[0], null, null,true);
@@ -2137,7 +2232,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         isSameLemma = GetIsSameLemmaList(func,Paths[0], null, null,false);
       }
       }else{
-         basePredicateString = GetBaseLemmaList(func,null, constraintExpr.expr);
+         basePredicateString = GetBaseLemmaList(func,null);
          if(expr.expr is QuantifierExpr){
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
         istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
@@ -2334,7 +2429,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       string validityCheck = "";
       if(vacTest)
       {
-        validityCheck = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1);
+        validityCheck = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1,0);
       }
       var lemmaName = lemma.Name;
       var funcName = func.Name;

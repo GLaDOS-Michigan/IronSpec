@@ -450,9 +450,42 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
     {
       Console.Write(" pp = " + e.expr + "( " + Printer.ExprToString(e.expr) + ") \n");
       List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
+      if(e.expr is ITEExpr)
+      {
+        var itee = e.expr as ITEExpr;
+        List<ExpressionDepth> Test = mutateOneExpressionRevised(program, decl, new ExpressionDepth(itee.Test,1));
+        List<ExpressionDepth> Thn = mutateOneExpressionRevised(program, decl, new ExpressionDepth(itee.Thn,1));
+        List<ExpressionDepth> Else = mutateOneExpressionRevised(program, decl, new ExpressionDepth(itee.Els,1));
+        foreach (var t in Test)
+        {
+          var iteT = new ITEExpr(e.expr.tok,itee.IsBindingGuard,t.expr,itee.Thn,itee.Els);
+          currentExperssions.Add(new ExpressionDepth(iteT,1));
+        }
+        foreach (var th in Thn)
+        {
+          var iteThn = new ITEExpr(e.expr.tok,itee.IsBindingGuard,itee.Test,th.expr,itee.Els);
+          currentExperssions.Add(new ExpressionDepth(iteThn,1));
+        }
+        foreach (var el in Else)
+        {
+          var iteEls = new ITEExpr(e.expr.tok,itee.IsBindingGuard,itee.Test,itee.Thn,el.expr);
+          currentExperssions.Add(new ExpressionDepth(iteEls,1));
+        }
+
+      }
       if(e.expr is LiteralExpr)
       {
         currentExperssions.Add(e);
+              if ((e.expr.Type.IsNumericBased(Type.NumericPersuasion.Int) 
+              || e.expr.Type.IsNumericBased(Type.NumericPersuasion.Real)))
+        {
+          var lit = e.expr as LiteralExpr;
+
+          var inc = Expression.CreateIncrement(e.expr, 1);
+          var dec = Expression.CreateDecrement(e.expr, 1);
+          currentExperssions.Add(new ExpressionDepth(inc,1));
+          currentExperssions.Add(new ExpressionDepth(dec,1));
+        }
       }
       if(e.expr is LetExpr)
       {

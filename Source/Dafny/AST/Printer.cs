@@ -47,7 +47,7 @@ namespace Microsoft.Dafny {
         return GetFullModuleName(moduleDef.EnclosingModule) + "." + moduleDef.Name;
       }
     }
-static public string GetFullTypeString(ModuleDefinition moduleDef, Type type, HashSet<ModuleDefinition> seenModules) {
+static public string GetFullTypeString(ModuleDefinition moduleDef, Type type, HashSet<ModuleDefinition> seenModules,bool full = false) {
       if (moduleDef is null) {
         return type.ToString();
       }
@@ -64,6 +64,10 @@ if (type is UserDefinedType) {
           if (decl.ToString() == typeStr) {
             var moduleName = GetFullModuleName(moduleDef);
             var result = (moduleName == "") ? typeStr : (moduleName + "." + typeStr);
+            if(full)
+            {
+              result = typeStr;
+            }
             if (type.TypeArgs.Count != 0) {
               result += "<";
               var sep = "";
@@ -3015,7 +3019,10 @@ if (type is UserDefinedType) {
         return;
       }
       */
-
+      if (expr is SeqUpdateExpr)
+      {
+        // Console.WriteLine("HERE = " + expr);
+      }
       if (expr is StaticReceiverExpr) {
         StaticReceiverExpr e = (StaticReceiverExpr)expr;
         wr.Write(e.Type);
@@ -3217,9 +3224,9 @@ if (type is UserDefinedType) {
 
       } else if (expr is SeqUpdateExpr) {
         SeqUpdateExpr e = (SeqUpdateExpr)expr;
-        if (e != null) {	
-          PrintExpr(e, contextBindingStrength, fragileContext, isRightmost, isFollowedBySemicolon, indent, keyword);	
-        } else {	
+        // if (e != null) {	
+        //   PrintExpr(e, contextBindingStrength, fragileContext, isRightmost, isFollowedBySemicolon, indent, keyword);	
+        // } else {	
           // determine if parens are needed	
           int opBindingStrength = 0x90;	
           bool parensNeeded = ParensNeeded(opBindingStrength, contextBindingStrength, fragileContext);	
@@ -3231,7 +3238,7 @@ if (type is UserDefinedType) {
           PrintExpression(e.Value, false);	
           wr.Write("]");	
           if (parensNeeded) { wr.Write(")"); }	
-        }
+        // }
       } else if (expr is DatatypeUpdateExpr) {
         var e = (DatatypeUpdateExpr)expr;
         // determine if parens are needed
@@ -3287,7 +3294,7 @@ if (type is UserDefinedType) {
           // wr.Write(GetFullTypeString(ModuleForTypes, e.Type, new HashSet<ModuleDefinition>()));	
           // wr.Write(".");	
           // wr.Write(e.Name);	
-          if(ModuleForTypes != null && e.Name == "NodeNextSubStep"){ //hardcoded 
+        if(ModuleForTypes != null && e.Name == "NodeNextSubStep"){ //hardcoded 
           wr.Write(GetFullModuleName(ModuleForTypes));
           wr.Write(".");	
           }
