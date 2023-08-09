@@ -188,6 +188,7 @@ namespace Microsoft.Dafny {
     public string ProofLemmaName = null;
     public string ProofModuleName = null;
     public string ProofLocation = null;
+    public string MutationRootName = null;
     public bool MutationsFromParams = false;
     public bool EvaluateAllAtOnce = false;
     public bool ProofOnly = false;
@@ -670,7 +671,12 @@ namespace Microsoft.Dafny {
             HoleEvaluatorFunctionName = args[ps.i];
           }
           return true;
-
+        // MutationRootName
+        case "mutationRootName":
+          if (ps.ConfirmArgumentCount(1)) {
+            MutationRootName = args[ps.i];
+          }
+          return true;
         case "proofName":
           if (ps.ConfirmArgumentCount(1)) {
             ProofLemmaName = args[ps.i];

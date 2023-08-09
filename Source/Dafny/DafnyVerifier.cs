@@ -314,9 +314,11 @@ public void clearTasks()
 
 
     private void RestartTask(IMessage request) {
-      // Console.WriteLine("Restart");
       // var prevTask = requestToCall[request];
       var serverId = requestToCnt[request] % serversList.Count;
+        Console.WriteLine("Restart  == at Server (" + serverId + ") for #"+requestToCnt[request]);
+        // Console.WriteLine($"calling await for #{requestToCnt[request]}");
+
       if (request is CloneAndVerifyRequest) {
         AsyncUnaryCall<VerificationResponse> task = serversList[serverId].CloneAndVerifyAsync(
           request as CloneAndVerifyRequest,
@@ -386,6 +388,7 @@ public void clearTasks()
       request.Code = code;
       request.Arguments.Add(args);
       var serverId = (availableExprAIndex * availableExprBIndex) % serversList.Count;
+      Console.WriteLine("sending to server: " + serverId);
       AsyncUnaryCall<VerificationResponse> task = serversList[serverId].CloneAndVerifyAsync(request);
       requestToCall[request] = task;
       if (!requestsList.ContainsKey(requestsList.Count)) {

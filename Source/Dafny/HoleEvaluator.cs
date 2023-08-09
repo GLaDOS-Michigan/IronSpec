@@ -551,6 +551,12 @@ public async Task<bool>writeFailedOutputs(int index)
     List<Tuple<Function, FunctionCallExpr, Expression>> CurrentPath =
       new List<Tuple<Function, FunctionCallExpr, Expression>>();
 
+    List<List<Tuple<Function, FunctionCallExpr, Expression>>> MutationsPaths =
+      new List<List<Tuple<Function, FunctionCallExpr, Expression>>>();
+    DirectedCallGraph<Function, FunctionCallExpr, Expression> MCG;
+      List<Tuple<Function, FunctionCallExpr, Expression>> CurrentPathMutations =
+      new List<Tuple<Function, FunctionCallExpr, Expression>>();
+
     public void GetAllPaths(Function source, Function destination) {
       if (source.FullDafnyName == destination.FullDafnyName) {
         Paths.Add(new List<Tuple<Function, FunctionCallExpr, Expression>>(CurrentPath));
@@ -561,6 +567,19 @@ public async Task<bool>writeFailedOutputs(int index)
           nwPair.Item1, nwPair.Item2, nwPair.Item3));
         GetAllPaths(nwPair.Item1, destination);
         CurrentPath.RemoveAt(CurrentPath.Count - 1);
+      }
+    }
+
+    public void GetAllMutationsPaths(Function source, Function destination) {
+      if (source.FullDafnyName == destination.FullDafnyName) {
+        MutationsPaths.Add(new List<Tuple<Function, FunctionCallExpr, Expression>>(CurrentPathMutations));
+        return;
+      }
+      foreach (var nwPair in MCG.AdjacencyWeightList[source]) {
+        CurrentPathMutations.Add(new Tuple<Function, FunctionCallExpr, Expression>(
+          nwPair.Item1, nwPair.Item2, nwPair.Item3));
+        GetAllMutationsPaths(nwPair.Item1, destination);
+        CurrentPathMutations.RemoveAt(CurrentPathMutations.Count - 1);
       }
     }
 
@@ -580,6 +599,63 @@ public async Task<bool>writeFailedOutputs(int index)
         pr.PrintExpression(expr, false);
         return wr.ToString();
       }
+    }
+
+public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = false)
+{
+    if (string.IsNullOrWhiteSpace(str) ||
+        string.IsNullOrWhiteSpace(substr))
+    {
+        throw new ArgumentException("String or substring is not specified.");
+    }
+
+    var indexes = new List<int>();
+    int index = 0;
+
+    while ((index = str.IndexOf(substr, index, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) != -1)
+    {
+        indexes.Add(index++);
+    }
+
+    return indexes.ToArray();
+}
+
+   public static string GetBaseLemmaListMutationList(Program program,Function fn, ModuleDefinition currentModuleDef,List<Tuple<Function, FunctionCallExpr, Expression>> path) {
+      string res = "";
+      // add all predicates in path
+      foreach (var nwPair in path)
+      {
+          using (var wr = new System.IO.StringWriter()) {
+          var pr = new Printer(wr);
+          pr.ModuleForTypes = currentModuleDef;
+          pr.PrintFunction(nwPair.Item1, 0,false);
+          res += wr.ToString();
+        }
+      res += "\n\n";
+      }
+    // annotate with "BASE_"
+    foreach (var nwPair in path)
+    {
+      var indecies = AllIndexesOf(res,nwPair.Item1.Name);
+      foreach (var index in indecies.Reverse())
+      {
+        res = res.Insert(index, "BASE_");
+      }
+    }
+    // add "mutated" intermediate predicates
+    // for (int i = 0; i < path.Count - 1; i++)
+    // {
+    //   var nwPair = path[i];
+    //   using (var wr = new System.IO.StringWriter()) {
+    //       var pr = new Printer(wr);
+    //       pr.ModuleForTypes = currentModuleDef;
+    //       pr.PrintFunction(nwPair.Item1, 0,false);
+    //       res += wr.ToString();
+    //     }
+    //   res += "\n\n";
+    // }
+
+      return res;
     }
 
    public static string GetBaseLemmaList(Function fn, ModuleDefinition currentModuleDef) {
@@ -714,6 +790,64 @@ public async Task<bool>writeFailedOutputs(int index)
       }
       return res;
     }
+
+    public static string GetIsWeakerMutationsRoot(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
+      string res = "lemma isAtLeastAsWeak";
+      //  foreach (var nwPair in path) {
+      //   res += "_" + nwPair.Item1.Name;
+      // }
+       res += "_" + path[0].Item1.Name;
+      foreach(var t in fn.TypeArgs)
+      {
+        res += "<"+t+"(0,!new)>";
+        // Console.WriteLine("a = " + t);
+      }
+      res += "(";
+      var sep = "";
+      var p = "";
+      Tuple<string, string> x = new Tuple<string, string>(null, null);
+
+      // foreach (var nwPair in path) {
+      //   res += sep + " ";
+      //   sep = "";
+      //   x = GetFunctionParamList(nwPair.Item1);
+      //   res += x.Item2;
+      //   p += "" + x.Item1; 
+      //   sep = ", ";
+      // }
+        res += sep + " ";
+        sep = "";
+        x = GetFunctionParamListSpec(path[0].Item1);
+        
+        res += x.Item2;
+        p += "" + x.Item1; 
+        sep = ", ";
+      res += ")\n";
+      // if(p != ""){
+      //   res += "requires " + fn.Name+"_BASE("+p+")\n";
+      // }
+      foreach (var req in path[0].Item1.Req) {
+        // res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
+        
+        if(isQuantifier){
+          res += "  requires forall " + x.Item2 + " :: "+ GetNonPrefixedString(req.E, currentModuleDef) + "\n";
+        }else{
+          res += "  requires " + GetNonPrefixedString(req.E, currentModuleDef) + "\n";
+        }
+      }
+      if(p != ""){
+        res += "requires BASE_" + fn.Name+"("+p+")\n";
+      }
+      if(p != ""){
+        // res += "  ensures forall " + p + " :: "+ fn.Name+"_BASE("+p+") ==> " + fn.Name+"("+p+")\n{}";
+        res += "ensures " + fn.Name+"("+p+")\n{}\n";
+      }else{
+        res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
+
+      }
+      return res;
+    }
+
 
     public static string getVacuityLemmaRevised(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
       string res = "lemma isVac";
@@ -913,6 +1047,11 @@ public async Task<bool>writeFailedOutputs(int index)
       {
         // Console.WriteLine("MOUDLE = " + proofModuleName);
       }
+      // var mutationRoot = null
+      if(DafnyOptions.O.MutationRootName == null)
+      {
+        DafnyOptions.O.MutationRootName = DafnyOptions.O.HoleEvaluatorFunctionName;
+      }
       Console.WriteLine("mutationsFromParams = " + mutationsFromParams);
       if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
@@ -967,8 +1106,12 @@ public async Task<bool>writeFailedOutputs(int index)
       }
       CG = GetCallGraph(baseFunc);
       Function func = GetFunction(program, funcName);
+      Function mutationRootFunc = GetFunction(program, DafnyOptions.O.MutationRootName);
       CurrentPath.Add(new Tuple<Function, FunctionCallExpr, Expression>(baseFunc, null, null));
       GetAllPaths(baseFunc, func);
+      MCG = GetCallGraph(mutationRootFunc);
+      CurrentPathMutations.Add(new Tuple<Function, FunctionCallExpr, Expression>(mutationRootFunc, null, null));
+      GetAllMutationsPaths(mutationRootFunc,func);
       if (Paths.Count == 0)
         Paths.Add(new List<Tuple<Function, FunctionCallExpr, Expression>>(CurrentPath));
       // foreach (var p in Paths) {
@@ -982,6 +1125,7 @@ public async Task<bool>writeFailedOutputs(int index)
       Console.WriteLine($"hole evaluation begins for func {funcName}");
       Function desiredFunction = null;
       Function desiredFunctionUnresolved = null;
+      Function desiredFunctionMutationRoot = null;
       Function topLevelDeclCopy = null;
       desiredFunction = GetFunction(program, funcName);
       // Console.WriteLine("--Function to Mutate--");
@@ -1091,6 +1235,7 @@ public async Task<bool>writeFailedOutputs(int index)
       //MERGE 
         // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
+        desiredFunctionMutationRoot = GetFunctionFromUnresolved(unresolvedProgram,DafnyOptions.O.MutationRootName);
         if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
           var fileLineList = DafnyOptions.O.HoleEvaluatorRemoveFileLine.Split(',');
           foreach (var fileLineString in fileLineList) {
@@ -1209,7 +1354,7 @@ public async Task<bool>writeFailedOutputs(int index)
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
         desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
         if(unresolvedProofProgram != null){
-            PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved, baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,true,false);
+            PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved, baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,true,false,desiredFunctionMutationRoot);
         }else{
           PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved, baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,true,false);
         }
@@ -1227,7 +1372,7 @@ public async Task<bool>writeFailedOutputs(int index)
           if(!isWeaker && !resolutionError){
             desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
             if(unresolvedProofProgram != null){
-                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
+                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true,desiredFunctionMutationRoot);
             }else{
               PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,false,true);
             }
@@ -1293,7 +1438,7 @@ public async Task<bool>writeFailedOutputs(int index)
               Console.WriteLine("Failed Afer 2nd PASS:  Index(" + i + ") :: isVacuous"); // Note that it is vacous, but still check
                 desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
                 if(unresolvedProofProgram != null){
-                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
+                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false,desiredFunctionMutationRoot);
               }else{
               // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
               PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
@@ -1306,7 +1451,7 @@ public async Task<bool>writeFailedOutputs(int index)
               
                desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
                 if(unresolvedProofProgram != null){
-                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
+                PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false,desiredFunctionMutationRoot);
               }else{
               // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
               PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
@@ -2208,13 +2353,14 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
     }
 
 
-public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program proofProg,Function func, Lemma lemma,string moduleName,ExpressionFinder.ExpressionDepth expr, int cnt, bool includeProof,bool isWeaker, bool vacTest) {
+public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program proofProg,Function func, Lemma lemma,string moduleName,ExpressionFinder.ExpressionDepth expr, int cnt, bool includeProof,bool isWeaker, bool vacTest,Function mutationRootFn) {
       
       if (!includeProof){
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine("Mutation -> " + $"{cnt}" + ": " + $"{Printer.ExprToString(expr.expr)}");
       var funcName = func.Name;
-      string basePredicateString = "";    
+      string basePredicateString = "";
+      string mutationBaseString = "";    
       string lemmaForExprValidityString = ""; // remove validityCheck
         string isSameLemma = "";
       string isStrongerLemma = "";
@@ -2222,24 +2368,27 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       if(constraintExpr == null)
       {
          basePredicateString = GetBaseLemmaList(func,null);
+         mutationBaseString = GetBaseLemmaListMutationList(program,func,null,MutationsPaths[0]);
        if(expr.expr is QuantifierExpr){
         isStrongerLemma = GetIsStronger(func,Paths[0], null, null,true);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, null,true);
+        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
         isSameLemma = GetIsSameLemmaList(func,Paths[0], null, null,true);
       }else{
         isStrongerLemma = GetIsStronger(func,Paths[0], null, null,false);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, null,false);
+        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
         isSameLemma = GetIsSameLemmaList(func,Paths[0], null, null,false);
+        // var test = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);
       }
       }else{
          basePredicateString = GetBaseLemmaList(func,null);
+         mutationBaseString = GetBaseLemmaListMutationList(program,func,null,MutationsPaths[0]);
          if(expr.expr is QuantifierExpr){
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
+        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
         isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,true);
       }else{
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,false);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
+        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
         isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,false);
       }
       }
@@ -2310,7 +2459,8 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             Console.WriteLine("TYPE = " + func.WhatKind);
             fnIndex = code.IndexOf("function " + funcName + "(");
           }
-          code = code.Insert(fnIndex-1,basePredicateString+"\n");
+          // code = code.Insert(fnIndex-1,basePredicateString+"\n");
+          code = code.Insert(fnIndex-1,mutationBaseString+"\n");
           // if(!includeProof){
           //   if(moduleName != null){
           //     // comment out entire module "assume this is last module"! 

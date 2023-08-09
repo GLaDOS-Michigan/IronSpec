@@ -699,6 +699,12 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
         {
             //DeleteNot
             currentExperssions.Add(new ExpressionDepth(ue.E,1));
+          List<ExpressionDepth> subExperssionsE = mutateOneExpressionRevised(program,decl,new ExpressionDepth(ue.E,1));
+          foreach (var subE in subExperssionsE)
+          {
+            // var sube_new = new BinaryExpr(be.tok, be.Op, subE.expr, ue.E);
+            currentExperssions.Add(new ExpressionDepth(subE.expr,1));
+          }
         }
       }
         
