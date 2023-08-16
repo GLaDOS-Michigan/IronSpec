@@ -947,6 +947,11 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         res += "_" + nwPair.Item1.Name;
       }
       res += "_" + id;
+            foreach(var t in path.Last().Item1.TypeArgs)
+      {
+        res += "<"+t+"(0,!new)>";
+        // Console.WriteLine("a = " + t);
+      }
       res += "(";
       var sep = "";
       foreach (var nwPair in path) {

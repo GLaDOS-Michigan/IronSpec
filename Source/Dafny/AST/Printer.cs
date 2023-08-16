@@ -100,6 +100,11 @@ if (type is UserDefinedType) {
           if (imp is ModuleDecl && !(imp as ModuleDecl).Signature.IsAbstract) {
             var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type, seenModules);
             if (result != "") {
+              if(result.Contains("<D>") && typeStr == "Optional"){
+                var index = result.IndexOf("<D>");
+                string clean = (index < 0) ? result : result.Remove(index,3);
+                result = clean;
+                }
               return result;
             }
           }
