@@ -24,6 +24,8 @@ namespace Microsoft.Dafny {
     private int numberOfSingleExpr = 0;
     private HoleEvaluator holeEval = null;
     private ProofEvaluator proofEval = null;
+
+    private SpecInputOutputChecker specInputOutputChecker = null;
     public List<ExpressionDepth> availableExpressions = new List<ExpressionDepth>();
     private List<BitArray> bitArrayList = new List<BitArray>();
     private HashSet<string> currCombinations = new HashSet<string>();
@@ -119,6 +121,10 @@ namespace Microsoft.Dafny {
     }
     public ExpressionFinder(ProofEvaluator proofEval) {
       this.proofEval = proofEval;
+    }
+
+    public ExpressionFinder(SpecInputOutputChecker specInputOutputChecker){
+      this.specInputOutputChecker = specInputOutputChecker;
     }
 
     private string ToBitString(BitArray bits, bool skipZero) {
@@ -473,6 +479,11 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
         }
 
       }
+      if(e.expr is ApplySuffix)
+      {
+                           //negation of Forall
+      currentExperssions.Add(new ExpressionDepth(Expression.CreateNot(e.expr.tok,e.expr),1));
+      }
       if(e.expr is LiteralExpr)
       {
         currentExperssions.Add(e);
@@ -670,6 +681,8 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
           qe = new ForallExpr(eforall.tok, eforall.BodyEndTok, newVars, ee.expr, eforall.Term, eforall.Attributes);
           currentExperssions.Add(new ExpressionDepth(qe,1));
         }
+                   //negation of Forall
+      currentExperssions.Add(new ExpressionDepth(Expression.CreateNot(eforall.tok,eforall),1));
 
       }else if(e.expr is ExistsExpr)
       {
@@ -936,8 +949,11 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
           qe = new ForallExpr(eforall.tok, eforall.BodyEndTok, newVars, ee.expr, eforall.Term, eforall.Attributes);
           currentExperssions.Add(new ExpressionDepth(qe,1));
         }
+           //negation of Forall
+      currentExperssions.Add(new ExpressionDepth(Expression.CreateNot(eforall.tok,eforall),1));
        }
 
+   
       return currentExperssions;
     }
 // Mutate the body and params
@@ -1509,6 +1525,37 @@ public static IEnumerable<ExpressionDepth> ListPredicateInvocations(
           yield return expr;
         }
       }
+    }
+
+    public IEnumerable<ExpressionDepth> ListArguments(Program program, Method method) {
+      foreach (var formal in method.Ins) {
+        var identExpr = Expression.CreateIdentExpr(formal);
+        foreach (var expr in TraverseFormal(program, new ExpressionDepth(identExpr, 1))) {
+          yield return expr;
+        }
+      }
+      foreach (var formal in method.Outs) {
+        var identExpr = Expression.CreateIdentExpr(formal);
+        foreach (var expr in TraverseFormal(program, new ExpressionDepth(identExpr, 1))) {
+          yield return expr;
+        }
+      }
+    }
+
+    public IEnumerable<ExpressionDepth> ListArgumentsMethodReq(Program program, Method method) {
+      foreach (var re in method.Req)
+      {
+        foreach (var expr in TraverseFormal(program, new ExpressionDepth(re.E, 1))) {
+          yield return expr;
+        }
+      }
+    }
+
+    public IEnumerable<ExpressionDepth> ListArgumentsCustom(Program program, Expression e) 
+    {
+      foreach (var expr in TraverseFormal(program, new ExpressionDepth(e, 1))) {
+          yield return expr;
+        }
     }
 
     public IEnumerable<ExpressionDepth> TraverseFormal(Program program, ExpressionDepth exprDepth) {

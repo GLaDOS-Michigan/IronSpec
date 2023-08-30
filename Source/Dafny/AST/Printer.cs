@@ -982,7 +982,8 @@ if (type is UserDefinedType) {
       PrintSpec("requires", f.Req, ind);
       PrintFrameSpecLine("reads", f.Reads, ind, null);
       PrintSpec("ensures", f.Ens, ind);
-      if (UniqueStringBeforeUnderscore == "") {
+      if(f.Decreases.Expressions.Count > 0){
+      // if (UniqueStringBeforeUnderscore == "") {
         PrintDecreasesSpec(f.Decreases, ind);
       }
       wr.WriteLine();

@@ -128,9 +128,9 @@ public async Task<bool>writeOutputs(int index)
       var response = output.Response;
       if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
               if(i == 1){
-                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
+                await File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
               }else{
-                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
+                await File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
               }
       }
     }
@@ -636,7 +636,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
     // annotate with "BASE_"
     foreach (var nwPair in path)
     {
-      var indecies = AllIndexesOf(res,nwPair.Item1.Name);
+      var indecies = AllIndexesOf(res,nwPair.Item1.Name+"(");
       foreach (var index in indecies.Reverse())
       {
         res = res.Insert(index, "BASE_");
@@ -785,7 +785,9 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         // res += "  ensures forall " + p + " :: "+ fn.Name+"_BASE("+p+") ==> " + fn.Name+"("+p+")\n{}";
         res += "ensures " + fn.Name+"("+p+")\n{}\n";
       }else{
-        res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
+        // res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
+        res += "  ensures " + fn.Name+"() ==> BASE_" + fn.Name+"()\n{}";
+
 
       }
       return res;
@@ -842,7 +844,8 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         // res += "  ensures forall " + p + " :: "+ fn.Name+"_BASE("+p+") ==> " + fn.Name+"("+p+")\n{}";
         res += "ensures " + fn.Name+"("+p+")\n{}\n";
       }else{
-        res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
+        // res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
+        res += "  ensures " + fn.Name+"() ==> BASE_" + fn.Name+"()\n{}";
 
       }
       return res;
@@ -1353,7 +1356,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       }
       // expressionFinder.availableExpressions = availableExpressionsTemp;
       expressionFinder.availableExpressions = hashtable.Values.Cast<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>().ToList();
-
+      int numFailiedAfter1stPass = 0;
       int remainingVal = expressionFinder.availableExpressions.Count;
       Console.WriteLine("--- Begin Is At Least As Weak Pass -- " + remainingVal);
       for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
@@ -1361,7 +1364,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         if(unresolvedProofProgram != null){
             PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved, baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,true,false,desiredFunctionMutationRoot);
         }else{
-          PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved, baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,true,false);
+          PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved, baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,true,false,desiredFunctionMutationRoot);
         }
       }
       await dafnyVerifier.startProofTasksAccordingToPriority();
@@ -1379,12 +1382,13 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
             if(unresolvedProofProgram != null){
                 PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true,desiredFunctionMutationRoot);
             }else{
-              PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,false,true);
+              PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,false,false,true,desiredFunctionMutationRoot);
             }
             // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
           }else{
             // if(isSame){Console.WriteLine("Failed Afer 2nd PASS:  Index(" + i + ") :: IsSame = " + isSame);}
           Console.WriteLine("Failed Afer 1st PASS:  Index(" + i + ") :: IsWeaker = " + isWeaker + " :: ResolutionError= " + resolutionError);
+          numFailiedAfter1stPass++;
             remainingVal = remainingVal - 1;
             var requestList = dafnyVerifier.requestsList[i];
             writeFailedOutputs(i);
@@ -1446,7 +1450,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
                 PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false,desiredFunctionMutationRoot);
               }else{
               // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
-              PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
+              PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false,desiredFunctionMutationRoot);
               }
 
             }else{
@@ -1459,7 +1463,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
                 PrintExprAndCreateProcessLemmaSeperateProof(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false,desiredFunctionMutationRoot);
               }else{
               // PrintExprAndCreateProcessLemma(unresolvedProgram, desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,true);
-              PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false);
+              PrintExprAndCreateProcessLemma(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,expressionFinder.availableExpressions[i], i,true,false,false,desiredFunctionMutationRoot);
               }
               // } 
             }
@@ -1468,6 +1472,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         await dafnyVerifier.startProofTasksAccordingToPriority();
         dafnyVerifier.clearTasks();
         Console.WriteLine("--- END Full Proof Pass -- ");
+
         // }
         FullStopWatch.Stop();
         Console.WriteLine("Elapsed Time is {0} ms", FullStopWatch.ElapsedMilliseconds);
@@ -1569,12 +1574,13 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       // Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
       //   invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount,
       //   noMatchingTriggerCount, expressionFinder.availableExpressions.Count);
-      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25}",
-        "InvalidExpr", "IncorrectProof", "ProofPasses", "vacousPasses","Total");
-      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25}",
-        invalidExprCount, incorrectProofCount, falsePredicateCount, vacousProofPass, expressionFinder.availableExpressions.Count);
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
+        "InvalidExpr", "IncorrectProof", "ProofPasses", "1st pass","vacousPasses","Total");
+      Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25}  {5, -15}",
+        invalidExprCount, incorrectProofCount, falsePredicateCount, numFailiedAfter1stPass, vacousProofPass , expressionFinder.availableExpressions.Count);
       string executionTimesSummary = "";
       string verboseExecTimesSummary = "";
+
       // executionTimes.Sort();
       foreach (var pair in verboseExecTimes)
         {
@@ -2155,7 +2161,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       }
     }
 
-    public void PrintExprAndCreateProcessLemma(Program program, Program proofProg,Function func, Lemma lemma,string moduleName,ExpressionFinder.ExpressionDepth expr, int cnt, bool includeProof,bool isWeaker, bool vacTest) {
+    public void PrintExprAndCreateProcessLemma(Program program, Program proofProg,Function func, Lemma lemma,string moduleName,ExpressionFinder.ExpressionDepth expr, int cnt, bool includeProof,bool isWeaker, bool vacTest,Function mutationRootFn) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine("Mutation -> " + $"{cnt}" + ": " + $"{Printer.ExprToString(expr.expr)}");
       var funcName = func.Name;
@@ -2165,14 +2171,18 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       string isSameLemma = "";
       string isStrongerLemma = "";
       string istWeakerLemma = "";
+      string mutationBaseString = "";    
+
+        // istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
+         mutationBaseString = GetBaseLemmaListMutationList(program,func,null,MutationsPaths[0]);
 
       if(expr.expr is QuantifierExpr){
-        isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
-        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, constraintExpr.expr,true);
+        isStrongerLemma = GetIsStronger(func,Paths[0], null, null,true);
+        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
+        isSameLemma = GetIsSameLemmaList(func,Paths[0], null, null,true);
       }else{
         isStrongerLemma = GetIsStronger(func,Paths[0], null, null,false);
-        istWeakerLemma = GetIsWeaker(func,Paths[0], null, null,false);
+        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
         isSameLemma = GetIsSameLemmaList(func,Paths[0], null, null,false);
       }
 
@@ -2218,7 +2228,9 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
           code += $"// {Printer.ExprToString(expr.expr)}\n" + includesList + Printer.ToStringWithoutNewline(wr) + "\n\n";
           
           int fnIndex = code.IndexOf("predicate " + funcName);
-          code = code.Insert(fnIndex-1,basePredicateString+"\n");
+          // code = code.Insert(fnIndex-1,basePredicateString+"\n");
+            code = code.Insert(fnIndex-1,mutationBaseString+"\n");
+
           if(!includeProof){
             if(moduleName != null){
               // comment out entire module "assume this is last module"! 
@@ -2279,8 +2291,14 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
           // basePredicatePosition = code.Count(f => f == '\n');
 
           // Console.WriteLine(code.IndexOf("lemma isSame_"+funcName));
-          if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
-            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
+          if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
+            if(isWeaker)
+            {
+              File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_weaker_{cnt}.dfy", code);
+            }else{
+              File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
+            }
+          }
         }
         string env = DafnyOptions.O.Environment.Remove(0, 22);
         var argList = env.Split(' ');

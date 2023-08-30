@@ -192,6 +192,8 @@ namespace Microsoft.Dafny {
     public bool MutationsFromParams = false;
     public bool EvaluateAllAtOnce = false;
     public bool ProofOnly = false;
+    public bool CheckInputAndOutputSpecified = false;
+
     
     public bool AllMutations = false;
     public string HoleEvaluatorBaseFunctionName = null;
@@ -698,6 +700,9 @@ namespace Microsoft.Dafny {
           return true;
         case "proofOnly":
           ProofOnly = true;
+          return true;
+        case "checkInputAndOutputSpecified":
+          CheckInputAndOutputSpecified = true;
           return true;
         case "evaluateAllAtOnce":
           EvaluateAllAtOnce = true;
