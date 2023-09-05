@@ -324,6 +324,26 @@ namespace Microsoft.Dafny {
           }
           return ExitValue.SUCCESS;
         }
+      if(DafnyOptions.O.InPlaceMutation) //works for methods
+      {
+          Console.WriteLine("Assumes Proof location");
+          specInputOutputChecker = new SpecInputOutputChecker();
+        var df1 = new DafnyFile(DafnyOptions.O.ProofLocation);
+         var proofFiles = new List<DafnyFile>();
+         proofFiles.Add(df1);
+        string programName1 = dafnyFileNames.Count == 1 ? dafnyFileNames[0] : "the_program";
+        string err1 = Dafny.Main.ParseCheck(proofFiles, df1.FilePath, reporter, out var dafnyProofProgram);
+        Dafny.Main.Parse(proofFiles, df1.FilePath, reporter, out var dafnyUnresolvedProofProgram);
+        var foundDesiredFunction = specInputOutputChecker.EvaluateMethodInPlace(dafnyProgram,
+            dafnyUnresolvedProgram,
+            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.ProofLemmaName,
+            null,
+            DafnyOptions.O.HoleEvaluatorBaseFunctionName,
+            DafnyOptions.O.HoleEvaluatorDepth,
+            DafnyOptions.O.MutationsFromParams,dafnyProofProgram,dafnyUnresolvedProofProgram);
+                    return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
+      }
 
       if(DafnyOptions.O.CheckInputAndOutputSpecified) //works for methods
       {

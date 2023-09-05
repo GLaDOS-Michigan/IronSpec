@@ -454,7 +454,7 @@ namespace Microsoft.Dafny {
 
 public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberDecl decl, ExpressionDepth e)
     {
-      Console.Write(" pp = " + e.expr + "( " + Printer.ExprToString(e.expr) + ") \n");
+      Console.Write(" expression = " + e.expr + "( " + Printer.ExprToString(e.expr) + ") \n");
       List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
       if(e.expr is ITEExpr)
       {
@@ -483,6 +483,12 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
       {
                            //negation of Forall
       currentExperssions.Add(new ExpressionDepth(Expression.CreateNot(e.expr.tok,e.expr),1));
+      }
+      if(e.expr is OldExpr)
+      {
+              // currentExperssions.Add(new ExpressionDepth(Expression.CreateNot(e.expr.tok,e.expr),1));
+          currentExperssions.Add(new ExpressionDepth((e.expr as OldExpr).E,1));
+
       }
       if(e.expr is LiteralExpr)
       {
@@ -711,12 +717,21 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
         if(ue.Op == UnaryOpExpr.Opcode.Not) // NOT
         {
             //DeleteNot
-            currentExperssions.Add(new ExpressionDepth(ue.E,1));
+          currentExperssions.Add(new ExpressionDepth(ue.E,1));
           List<ExpressionDepth> subExperssionsE = mutateOneExpressionRevised(program,decl,new ExpressionDepth(ue.E,1));
           foreach (var subE in subExperssionsE)
           {
             // var sube_new = new BinaryExpr(be.tok, be.Op, subE.expr, ue.E);
             currentExperssions.Add(new ExpressionDepth(subE.expr,1));
+          }
+        }
+        if(ue.Op == UnaryOpExpr.Opcode.Cardinality)
+        {
+          List<ExpressionDepth> subExperssionsE = mutateOneExpressionRevised(program,decl,new ExpressionDepth(ue.E,1));
+          foreach (var subE in subExperssionsE)
+          {
+            // var sube_new = new BinaryExpr(be.tok, be.Op, subE.expr, ue.E);
+            currentExperssions.Add(new ExpressionDepth(Expression.CreateCardinality(subE.expr,program.BuiltIns),1));
           }
         }
       }

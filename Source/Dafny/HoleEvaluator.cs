@@ -1048,6 +1048,41 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       return null;
     }
 
+        public static Method GetMethod(Program program, string methodName) {
+      foreach (var kvp in program.ModuleSigs) {
+        foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
+          var cl = d as TopLevelDeclWithMembers;
+          if (cl != null) {
+            foreach (var member in cl.Members) {
+              var m = member as Method;
+              if (m != null) {
+                if (m.FullDafnyName == methodName) {
+                  return m;
+                }
+              }
+            }
+          }
+        }
+      }
+      return null;
+    }
+        public void PrintAllMethods(Program program, string methodName) {
+      foreach (var kvp in program.ModuleSigs) {
+        foreach (var d in kvp.Value.ModuleDef.TopLevelDecls) {
+          var cl = d as TopLevelDeclWithMembers;
+          if (cl != null) {
+            foreach (var member in cl.Members) {
+              var m = member as Method;
+              if (m != null) {
+                Console.WriteLine("Method NAME = " + m.FullDafnyName);
+              }
+            }
+          }
+        }
+      }
+    }
+
+
 
     public async Task<bool> EvaluateFilterStrongerAndSame(Program program, Program unresolvedProgram, string funcName, string lemmaName, string proofModuleName, string baseFuncName, int depth, bool mutationsFromParams,Program proofProg, Program unresolvedProofProgram) {
       // Console.WriteLine("here " + DafnyOptions.O.EvaluateAllAtOnce);
@@ -1133,6 +1168,8 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       Console.WriteLine($"hole evaluation begins for func {funcName}");
       Function desiredFunction = null;
       Function desiredFunctionUnresolved = null;
+      Method desiredMethod = null;
+      Method desiredMethodUnresolved = null;
       Function desiredFunctionMutationRoot = null;
       Function topLevelDeclCopy = null;
       desiredFunction = GetFunction(program, funcName);
@@ -1162,10 +1199,13 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         // dafnyVerifier.InitializeBaseFoldersInRemoteServers(proofProg, includeParser.commonPrefix);
         affectedFiles.Add(filename);
         affectedFiles = affectedFiles.Distinct().ToList();
+        desiredMethod = GetMethod(proofProg, lemmaName);
         Lemma desiredLemmm = GetLemma(proofProg, lemmaName);
-      if (desiredLemmm == null) {
+      if (desiredLemmm == null && desiredMethod == null) {
         Console.WriteLine($"couldn't find function {desiredLemmm}. List of all lemmas:");
-      PrintAllLemmas(proofProg, lemmaName);
+        PrintAllLemmas(proofProg, lemmaName);
+        Console.WriteLine($"couldn't find function {desiredMethod}. List of all methods:");
+        PrintAllMethods(proofProg, lemmaName);
         return false;
       }
       Console.WriteLine(getVacuityLemma(desiredLemmm));
@@ -1225,25 +1265,11 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         }
         //MERGE
             expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunction);
-          //   // Console.WriteLine(GetBaseLemmaList(baseFunc, null, constraintExpr));
-
-          //   // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
-          //   desiredFunctionUnresolved = GetFunctionFromUnresolvedClass(unresolvedProgram, funcName);
-          //   // Console.WriteLine("BEFORE");
-          //   if(desiredFunctionUnresolved == null){
-          //     desiredFunctionUnresolved = GetFunction(program, funcName);
-          //   }
-          // //         Console.WriteLine("--Function to Mutate--");
-          // // using (var wr = new System.IO.StringWriter()) {
-          // //   var pr = new Printer(wr);
-          // //   pr.PrintFunction(desiredFunction, 0,false);
-          // //   Console.WriteLine(wr.ToString());
-          // // }
-          // // Console.WriteLine("--------------");
-      //MERGE 
         // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
         desiredFunctionMutationRoot = GetFunctionFromUnresolved(unresolvedProgram,DafnyOptions.O.MutationRootName);
+          desiredMethodUnresolved = GetMethodFromUnresolved(unresolvedProofProgram,lemmaName);
+
         if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
           var fileLineList = DafnyOptions.O.HoleEvaluatorRemoveFileLine.Split(',');
           foreach (var fileLineString in fileLineList) {
@@ -1254,8 +1280,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           }
         }
         Contract.Assert(desiredFunctionUnresolved != null);
-        
-        // Console.WriteLine("AFTER");
         topLevelDeclCopy = new Function(
           desiredFunctionUnresolved.tok, desiredFunctionUnresolved.Name, desiredFunctionUnresolved.HasStaticKeyword,
           desiredFunctionUnresolved.IsGhost, desiredFunctionUnresolved.TypeArgs, desiredFunctionUnresolved.Formals,
@@ -1700,6 +1724,20 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       }
       return null;
     }
+        public static Method GetMethodFromUnresolved(Program program, string methodName) {
+      int index = methodName.IndexOf('.');
+      string moduleName = methodName.Remove(index);
+      foreach (var topLevelDecl in program.DefaultModuleDef.TopLevelDecls) {
+        if (topLevelDecl.FullDafnyName == moduleName) {
+          var lmd = topLevelDecl as LiteralModuleDecl;
+          var func = GetMethodFromModuleDef(lmd.ModuleDef, methodName);
+          if (func != null) {
+            return func;
+          }
+        }
+      }
+      return null;
+    }
 
 public async Task<bool> Evaluate(Program program, Program unresolvedProgram, string funcName, string baseFuncName, int depth) {
       if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
@@ -2127,7 +2165,28 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       }
       return null;
     }
-
+    public static Method GetMethodFromModuleDef(ModuleDefinition moduleDef, string methName) {
+      foreach (var topLevelDecl in moduleDef.TopLevelDecls) {
+        if (topLevelDecl is ClassDecl) {
+          var cd = topLevelDecl as ClassDecl;
+          foreach (var member in cd.Members) {
+            if ($"{cd.FullDafnyName}.{member.Name}" == methName) {
+              return member as Method;
+            }
+          }
+        }
+        if(topLevelDecl is DatatypeDecl)
+        {
+          var cd = topLevelDecl as DatatypeDecl;
+          foreach (var member in cd.Members) {
+            if ($"{cd.FullDafnyName}.{member.Name}" == methName) {
+              return member as Method;
+            }
+          }
+        }
+      }
+      return null;
+    }
     public static Function GetFunctionFromUnresolved(Program program, string funcName) {
       int index = funcName.IndexOf('.');
       string moduleName = funcName.Remove(index);
