@@ -2375,10 +2375,6 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
           // args.Add("/proc:*" + lemma.Name +"*");
          }
         // args.Add("/proc:*" + lemma.CompileName );
-        foreach (var arg in args) {
-          // Console.WriteLine("hereerere ");
-        }
-                  // Console.WriteLine("hereerere 1");
 
         var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
                   // Console.WriteLine("hereerere 2");

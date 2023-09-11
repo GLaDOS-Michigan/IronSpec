@@ -195,7 +195,7 @@ namespace Microsoft.Dafny {
     public bool CheckInputAndOutputSpecified = false;
 
     public bool InPlaceMutation = false;
-
+    public bool IsRequires = false;
     public bool AllMutations = false;
     public string HoleEvaluatorBaseFunctionName = null;
     public int HoleEvaluatorDepth = 1;
@@ -707,6 +707,9 @@ namespace Microsoft.Dafny {
           return true;
         case "inPlaceMutation":
           InPlaceMutation = true;
+          return true;
+        case "isRequires":
+          IsRequires = true;
           return true;
         case "evaluateAllAtOnce":
           EvaluateAllAtOnce = true;
