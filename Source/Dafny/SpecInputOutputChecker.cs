@@ -813,8 +813,10 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
       }
       int totalMutationCount = 0;
       Dictionary<ExpressionFinder.ExpressionDepth,Expression> mutatedMap = new Dictionary<ExpressionFinder.ExpressionDepth, Expression>();
-
-      //collect all mutations
+      
+      List<Tuple<ExpressionFinder.ExpressionDepth,Expression,bool>> inPlaceMutationList =
+      new List<Tuple<ExpressionFinder.ExpressionDepth,Expression,bool>>();
+      //collect all mutations (ens)
       for (int i = 0; i < desiredMethod.Ens.Count; i++)
       {
         var e = desiredMethod.Ens[i];
@@ -824,39 +826,40 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
         Console.Write(" pp = " + ee  + "\n");
         foreach (ExpressionFinder.ExpressionDepth ex in ensuresMutationList)
         {
+          inPlaceMutationList.Add(new Tuple<ExpressionFinder.ExpressionDepth,Expression,bool> (ex,ee,false));
           mutatedMap.Add(ex,ee);
           // PrintExprAndCreateProcessMethodInPlace(unresolvedProgram, unresolvedProofProgram,desiredMethod,proofModuleName,ex,ee,true,false,totalMutationCount,true,true,false,desiredFunctionMutationRoot);
           totalMutationCount++;
         }
         
       }
-      // foreach (AttributedExpression e in desiredMethod.Ens)
-      // {
-      //   var ensList = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(e.E,1));
-      //   Expression ee = e.E;
-      //   List<ExpressionFinder.ExpressionDepth> ensuresMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethodUnresolved,new ExpressionFinder.ExpressionDepth(e.E,1));
-      //   Console.Write(" pp = " + ee  + "\n");
-      //   foreach (ExpressionFinder.ExpressionDepth ex in ensuresMutationList)
-      //   {
-      //     mutatedMap.Add(ex,ee);
-      //     // PrintExprAndCreateProcessMethodInPlace(unresolvedProgram, unresolvedProofProgram,desiredMethod,proofModuleName,ex,ee,true,false,totalMutationCount,true,true,false,desiredFunctionMutationRoot);
-      //     totalMutationCount++;
-      //   }
-      //   // Console.Write(" pp = " + e + "( " + Printer.ExprToString(e) + ") \n");
-      // }
+      for (int i = 0; i < desiredMethod.Req.Count; i++)
+      {
+        var r = desiredMethod.Req[i];
+        var reqList = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(r.E,1));
+        Expression re = desiredMethodUnresolved.Req[i].E;
+        List<ExpressionFinder.ExpressionDepth> reqsMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethodUnresolved,new ExpressionFinder.ExpressionDepth(r.E,1));
+        Console.Write(" pp = " + re  + "\n");
+
+        foreach (ExpressionFinder.ExpressionDepth ex in reqsMutationList)
+        {
+          inPlaceMutationList.Add(new Tuple<ExpressionFinder.ExpressionDepth,Expression,bool> (ex,re,true));
+          totalMutationCount++;
+        }
+      }
             dafnyVerifier.sw = Stopwatch.StartNew();
 
         Console.WriteLine("--- START Is At Least As Weak Pass  -- ");
-        for (int i = 0; i< mutatedMap.Count; i++)
+        for (int i = 0; i< inPlaceMutationList.Count; i++)
         {
           PrintExprAndCreateProcessMethodInPlace(unresolvedProgram, 
                                                 unresolvedProofProgram,
                                                 desiredMethod,
                                                 proofModuleName,
-                                                mutatedMap.ElementAt(i).Key,
-                                                mutatedMap.ElementAt(i).Value,
+                                                inPlaceMutationList.ElementAt(i).Item1,
+                                                inPlaceMutationList.ElementAt(i).Item2,
                                                 true,
-                                                false,
+                                                inPlaceMutationList.ElementAt(i).Item3,
                                                 i,
                                                 true,
                                                 true,
@@ -870,7 +873,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
             Console.WriteLine("--- START Vacuity Pass -- ");
 
 
-      for(int i = 0; i < mutatedMap.Count; i++)
+      for(int i = 0; i < inPlaceMutationList.Count; i++)
       {
          var isWeaker = isDafnyVerifySuccessful(i);  
          var resolutionError = isResolutionError(i);
@@ -881,10 +884,10 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
                                                 unresolvedProofProgram,
                                                 desiredMethod,
                                                 proofModuleName,
-                                                mutatedMap.ElementAt(i).Key,
-                                                mutatedMap.ElementAt(i).Value,
+                                                inPlaceMutationList.ElementAt(i).Item1,
+                                                inPlaceMutationList.ElementAt(i).Item2,
                                                 true,
-                                                false,
+                                                inPlaceMutationList.ElementAt(i).Item3,
                                                 i,
                                                 true,
                                                 false,
@@ -907,7 +910,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
         FullStopWatch.Start();
         List<int> vacIndex = new List<int>();
 
-      for(int i = 0; i < mutatedMap.Count; i++)
+      for(int i = 0; i < inPlaceMutationList.Count; i++)
       {
         var isVacuous = isDafnyVerifySuccessful(i);
             var prevPassRes = dafnyVerifier.dafnyOutput[dafnyVerifier.requestsList[i].First()].Response; //isAtLeastAsWeak
@@ -922,10 +925,10 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
                                                 unresolvedProofProgram,
                                                 desiredMethod,
                                                 proofModuleName,
-                                                mutatedMap.ElementAt(i).Key,
-                                                mutatedMap.ElementAt(i).Value,
+                                                inPlaceMutationList.ElementAt(i).Item1,
+                                                inPlaceMutationList.ElementAt(i).Item2,
                                                 true,
-                                                false,
+                                                inPlaceMutationList.ElementAt(i).Item3,
                                                 i,
                                                 true,
                                                 false,
@@ -940,33 +943,33 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
         Console.WriteLine("Elapsed Time is {0} ms", FullStopWatch.ElapsedMilliseconds);
       bool foundCorrectExpr = false;
 
-      for(int i = 0; i < mutatedMap.Count; i++)
+      int reqPasses = 0;
+      for(int i = 0; i < inPlaceMutationList.Count; i++)
       {
-                  UpdateCombinationResultVacAwareList(i,vacIndex.Contains(i));
-          
-                writeFinalOutputs(i);
-                foundCorrectExpr = false;
-                foundCorrectExpr |= combinationResults[i] == Result.FalsePredicate;
-                // Console.WriteLine(foundCorrectExpr);
-                var t = isDafnyVerifySuccessful(i);
-                if(foundCorrectExpr)
-                {
-                  Console.WriteLine("Mutation that Passes = " + i);
-                  Console.WriteLine("\t ==> " +  Printer.ExprToString(mutatedMap.ElementAt(i).Key.expr));
-                }else if (combinationResults[i] == Result.vacousProofPass)
-                {
-                  Console.WriteLine("Mutation that Passes = " + i + " ** is vacous!");
-                  Console.WriteLine("\t ==> " +  Printer.ExprToString(mutatedMap.ElementAt(i).Key.expr));
-
-
+        UpdateCombinationResultVacAwareList(i,vacIndex.Contains(i));
+        writeFinalOutputs(i);
+        foundCorrectExpr = false;
+        foundCorrectExpr |= combinationResults[i] == Result.FalsePredicate;
+        // Console.WriteLine(foundCorrectExpr);
+        var t = isDafnyVerifySuccessful(i);
+        String reqOrEns = inPlaceMutationList.ElementAt(i).Item3 ? "requires " :  "ensures ";
+        if(foundCorrectExpr)
+        {
+          Console.WriteLine("Mutation that Passes = " + i);
+          Console.WriteLine("\t mutation: " + reqOrEns + Printer.ExprToString(inPlaceMutationList.ElementAt(i).Item1.expr));
+          Console.WriteLine("\t orig: " + reqOrEns + Printer.ExprToString(inPlaceMutationList.ElementAt(i).Item2));
+          if(inPlaceMutationList.ElementAt(i).Item3)
+          {
+            reqPasses++;
+          }
+        }else if (combinationResults[i] == Result.vacousProofPass)
+        {
+          Console.WriteLine("Mutation that Passes = " + i + " ** is vacous!");
+          Console.WriteLine("\t mutation: " + reqOrEns + Printer.ExprToString(inPlaceMutationList.ElementAt(i).Item1.expr));
+          Console.WriteLine("\t orig: " + reqOrEns + Printer.ExprToString(inPlaceMutationList.ElementAt(i).Item2));
+        }
       }
-      }
-        dafnyVerifier.Cleanup();
-
-      
-
-      
-                
+      dafnyVerifier.Cleanup();    
       Console.WriteLine("--- Finish Test -- ");
 
       dafnyVerifier.Cleanup();
@@ -978,7 +981,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
       int falsePredicateCount = 0;
       int vacousProofPass = 0;
       int noMatchingTriggerCount = 0;
-      for (int i = 0; i < mutatedMap.Count; i++) {
+      for (int i = 0; i < inPlaceMutationList.Count; i++) {
         switch (combinationResults[i]) {
           case Result.InvalidExpr: invalidExprCount++; break;
           case Result.FalsePredicate: falsePredicateCount++; break;
@@ -996,35 +999,14 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
       //   invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount,
       //   noMatchingTriggerCount, expressionFinder.availableExpressions.Count);
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
-        "InvalidExpr", "IncorrectProof", "ProofPasses", "1st pass","vacousPasses","Total");
+        "InvalidExpr", "IncorrectProof", "ProofPasses", "ReqPasses","vacousPasses","Total");
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25}  {5, -15}",
-        invalidExprCount, incorrectProofCount, falsePredicateCount, 0, vacousProofPass , expressionFinder.availableExpressions.Count);
+        invalidExprCount, incorrectProofCount, falsePredicateCount, reqPasses, vacousProofPass ,  inPlaceMutationList.Count);
       string executionTimesSummary = "";
       string verboseExecTimesSummary = "";
 
       return true;
 
-            // foreach (AttributedExpression e in desiredMethod.Req)
-      // {
-      //           Expression ee = e.E;
-
-      //   List<ExpressionFinder.ExpressionDepth> reqsMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethodUnresolved,new ExpressionFinder.ExpressionDepth(e.E,1));
-
-      //   foreach (ExpressionFinder.ExpressionDepth ex in reqsMutationList)
-      //   {
-      //     PrintExprAndCreateProcessMethodInPlace(unresolvedProgram, unresolvedProofProgram,desiredMethod,proofModuleName,ex,ee,false,true,totalMutationCount,true,true,false,desiredFunctionMutationRoot);
-      //     totalMutationCount++;
-      //   }
-
-      //     // PrintExprAndCreateProcessMethodInPlace(unresolvedProgram, unresolvedProofProgram,desiredMethod,proofModuleName,ex,ee,false,true,totalMutationCount,true,true,false,desiredFunctionMutationRoot);
-      //     // totalMutationCount++;
-
-      //   // var ensList = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(e.E,1));
-      //   // Expression ee = e.E;
-      //   // List<ExpressionFinder.ExpressionDepth> ReqMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethodUnresolved,new ExpressionFinder.ExpressionDepth(e.E,1));
-      //   // Console.Write(" pp = " + ee  + "\n");
-      //   // Console.Write(" pp = " + e + "( " + Printer.ExprToString(e) + ") \n");
-      // }
 
     }
 
@@ -1567,6 +1549,10 @@ public async Task<bool>writeOutputs(int index)
         res += "(";
         var sep = "";
         var p = "";
+        foreach (string newP in paramsAndBodies[0])
+          {
+            res += newP + ",";
+          }
         Tuple<string, string> x = new Tuple<string, string>(null, null);
         res += sep + " ";
           sep = "";
@@ -1649,6 +1635,10 @@ public static string GetIsMutatedPredMethodInPlace(Method method,List<Tuple<Func
         res += "(";
         var sep = "";
         var p = "";
+        foreach (string newP in paramsAndBodies[0])
+          {
+            res += newP + ",";
+          }
         Tuple<string, string> x = new Tuple<string, string>(null, null);
         res += sep + " ";
           sep = "";
@@ -1663,7 +1653,7 @@ public static string GetIsMutatedPredMethodInPlace(Method method,List<Tuple<Func
          foreach (AttributedExpression e in method.Req)
         {
           Expression ee = e.E;
-          if (ee == orig)
+          if (Printer.ExprToString(ee) == Printer.ExprToString(orig))
          {
           // Console.WriteLine("sadfasdf");
           ee = mutataed;
@@ -2029,11 +2019,20 @@ public static string GetIsMutatedPredMethodInPlace(Method method,List<Tuple<Func
       return res;
     }
 
+public string ReplaceFirst(int pos, string text, string search, string replace)
+{
+  // int pos = text.IndexOf(search);
+  if (pos < 0)
+  {
+    return text;
+  }
+  return text.Substring(0, pos) + replace + text.Substring(pos + search.Length);
+}
 
     public void PrintExprAndCreateProcessMethodInPlace(Program program, Program proofProg,Method meth, string moduleName,ExpressionFinder.ExpressionDepth expr,Expression originalExpr,bool isEns,bool isReq,int cnt, bool includeProof,bool isWeaker, bool vacTest,Function mutationRootFn) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine("Mutation -> " + $"{cnt}" + ": " + $"{Printer.ExprToString(expr.expr)}");
-      String reqOrEns = isReq ? "requires " : (isEns ? "ensures " : "");
+      String reqOrEns = isReq ? "requires " :  "ensures ";
       Console.WriteLine("Original -> " + $"{cnt}" + ": " + reqOrEns + $"{Printer.ExprToString(originalExpr)}");
       var funcName = meth.Name;
 
@@ -2089,51 +2088,33 @@ public static string GetIsMutatedPredMethodInPlace(Method method,List<Tuple<Func
           code += $"// {Printer.ExprToString(expr.expr)}\n" + includesList + Printer.ToStringWithoutNewline(wr) + "\n\n";
           
           //apply mutation string b/c these are readonly
-          if(isReq)
-          {
-            code = code.Replace("requires " +Printer.ExprToString(originalExpr),"requires " +Printer.ExprToString(expr.expr));
-          }else{
-            code = code.Replace("ensures " +Printer.ExprToString(originalExpr),"ensures " +Printer.ExprToString(expr.expr));
-          }
-          // int fnIndex = code.IndexOf("predicate " + funcName);
-//           // code = code.Insert(fnIndex-1,basePredicateString+"\n");
-//             code = code.Insert(fnIndex-1,mutationBaseString+"\n");
-
-//           if(!includeProof){
-//             if(moduleName != null){
-//               // comment out entire module "assume this is last module"! 
-//               int moduleLoc = code.IndexOf("module " +moduleName);
-//               code = code.Insert(moduleLoc-1,"/*"+"\n");
-//               code = code + "/*";
-//             }else{
-//               //Comment out single 'proof' lemma
-//               // Console.WriteLine("=----> " + lemma.Name);
-//               // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-//               // if(lemmaLoc == -1 )
-//               // {
-//               //   lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-//               // }
-//               // code = code.Insert(lemmaLoc-1,"/*"+"\n");
-//               // code = code.Insert(code.IndexOf("}\n\n",lemmaLoc)-1,"*/"+"\n");
-//             }
-//           }
-          if(isWeaker){
-            var methIndex = code.IndexOf("method " + meth.Name);
+          var methIndex = code.IndexOf("method " + meth.Name);
             if (methIndex < 0){
               methIndex = code.IndexOf("} " + meth.Name); 
               methIndex = code.LastIndexOf("method",methIndex);
             }
+          if(isReq)
+          {
+           code = ReplaceFirst(code.IndexOf("requires " +Printer.ExprToString(originalExpr),methIndex),code,"requires " +Printer.ExprToString(originalExpr),"requires " +Printer.ExprToString(expr.expr));
+          // code = code.Replace("requires " +Printer.ExprToString(originalExpr),"requires " +Printer.ExprToString(expr.expr));
+          }else{
+            code = ReplaceFirst(code.IndexOf("ensures " +Printer.ExprToString(originalExpr),methIndex),code,"ensures " +Printer.ExprToString(originalExpr),"ensures " +Printer.ExprToString(expr.expr));
+
+            // code = code.Replace("ensures " +Printer.ExprToString(originalExpr),"ensures " +Printer.ExprToString(expr.expr));
+          }
+          if(isWeaker){
+            
             code = code.Insert(methIndex-1,istWeakerLemma+"\n" + methodPred + "\n" + methodMutatedPred + "\n");
           }
           if(vacTest) //just inline "ensures false" 
           {
             methodMutatedPred = GetIsMutatedPredMethodInPlace(meth,MutationsPaths[0], null, null,isReq,originalExpr,expr.expr);
             isVacTest = GetIsSimpleVacTest(meth,MutationsPaths[0], null, null,isReq);
-            var methIndex = code.IndexOf("method " + meth.Name);
-            if (methIndex < 0){
-              methIndex = code.IndexOf("} " + meth.Name); 
-              methIndex = code.LastIndexOf("method",methIndex);
-            }
+            // var methIndex = code.IndexOf("method " + meth.Name);
+            // if (methIndex < 0){
+            //   methIndex = code.IndexOf("} " + meth.Name); 
+            //   methIndex = code.LastIndexOf("method",methIndex);
+            // }
             code = code.Insert(methIndex-1,isVacTest + "\n" + methodMutatedPred + "\n");
           }
 //           // if((vacTest && includeProof)){
