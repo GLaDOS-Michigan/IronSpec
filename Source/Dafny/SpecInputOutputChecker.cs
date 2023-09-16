@@ -2051,7 +2051,6 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
 
       if (isWeaker)
       {
-
         istWeakerLemma = GetIsWeakerMethodInPlace(meth,MutationsPaths[0], null, null,isReq);
         methodPred = GetIsBasePredMethodInPlace(meth,MutationsPaths[0], null, null,isReq);
         methodMutatedPred = GetIsMutatedPredMethodInPlace(meth,MutationsPaths[0], null, null,isReq,originalExpr,expr.expr);
