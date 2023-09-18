@@ -6339,9 +6339,9 @@ namespace Microsoft.Dafny {
     public readonly List<TypeParameter> TypeArgs;
     public readonly List<Formal> Ins;
     public readonly List<Formal> Outs;
-    public readonly List<AttributedExpression> Req;
+    public  List<AttributedExpression> Req;
     public readonly Specification<FrameExpression> Mod;
-    public readonly List<AttributedExpression> Ens;
+    public  List<AttributedExpression> Ens;
     public readonly Specification<Expression> Decreases;
     private BlockStmt methodBody;  // Body is readonly after construction, except for any kind of rewrite that may take place around the time of resolution (note that "methodBody" is a "DividedBlockStmt" for any "Method" that is a "Constructor")
     [FilledInDuringResolution] public bool IsRecursive;
@@ -12698,7 +12698,7 @@ namespace Microsoft.Dafny {
   }
 
   public class AttributedExpression : IAttributeBearingDeclaration {
-    public readonly Expression E;
+    public Expression E;
     public readonly AssertLabel/*?*/ Label;
 
     [ContractInvariantMethod]

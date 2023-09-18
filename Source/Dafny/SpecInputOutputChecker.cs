@@ -581,7 +581,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
         desiredFunctionMutationRoot = GetFunctionFromUnresolved(unresolvedProgram,DafnyOptions.O.MutationRootName);
-        desiredMethodUnresolved = GetMethodFromUnresolved(unresolvedProofProgram,lemmaName);
+        desiredMethodUnresolved = GetMethodFromUnresolved(unresolvedProgram,lemmaName);
         if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
           var fileLineList = DafnyOptions.O.HoleEvaluatorRemoveFileLine.Split(',');
           foreach (var fileLineString in fileLineList) {
@@ -724,7 +724,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
         // dafnyVerifier.InitializeBaseFoldersInRemoteServers(proofProg, includeParser.commonPrefix);
         affectedFiles.Add(filename);
         affectedFiles = affectedFiles.Distinct().ToList();
-        desiredMethod = GetMethod(proofProg, lemmaName);
+        desiredMethod = GetMethod(program, lemmaName);
         Lemma desiredLemmm = GetLemma(proofProg, lemmaName);
       if (desiredLemmm == null && desiredMethod == null) {
         Console.WriteLine($"couldn't find function {desiredLemmm}. List of all lemmas:");
@@ -855,6 +855,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
           PrintExprAndCreateProcessMethodInPlace(unresolvedProgram, 
                                                 unresolvedProofProgram,
                                                 desiredMethod,
+                                                desiredMethodUnresolved,
                                                 proofModuleName,
                                                 inPlaceMutationList.ElementAt(i).Item1,
                                                 inPlaceMutationList.ElementAt(i).Item2,
@@ -883,6 +884,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
             PrintExprAndCreateProcessMethodInPlace(unresolvedProgram, 
                                                 unresolvedProofProgram,
                                                 desiredMethod,
+                                                desiredMethodUnresolved,
                                                 proofModuleName,
                                                 inPlaceMutationList.ElementAt(i).Item1,
                                                 inPlaceMutationList.ElementAt(i).Item2,
@@ -924,6 +926,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
               PrintExprAndCreateProcessMethodInPlace(unresolvedProgram, 
                                                 unresolvedProofProgram,
                                                 desiredMethod,
+                                                desiredMethodUnresolved,
                                                 proofModuleName,
                                                 inPlaceMutationList.ElementAt(i).Item1,
                                                 inPlaceMutationList.ElementAt(i).Item2,
@@ -2029,7 +2032,7 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
   return text.Substring(0, pos) + replace + text.Substring(pos + search.Length);
 }
 
-    public void PrintExprAndCreateProcessMethodInPlace(Program program, Program proofProg,Method meth, string moduleName,ExpressionFinder.ExpressionDepth expr,Expression originalExpr,bool isEns,bool isReq,int cnt, bool includeProof,bool isWeaker, bool vacTest,Function mutationRootFn) {
+    public void PrintExprAndCreateProcessMethodInPlace(Program program, Program proofProg,Method meth, Method unresolvedMeth, string moduleName,ExpressionFinder.ExpressionDepth expr,Expression originalExpr,bool isEns,bool isReq,int cnt, bool includeProof,bool isWeaker, bool vacTest,Function mutationRootFn) {
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       Console.WriteLine("Mutation -> " + $"{cnt}" + ": " + $"{Printer.ExprToString(expr.expr)}");
       String reqOrEns = isReq ? "requires " :  "ensures ";
@@ -2055,6 +2058,29 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
         methodPred = GetIsBasePredMethodInPlace(meth,MutationsPaths[0], null, null,isReq);
         methodMutatedPred = GetIsMutatedPredMethodInPlace(meth,MutationsPaths[0], null, null,isReq,originalExpr,expr.expr);
       }
+      // unresolvedMeth.Body = originalExpr;
+        //       if(isReq){
+        //   foreach (AttributedExpression e in unresolvedMeth.Req)
+        //   {
+        //     Expression ee = e.E;
+        //     //update requires to match "Old" 
+        //     string reqExprStr = Printer.ExprToString(ee);
+        //     if(reqExprStr == Printer.ExprToString(originalExpr))
+        //     {
+        //       e.E = expr.expr;
+        //     }
+        //   }
+        // }else{
+        //   foreach (AttributedExpression e in unresolvedMeth.Ens)
+        //   {
+        //      Expression ee = e.E;
+        //      string ensExprStr = Printer.ExprToString(ee);
+        //     if(ensExprStr == Printer.ExprToString(originalExpr))
+        //     {
+        //       e.E = expr.expr;
+        //     }
+        //   }
+        // }
 
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
@@ -2069,6 +2095,7 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
         var pr = new Printer(wr, DafnyOptions.PrintModes.NoIncludes);
         pr.UniqueStringBeforeUnderscore = UnderscoreStr;
         //apply mutation
+
 
       var includesList = "";
       foreach (var q in program.DefaultModuleDef.Includes)

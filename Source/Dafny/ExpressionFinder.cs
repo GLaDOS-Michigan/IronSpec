@@ -454,8 +454,64 @@ namespace Microsoft.Dafny {
 
 public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberDecl decl, ExpressionDepth e)
     {
-      Console.Write(" expression = " + e.expr + "( " + Printer.ExprToString(e.expr) + ") \n");
       List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
+      if(e.expr == null)
+      {
+        return currentExperssions;
+      }
+      Function f = decl as Function;
+      Console.WriteLine(" expression = " + e.expr + "( " + Printer.ExprToString(e.expr) + ") \n");
+      //replacement mutations
+      if(e.expr is NameSegment)
+      {
+        var ens = e.expr as NameSegment;
+        var ensTypeStr = Printer.GetFullTypeString(f.EnclosingClass.EnclosingModuleDefinition, ens.Type, new HashSet<ModuleDefinition>(),true);
+
+        foreach (var form in f.Formals)
+        {
+          if(form.Name != ens.Name){
+            var formTypeStr = Printer.GetFullTypeString(f.EnclosingClass.EnclosingModuleDefinition, form.Type, new HashSet<ModuleDefinition>(),true);
+            if(ensTypeStr == formTypeStr){
+              var ns = new NameSegment(form.Tok, form.Name, null);
+              currentExperssions.Add(new ExpressionDepth(ns,1));
+            }
+          }
+        }
+      }
+      if(e.expr is SeqSelectExpr)
+      {
+        var sse = e.expr as SeqSelectExpr;
+        List<ExpressionDepth> sse_seq_mutations = mutateOneExpressionRevised(program, decl, new ExpressionDepth(sse.Seq != null ? sse.Seq : null,1));
+        List<ExpressionDepth> sse_e0_mutations = mutateOneExpressionRevised(program, decl, new ExpressionDepth(sse.E0 != null ? sse.E0 : null,1));
+        List<ExpressionDepth> sse_e1_mutations = mutateOneExpressionRevised(program, decl, new ExpressionDepth(sse.E1 != null ? sse.E1 : null,1));
+        foreach (var seqM in sse_seq_mutations)
+        {
+          var sseMutatedSeq = new SeqSelectExpr(sse.tok,sse.SelectOne,seqM.expr,sse.E0,sse.E1,sse.CloseParen);
+          currentExperssions.Add(new ExpressionDepth(sseMutatedSeq,1));
+        }
+        foreach (var e0M in sse_e0_mutations)
+        {
+          var sseMutatedE0 = new SeqSelectExpr(sse.tok,sse.SelectOne,sse.Seq,e0M.expr,sse.E1,sse.CloseParen);
+          currentExperssions.Add(new ExpressionDepth(sseMutatedE0,1));
+        }
+        foreach (var e1M in sse_e1_mutations)
+        {
+          var sseMutatedE1 = new SeqSelectExpr(sse.tok,sse.SelectOne,sse.Seq,sse.E0,e1M.expr,sse.CloseParen);
+          currentExperssions.Add(new ExpressionDepth(sseMutatedE1,1));
+        }
+      }
+      if(e.expr is ExprDotName)
+      {
+        var expDotN = e.expr as ExprDotName;
+        List<ExpressionDepth> NameMutationsLhs = mutateOneExpressionRevised(program, decl, new ExpressionDepth(expDotN.Lhs,1));
+        foreach (var nml in NameMutationsLhs)
+        {
+          var edn = new ExprDotName(expDotN.tok,nml.expr,expDotN.SuffixName,expDotN.OptTypeArguments);
+          currentExperssions.Add(new ExpressionDepth(edn,1));
+        } 
+      }
+
+
       if(e.expr is ITEExpr)
       {
         var itee = e.expr as ITEExpr;
@@ -481,7 +537,7 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
       }
       if(e.expr is ApplySuffix)
       {
-                           //negation of Forall
+      //negation of ApplySuffix
       currentExperssions.Add(new ExpressionDepth(Expression.CreateNot(e.expr.tok,e.expr),1));
       }
       if(e.expr is OldExpr)
