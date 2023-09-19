@@ -459,21 +459,42 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
       {
         return currentExperssions;
       }
-      Function f = decl as Function;
+    
+      // }else{
       Console.WriteLine(" expression = " + e.expr + "( " + Printer.ExprToString(e.expr) + ") \n");
       //replacement mutations
       if(e.expr is NameSegment)
       {
-        var ens = e.expr as NameSegment;
-        var ensTypeStr = Printer.GetFullTypeString(f.EnclosingClass.EnclosingModuleDefinition, ens.Type, new HashSet<ModuleDefinition>(),true);
-
-        foreach (var form in f.Formals)
+        var f = decl as Function;
+        if(f == null)
         {
-          if(form.Name != ens.Name){
-            var formTypeStr = Printer.GetFullTypeString(f.EnclosingClass.EnclosingModuleDefinition, form.Type, new HashSet<ModuleDefinition>(),true);
-            if(ensTypeStr == formTypeStr){
-              var ns = new NameSegment(form.Tok, form.Name, null);
-              currentExperssions.Add(new ExpressionDepth(ns,1));
+          Method fm = decl as Method;
+          var ens = e.expr as NameSegment;
+          var ensTypeStr = Printer.GetFullTypeString(fm.EnclosingClass.EnclosingModuleDefinition, ens.Type, new HashSet<ModuleDefinition>(),true);
+
+          foreach (var form in fm.Ins)
+          {
+            if(form.Name != ens.Name){
+              var formTypeStr = Printer.GetFullTypeString(fm.EnclosingClass.EnclosingModuleDefinition, form.Type, new HashSet<ModuleDefinition>(),true);
+              if(ensTypeStr == formTypeStr){
+                var ns = new NameSegment(form.Tok, form.Name, null);
+                currentExperssions.Add(new ExpressionDepth(ns,1));
+              }
+            }
+          }
+
+        }else{
+          var ens = e.expr as NameSegment;
+          var ensTypeStr = Printer.GetFullTypeString(f.EnclosingClass.EnclosingModuleDefinition, ens.Type, new HashSet<ModuleDefinition>(),true);
+
+          foreach (var form in f.Formals)
+          {
+            if(form.Name != ens.Name){
+              var formTypeStr = Printer.GetFullTypeString(f.EnclosingClass.EnclosingModuleDefinition, form.Type, new HashSet<ModuleDefinition>(),true);
+              if(ensTypeStr == formTypeStr){
+                var ns = new NameSegment(form.Tok, form.Name, null);
+                currentExperssions.Add(new ExpressionDepth(ns,1));
+              }
             }
           }
         }

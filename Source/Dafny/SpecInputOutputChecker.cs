@@ -726,6 +726,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
         affectedFiles = affectedFiles.Distinct().ToList();
         desiredMethod = GetMethod(program, lemmaName);
         Lemma desiredLemmm = GetLemma(proofProg, lemmaName);
+        bool isLemma = desiredLemmm != null;
       if (desiredLemmm == null && desiredMethod == null) {
         Console.WriteLine($"couldn't find function {desiredLemmm}. List of all lemmas:");
         PrintAllLemmas(proofProg, lemmaName);
@@ -791,26 +792,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
 
       DafnyOptions.O.HoleEvaluatorExpressionDepth = 10;
       // lets check 
-            expressionFinder = new ExpressionFinder(this);
-
-      Dictionary<String, Expression> reqExprs = new Dictionary<String, Expression>();
-      var expressions = expressionFinder.ListArguments(proofProg, desiredMethod);
-      Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDict = expressionFinder.GetRawExpressions(proofProg, desiredMethod, expressions, false);
-      var typeToExpressionDictTest = expressionFinder.GetTypeToExpressionDict(expressions);
-      
-      var ezTest = expressionFinder.ListArgumentsMethodReq(proofProg,desiredMethod);
-        Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDicTestt = expressionFinder.GetRawExpressions(proofProg, desiredMethod, ezTest, false);
-
-      var typeToExpressionDictTest2 = expressionFinder.GetTypeToExpressionDict(ezTest);
-      // var eliTest = expressionFinder.ListArgumentsCustom(proofProg, desiredMethod.Req[0].E);
-
-// Dictionary<string, HashSet<ExpressionDepth>> test = GetRawExpressions(proofProg, desiredMethod,
-//         IEnumerable<ExpressionDepth> expressions, bool addToAvailableExpressions)
-      foreach (Formal methodP in desiredMethodUnresolved.Ins)
-      {
-        Console.WriteLine("==> "+ methodP.DisplayName);
-        var formals = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(methodP),1));
-      }
+      expressionFinder = new ExpressionFinder(this);
       int totalMutationCount = 0;
       Dictionary<ExpressionFinder.ExpressionDepth,Expression> mutatedMap = new Dictionary<ExpressionFinder.ExpressionDepth, Expression>();
       
@@ -822,8 +804,22 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
         var e = desiredMethod.Ens[i];
         var ensList = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(e.E,1));
         Expression ee = desiredMethodUnresolved.Ens[i].E;
-        List<ExpressionFinder.ExpressionDepth> ensuresMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethodUnresolved,new ExpressionFinder.ExpressionDepth(e.E,1));
-        Console.Write(" pp = " + ee  + "\n");
+        List<ExpressionFinder.ExpressionDepth> ensuresMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethod,new ExpressionFinder.ExpressionDepth(e.E,1));
+        // Console.Write(" pp = " + ee  + "\n");
+        Hashtable duplicateMutationsEns = new Hashtable();
+        foreach (var ed in ensuresMutationList)
+        {
+          if(!duplicateMutationsEns.ContainsKey(Printer.ExprToString(ed.expr)))
+          {
+          // availableExpressionsTemp.Add(ed);
+          duplicateMutationsEns.Add(Printer.ExprToString(ed.expr),ed);
+          }else{
+            Console.WriteLine("Skipping (ensures) = " + Printer.ExprToString(ed.expr));
+          }
+        }
+        // expressionFinder.availableExpressions = availableExpressionsTemp;
+        ensuresMutationList = duplicateMutationsEns.Values.Cast<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>().ToList();
+        
         foreach (ExpressionFinder.ExpressionDepth ex in ensuresMutationList)
         {
           inPlaceMutationList.Add(new Tuple<ExpressionFinder.ExpressionDepth,Expression,bool> (ex,ee,false));
@@ -838,8 +834,21 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
         var r = desiredMethod.Req[i];
         var reqList = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(r.E,1));
         Expression re = desiredMethodUnresolved.Req[i].E;
-        List<ExpressionFinder.ExpressionDepth> reqsMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethodUnresolved,new ExpressionFinder.ExpressionDepth(r.E,1));
+        List<ExpressionFinder.ExpressionDepth> reqsMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethod,new ExpressionFinder.ExpressionDepth(r.E,1));
         Console.Write(" pp = " + re  + "\n");
+        Hashtable duplicateMutationsReq = new Hashtable();
+        foreach (var ed in reqsMutationList)
+        {
+          if(!duplicateMutationsReq.ContainsKey(Printer.ExprToString(ed.expr)))
+          {
+          // availableExpressionsTemp.Add(ed);
+          duplicateMutationsReq.Add(Printer.ExprToString(ed.expr),ed);
+          }else{
+            Console.WriteLine("Skipping (ensures) = " + Printer.ExprToString(ed.expr));
+          }
+        }
+        // expressionFinder.availableExpressions = availableExpressionsTemp;
+        reqsMutationList = duplicateMutationsReq.Values.Cast<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>().ToList();
 
         foreach (ExpressionFinder.ExpressionDepth ex in reqsMutationList)
         {
@@ -2114,34 +2123,45 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
           code += $"// {Printer.ExprToString(expr.expr)}\n" + includesList + Printer.ToStringWithoutNewline(wr) + "\n\n";
           
           //apply mutation string b/c these are readonly
-          var methIndex = code.IndexOf("method " + meth.Name);
-            if (methIndex < 0){
-              methIndex = code.IndexOf("} " + meth.Name); 
-              methIndex = code.LastIndexOf("method",methIndex);
+          var targetIndex = 0;
+          if(meth is Lemma)
+          {
+            targetIndex = code.IndexOf("lemma " + meth.Name);
+            if (targetIndex < 0){
+              targetIndex = code.IndexOf("} " + meth.Name); 
+              targetIndex = code.LastIndexOf("lemma",targetIndex);
             }
+            
+          }else{
+            targetIndex = code.IndexOf("method " + meth.Name);
+            if (targetIndex < 0){
+              targetIndex = code.IndexOf("} " + meth.Name); 
+              targetIndex = code.LastIndexOf("method",targetIndex);
+            }
+          }
           if(isReq)
           {
-           code = ReplaceFirst(code.IndexOf("requires " +Printer.ExprToString(originalExpr),methIndex),code,"requires " +Printer.ExprToString(originalExpr),"requires " +Printer.ExprToString(expr.expr));
+           code = ReplaceFirst(code.IndexOf("requires " +Printer.ExprToString(originalExpr),targetIndex),code,"requires " +Printer.ExprToString(originalExpr),"requires " +Printer.ExprToString(expr.expr));
           // code = code.Replace("requires " +Printer.ExprToString(originalExpr),"requires " +Printer.ExprToString(expr.expr));
           }else{
-            code = ReplaceFirst(code.IndexOf("ensures " +Printer.ExprToString(originalExpr),methIndex),code,"ensures " +Printer.ExprToString(originalExpr),"ensures " +Printer.ExprToString(expr.expr));
+            code = ReplaceFirst(code.IndexOf("ensures " +Printer.ExprToString(originalExpr),targetIndex),code,"ensures " +Printer.ExprToString(originalExpr),"ensures " +Printer.ExprToString(expr.expr));
 
             // code = code.Replace("ensures " +Printer.ExprToString(originalExpr),"ensures " +Printer.ExprToString(expr.expr));
           }
           if(isWeaker){
             
-            code = code.Insert(methIndex-1,istWeakerLemma+"\n" + methodPred + "\n" + methodMutatedPred + "\n");
+            code = code.Insert(targetIndex-1,istWeakerLemma+"\n" + methodPred + "\n" + methodMutatedPred + "\n");
           }
           if(vacTest) //just inline "ensures false" 
           {
             methodMutatedPred = GetIsMutatedPredMethodInPlace(meth,MutationsPaths[0], null, null,isReq,originalExpr,expr.expr);
             isVacTest = GetIsSimpleVacTest(meth,MutationsPaths[0], null, null,isReq);
-            // var methIndex = code.IndexOf("method " + meth.Name);
-            // if (methIndex < 0){
-            //   methIndex = code.IndexOf("} " + meth.Name); 
-            //   methIndex = code.LastIndexOf("method",methIndex);
+            // var targetIndex = code.IndexOf("method " + meth.Name);
+            // if (targetIndex < 0){
+            //   targetIndex = code.IndexOf("} " + meth.Name); 
+            //   targetIndex = code.LastIndexOf("method",targetIndex);
             // }
-            code = code.Insert(methIndex-1,isVacTest + "\n" + methodMutatedPred + "\n");
+            code = code.Insert(targetIndex-1,isVacTest + "\n" + methodMutatedPred + "\n");
           }
 //           // if((vacTest && includeProof)){
 //           //   int lemmaLoc = code.IndexOf("lemma " +lemma.Name);

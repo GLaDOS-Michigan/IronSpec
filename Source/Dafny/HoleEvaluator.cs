@@ -67,8 +67,7 @@ namespace Microsoft.Dafny {
     public static string lemmaForExprValidityString = "";
     private static int lemmaForExprValidityLineCount = 0;
 
-    // public static string lemmaForExprValidityString = "";
-    // private static int lemmaForExprValidityLineCount = 0;
+
     private void UpdateCombinationResult(int index) {
       var requestList = dafnyVerifier.requestsList[index];
       for (int i = 0; i < requestList.Count; i++) {
@@ -1316,19 +1315,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         var singleValidityLemma = GetValidityLemma(p, null, constraintExpr == null ? null : constraintExpr.expr, -1,id);
         id++;
       }
-      // Console.WriteLine(getVacuityLemma(baseLemma));
-            lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1,0);
-      lemmaForExprValidityLineCount = lemmaForExprValidityString.Count(f => (f == '\n'));
-      Console.WriteLine("VALIDITYLEMMA \n" + lemmaForExprValidityString + " \n --");
-      }
-      using (var wr1 = new System.IO.StringWriter()) {
-        var pr1 = new Printer(wr1);
-        pr1.PrintMethod(baseLemma, 0,false);
-        Console.WriteLine(wr1.ToString());
-        // res = wr1.ToString();
-      }
 
-      
       int initialCount = expressionFinder.availableExpressions.Count;
       ExpressionFinder expressionFindeTest = new ExpressionFinder(this);
       if(mutationsFromParams){
@@ -1365,24 +1352,21 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           }
         }
       }
-        // Console.WriteLine("Combo Count = " + comboCount);
-      }//116
-      //
+      }
       Console.WriteLine($"expressionFinder.availableExpressions.Count == {expressionFinder.availableExpressions.Count}");
-      // List<Microsoft.Dafny.ExpressionFinder.ExpressionDepth> availableExpressionsTemp = new List<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>();
-      Hashtable hashtable = new Hashtable();
+      Hashtable duplicateMutations = new Hashtable();
       foreach (var ed in expressionFinder.availableExpressions)
       {
-        if(!hashtable.ContainsKey(Printer.ExprToString(ed.expr)))
+        if(!duplicateMutations.ContainsKey(Printer.ExprToString(ed.expr)))
         {
           // availableExpressionsTemp.Add(ed);
-          hashtable.Add(Printer.ExprToString(ed.expr),ed);
+          duplicateMutations.Add(Printer.ExprToString(ed.expr),ed);
         }else{
           Console.WriteLine("Skipping = " + Printer.ExprToString(ed.expr));
         }
       }
       // expressionFinder.availableExpressions = availableExpressionsTemp;
-      expressionFinder.availableExpressions = hashtable.Values.Cast<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>().ToList();
+      expressionFinder.availableExpressions = duplicateMutations.Values.Cast<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>().ToList();
       int numFailiedAfter1stPass = 0;
       int remainingVal = expressionFinder.availableExpressions.Count;
       Console.WriteLine("--- Begin Is At Least As Weak Pass -- " + remainingVal);
