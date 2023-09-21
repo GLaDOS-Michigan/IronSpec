@@ -1316,6 +1316,10 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         id++;
       }
 
+      }
+
+
+      
       int initialCount = expressionFinder.availableExpressions.Count;
       ExpressionFinder expressionFindeTest = new ExpressionFinder(this);
       if(mutationsFromParams){

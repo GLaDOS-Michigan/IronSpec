@@ -455,7 +455,7 @@ namespace Microsoft.Dafny {
 public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberDecl decl, ExpressionDepth e)
     {
       List<ExpressionDepth> currentExperssions = new List<ExpressionDepth>();
-      if(e.expr == null)
+      if(e.expr == null || e.expr.Type == null)
       {
         return currentExperssions;
       }
@@ -520,6 +520,36 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
           var sseMutatedE1 = new SeqSelectExpr(sse.tok,sse.SelectOne,sse.Seq,sse.E0,e1M.expr,sse.CloseParen);
           currentExperssions.Add(new ExpressionDepth(sseMutatedE1,1));
         }
+      }
+      if(e.expr is NestedMatchExpr)
+      {
+        var nme = e.expr as NestedMatchExpr;
+        var me = nme.Resolved as MatchExpr;
+        for (int i = 0; i < me.Cases.Count; i++){
+          var subCase = me.Cases[i];
+          List<ExpressionDepth> CaseMutations = mutateOneExpressionRevised(program, decl, new ExpressionDepth(subCase.Body,1));
+          //    public NestedMatchExpr(IToken tok, Expression source, [Captured] List<NestedMatchCaseExpr> cases, bool usesOptionalBraces, Attributes attrs = null) : base(tok) {
+          List<NestedMatchCaseExpr> mutatedCases = new List<NestedMatchCaseExpr>();
+          for(int j = 0;j < me.Cases.Count; j++){
+            if(!(j == i))
+            {
+              mutatedCases.Add(nme.Cases[j]);
+            }
+          }
+          foreach(var caseMutant in CaseMutations)
+          {
+            List<NestedMatchCaseExpr> mutatedSubCases = new List<NestedMatchCaseExpr>(mutatedCases);
+            NestedMatchCaseExpr nmcExpr = new NestedMatchCaseExpr(nme.Cases[i].Tok,nme.Cases[i].Pat,caseMutant.expr,nme.Cases[i].Attributes);
+            mutatedSubCases.Add(nmcExpr);
+            NestedMatchExpr nmeMutated = new NestedMatchExpr(nme.tok,nme.Source,mutatedSubCases,nme.UsesOptionalBraces,nme.Attributes);
+            currentExperssions.Add(new ExpressionDepth(nmeMutated,1));
+          }
+        }
+
+      }
+      if(e.expr is NestedMatchCaseExpr)
+      {
+        // var nmce = e.expr as NestedMatchCaseExpr;
       }
       if(e.expr is ExprDotName)
       {
@@ -1648,6 +1678,174 @@ public static IEnumerable<ExpressionDepth> ListPredicateInvocations(
       foreach (var expr in TraverseFormal(program, new ExpressionDepth(e, 1))) {
           yield return expr;
         }
+    }
+    
+public IEnumerable<ExpressionDepth> TraverseFormalSimplified(Program program, ExpressionDepth exprDepth) {
+      Contract.Requires(exprDepth != null);
+      var maxExpressionDepth = DafnyOptions.O.HoleEvaluatorExpressionDepth;
+      if (exprDepth.depth > maxExpressionDepth)
+        yield break;
+      yield return exprDepth;
+      var expr = exprDepth.expr;
+      var t = expr.Type;
+      if (t is BoolType || t is CharType || t is IntType || t is BigOrdinalType ||
+          t is RealType || t is BitvectorType || t is CollectionType) {
+        if (t is BoolType) {
+          // var trueLiteralExpr = Expression.CreateBoolLiteral(expr.tok, true);
+          yield return new ExpressionDepth(expr, 1);
+          // NOTE: No need to add false literal since we also check for non-equality.
+        } else if (t is IntType) {
+          // var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
+          yield return new ExpressionDepth(expr, 1);
+          // var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
+          // yield return new ExpressionDepth(oneLiteralExpr, 1);
+          
+          // if (exprDepth.depth + 1 <= maxExpressionDepth) {
+          //   var plusOneLiteralExpr = Expression.CreateIncrement(expr, 1);
+          //   yield return new ExpressionDepth(plusOneLiteralExpr, exprDepth.depth + 1);
+          //   var minusOneLiteralExpr = Expression.CreateDecrement(expr, 1);
+          //   yield return new ExpressionDepth(minusOneLiteralExpr, exprDepth.depth + 1);
+          // }
+        } else if (t is CollectionType) {
+          // create cardinality
+          if (exprDepth.depth + 1 <= maxExpressionDepth) {
+            var cardinalityExpr = Expression.CreateCardinality(expr, program.BuiltIns);
+            yield return new ExpressionDepth(cardinalityExpr, exprDepth.depth + 1);
+          }
+          if (t is SeqType) {
+            var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
+            var zerothElement = new SeqSelectExpr(expr.tok, true, expr, zeroLiteralExpr, null, null);
+            var st = t as SeqType;
+            zerothElement.Type = st.Arg;
+            foreach (var e in TraverseFormalSimplified(program, new ExpressionDepth(zerothElement, exprDepth.depth + 1))) {
+              yield return e;
+            }
+            // create 0th element of the sequence
+          }
+        }
+        // Console.WriteLine("pre-defined variable type");
+        yield break;
+      }
+      var udt = (UserDefinedType)t;
+      var cl = udt.ResolvedClass;
+      if (cl is OpaqueTypeDecl) {
+        var otd = (OpaqueTypeDecl)cl;
+        // Console.WriteLine($"{variable.Name} is OpaqueTypeDecl");
+        // TODO traverse underlying definition as well.
+        throw new NotImplementedException();
+      } else if (cl is TypeParameter) {
+        var tp = (TypeParameter)cl;
+        // Console.WriteLine($"{variable.Name} is TypeParameter");
+        // TODO traverse underlying definition as well.
+        throw new NotImplementedException();
+      } else if (cl is InternalTypeSynonymDecl) {
+        var isyn = (InternalTypeSynonymDecl)cl;
+        // Console.WriteLine($"{variable.Name} is InternalTypeSynonymDecl");
+        // TODO traverse underlying definition as well.
+        throw new NotImplementedException();
+      } else if (cl is NewtypeDecl) {
+        var td = (NewtypeDecl)cl;
+        // Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.BaseType} {td.BaseType is IntType}");
+        // TODO possibly figure out other expressions from td.Constraint
+        if (td.BaseType is IntType) {
+          var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
+          zeroLiteralExpr.Type = t;
+          // TODO Add the literal for maximum value of this newtype decl.
+          yield return new ExpressionDepth(zeroLiteralExpr, 1);
+          var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
+          oneLiteralExpr.Type = t;
+          yield return new ExpressionDepth(oneLiteralExpr, 1);
+
+          if (exprDepth.depth + 1 <= maxExpressionDepth) {
+            var plusOneLiteralExpr = Expression.CreateIncrement(expr, 1);
+            plusOneLiteralExpr.Type = t;
+            yield return new ExpressionDepth(plusOneLiteralExpr, exprDepth.depth + 1);
+            var minusOneLiteralExpr = Expression.CreateDecrement(expr, 1);
+            minusOneLiteralExpr.Type = t;
+            yield return new ExpressionDepth(minusOneLiteralExpr, exprDepth.depth + 1);
+          }
+        } else {
+          throw new NotImplementedException();
+        }
+        // foreach (var v in TraverseType(program, td.BaseType)) {
+        //   // var ngv = (Formal)variable;
+        //   // var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
+        //   Console.WriteLine($"!!!! {v.val}");
+        //   var e = new ExprDotName(v, expr, v.val, null);
+        //   e.Type = expr.Type;
+        //   // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
+        //   yield return e;
+        // }
+      } else if (cl is SubsetTypeDecl) {
+        // Console.WriteLine($"{Printer.ExprToString(expr)}");
+        var td = (SubsetTypeDecl)cl;
+        // Console.WriteLine($"{Printer.ExprToString(td.Constraint)} {td.Var.Name} {td.Rhs}");
+        if (td.Rhs is IntType) {
+          var zeroLiteralExpr = Expression.CreateIntLiteral(expr.tok, 0);
+          zeroLiteralExpr.Type = t;
+          yield return new ExpressionDepth(zeroLiteralExpr, 1);
+          var oneLiteralExpr = Expression.CreateIntLiteral(expr.tok, 1);
+          oneLiteralExpr.Type = t;
+          yield return new ExpressionDepth(oneLiteralExpr, 1);
+          if (exprDepth.depth + 1 <= maxExpressionDepth) {
+            var plusOneLiteralExpr = Expression.CreateIncrement(expr, 1);
+            plusOneLiteralExpr.Type = t;
+            yield return new ExpressionDepth(plusOneLiteralExpr, exprDepth.depth + 1);
+            var minusOneLiteralExpr = Expression.CreateDecrement(expr, 1);
+            minusOneLiteralExpr.Type = t;
+            yield return new ExpressionDepth(minusOneLiteralExpr, exprDepth.depth + 1);
+          }
+        }
+        // Console.WriteLine($"{variable.Name} is SubsetTypeDecl");
+      } else if (cl is ClassDecl) {
+        // Console.WriteLine($"{variable.Name} is ClassDecl");
+        // TODO traverse underlying definition as well.
+        throw new NotImplementedException();
+      } else if (cl is DatatypeDecl) {
+        if (exprDepth.depth + 1 <= maxExpressionDepth) {
+          var dt = (DatatypeDecl)cl;
+          var subst = Resolver.TypeSubstitutionMap(dt.TypeArgs, udt.TypeArgs);
+          // Console.WriteLine($"{variable.Name} is DatatypeDecl");
+          foreach (var ctor in dt.Ctors) {
+            if (dt.Ctors.Count > 1) {
+              var exprDot = new ExprDotName(ctor.tok, expr, ctor.tok.val + "?", null);
+              exprDot.Type = Type.Bool;
+              yield return new ExpressionDepth(exprDot, exprDepth.depth + 1);
+            }
+            foreach (var formal in ctor.Formals) {
+              // Console.WriteLine($"type={formal.Type} => {Resolver.SubstType(formal.Type, subst)}");
+              // var convertedFormal = new Formal(formal.tok, formal.Name, 
+              //     Resolver.SubstType(formal.Type, subst), formal.InParam, formal.IsGhost,
+              //     formal.DefaultValue, formal.IsOld, formal.IsNameOnly, formal.NameForCompilation);
+              // var identExpr = Expression.CreateIdentExpr(convertedFormal);
+              var exprDot = new ExprDotName(formal.tok, expr, formal.tok.val, null);
+              exprDot.Type = Resolver.SubstType(formal.Type, subst);
+              foreach (var v in TraverseFormalSimplified(program, new ExpressionDepth(exprDot, exprDepth.depth + 1))) {
+                // Console.WriteLine($"aaa {v.tok.val}");
+                // // var ngv = (Formal)variable;
+                // // var dotVar = new Formal(ngv.tok, ngv.Name + "." + v.Name, v.Type, true, true, null);
+                // // Console.WriteLine($"Constructing dot var:{dotVar.Name}");
+                // var e = new ExprDotName(v.tok, expr, v.tok.val, null);
+                // e.Type = v.Type;
+                yield return v;
+              }
+              // Console.WriteLine($"aaaa {formal.Name}");
+            }
+          }
+        }
+      }
+      // var members = expr.Type.NormalizeExpand().AsTopLevelTypeWithMembers;
+      // foreach(var mem in members.Members)
+      // {
+      //   Console.WriteLine(mem);
+      // }
+      // if (expr.SubExpressions != null)
+      // {
+      // foreach (var subexpr in expr.SubExpressions)
+      // {
+      //   TraverseFormalSimplified(subexpr);
+      // }
+      // }
     }
 
     public IEnumerable<ExpressionDepth> TraverseFormal(Program program, ExpressionDepth exprDepth) {

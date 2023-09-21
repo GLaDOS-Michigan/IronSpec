@@ -503,6 +503,11 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       Function mutationRootFunc = GetFunction(program, DafnyOptions.O.MutationRootName);
       CurrentPath.Add(new Tuple<Function, FunctionCallExpr, Expression>(baseFunc, null, null));
       GetAllPaths(baseFunc, func);
+      if(mutationRootFunc == null)
+      {
+         Console.WriteLine("mutationRootFunc is null");
+        return false;
+      }
       MCG = GetCallGraph(mutationRootFunc);
       CurrentPathMutations.Add(new Tuple<Function, FunctionCallExpr, Expression>(mutationRootFunc, null, null));
       GetAllMutationsPaths(mutationRootFunc,func);
@@ -552,24 +557,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       }
 
         includeParser = new IncludeParser(proofProg);
-        // var filenameProof = "";
-        // if(desiredLemmm.BodyStartTok.Filename == null)
-        // {
-        //   filenameProof = includeParser.Normalized(proofProg.FullName);
-        // }else{
-        //   filenameProof = includeParser.Normalized(desiredLemmm.BodyStartTok.Filename);
-        // }
-        // foreach (var file in includeParser.GetListOfAffectedFilesBy(filenameProof)) {
-        //   Console.WriteLine("file = " + filenameProof);
-        //   affectedFiles.Add(file);
-        // }
-
-        // foreach (var file in includeParser.GetListOfAffectedFiles(filenameProof)) {
-        //   Console.WriteLine("file = " + filenameProof);
-        //   affectedFiles.Add(file);
-        // }
-
-        // dafnyVerifier.InitializeBaseFoldersInRemoteServers(proofProg, includeParser.commonPrefix);
 
       }else{
         // dafnyVerifier.InitializeBaseFoldersInRemoteServers(program, includeParser.commonPrefix);
@@ -592,15 +579,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           }
         }
         Contract.Assert(desiredFunctionUnresolved != null);
-        
-        // Console.WriteLine("AFTER");
-        topLevelDeclCopy = new Function(
-          desiredFunctionUnresolved.tok, desiredFunctionUnresolved.Name, desiredFunctionUnresolved.HasStaticKeyword,
-          desiredFunctionUnresolved.IsGhost, desiredFunctionUnresolved.TypeArgs, desiredFunctionUnresolved.Formals,
-          desiredFunctionUnresolved.Result, desiredFunctionUnresolved.ResultType, desiredFunctionUnresolved.Req,
-          desiredFunctionUnresolved.Reads, desiredFunctionUnresolved.Ens, desiredFunctionUnresolved.Decreases,
-          desiredFunctionUnresolved.Body, desiredFunctionUnresolved.ByMethodTok, desiredFunctionUnresolved.ByMethodBody,
-          desiredFunctionUnresolved.Attributes, desiredFunctionUnresolved.SignatureEllipsis);
+      
       } else {
         Console.WriteLine($"{funcName} was not found!");
         return false;
@@ -608,50 +587,181 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
 
       DafnyOptions.O.HoleEvaluatorExpressionDepth = 10;
       // lets check 
-            expressionFinder = new ExpressionFinder(this);
-
-      Dictionary<String, Expression> reqExprs = new Dictionary<String, Expression>();
-      var expressions = expressionFinder.ListArguments(proofProg, desiredMethod);
-      Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDict = expressionFinder.GetRawExpressions(proofProg, desiredMethod, expressions, false);
-      var typeToExpressionDictTest = expressionFinder.GetTypeToExpressionDict(expressions);
-      
-      var ezTest = expressionFinder.ListArgumentsMethodReq(proofProg,desiredMethod);
-        Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDicTestt = expressionFinder.GetRawExpressions(proofProg, desiredMethod, ezTest, false);
-
-      var typeToExpressionDictTest2 = expressionFinder.GetTypeToExpressionDict(ezTest);
-      // var eliTest = expressionFinder.ListArgumentsCustom(proofProg, desiredMethod.Req[0].E);
-
-// Dictionary<string, HashSet<ExpressionDepth>> test = GetRawExpressions(proofProg, desiredMethod,
-//         IEnumerable<ExpressionDepth> expressions, bool addToAvailableExpressions)
-      foreach (Formal methodP in desiredMethodUnresolved.Ins)
+      bool simpleCheck = true;
+      expressionFinder = new ExpressionFinder(this);
+      //simple check
+      if(desiredMethod is Lemma) //TODO
       {
-        Console.WriteLine("==> "+ methodP.DisplayName);
-        var formals = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(methodP),1));
+
+      }else{
+            Console.WriteLine("\n---Start Simple Check Ens---\n");
+
+        foreach(var inputF in desiredMethod.Ins)
+        {
+          // var test = expressionFinder.TraverseFormalSimplified(proofProg,new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(inputF),1)).ToList();
+          simpleCheck &= simpleEnsSanityCheck(desiredMethod,inputF,false);
+        }
+        foreach(var outF in desiredMethod.Outs)
+        {
+          simpleCheck &= simpleEnsSanityCheck(desiredMethod,outF,true);
+        } 
+
       }
-      // foreach (AttributedExpression e in desiredMethod.Ens)
-      // {
-      //   var ensList = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(e.E,1));
-      //   Expression ee = e.E;
-      //   List<ExpressionFinder.ExpressionDepth> ensuresMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethodUnresolved,new ExpressionFinder.ExpressionDepth(e.E,1));
-      //   Console.Write(" pp = " + ee  + "\n");
-      //   foreach (ExpressionFinder.ExpressionDepth ex in ensuresMutationList)
-      //   {
-      //     PrintExprAndCreateProcessMethodInPlace(unresolvedProgram, unresolvedProofProgram,desiredMethod,proofModuleName,ex,ee,true,false,0,true,false,false,desiredFunctionMutationRoot);
-      //   }
-      //   // Console.Write(" pp = " + e + "( " + Printer.ExprToString(e) + ") \n");
-      // }
-      
-      // foreach (AttributedExpression e in desiredMethod.Req)
-      // {
-      //   // var ensList = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(e.E,1));
-      //   Expression ee = e.E;
-      //   List<ExpressionFinder.ExpressionDepth> ReqMutationList =  expressionFinder.mutateOneExpressionRevised(proofProg,desiredMethodUnresolved,new ExpressionFinder.ExpressionDepth(e.E,1));
-      //   Console.Write(" pp = " + ee  + "\n");
-      //   // Console.Write(" pp = " + e + "( " + Printer.ExprToString(e) + ") \n");
-      // }
+    Console.WriteLine("\nSimpleCheck Ens PASS = " + simpleCheck);
+// end simple check
+// simple check req 
+  Console.WriteLine("\n---Start Simple Check Req---\n");
+  simpleCheck = true;
+  foreach(var inputF in desiredMethod.Ins)
+    {
+      // var test = expressionFinder.TraverseFormalSimplified(proofProg,new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(inputF),1)).ToList();
+      simpleCheck &= simpleReqSanityCheck(desiredMethod,inputF,false);
+    }
+  foreach(var outF in desiredMethod.Outs)
+    {
+      simpleCheck &= simpleReqSanityCheck(desiredMethod,outF,true);
+    } 
+     Console.WriteLine("SimpleCheck Req PASS = " + simpleCheck);
+        
+// start deeper check
+    Console.WriteLine("\n--- Start Full Check For Ensures ---\n");
+         var deepCheck = true;
+         var noInputIsNeededInOutput = false;
+  Console.WriteLine("Sanity Checking Parameters:\n");
+
+    foreach(var inputF in desiredMethod.Ins)
+        {
+          var test = expressionFinder.TraverseFormalSimplified(proofProg,new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(inputF),1)).ToList();
+          // de-duplicate/turn traverseFormalToFormal
+          Dictionary<string,Formal> tfs = new Dictionary<string,Formal>();
+          foreach (var extendedF in test)
+          {
+            var name = Printer.ExprToString(extendedF.expr);
+            Formal f = new Formal(extendedF.expr.tok,name,extendedF.expr.Type,true,true,extendedF.expr);
+            if(!(tfs.ContainsKey(name)))
+            {
+              tfs.Add(name,f);
+            }
+            
+          }
+          // gathered nested formals
+          foreach (var nestedF in tfs.Values)
+          {
+            var sanCheck = simpleEnsSanityCheck(desiredMethod,nestedF,false);
+             deepCheck &= sanCheck;
+             noInputIsNeededInOutput |= sanCheck;
+          }
+
+        }
+        if(!noInputIsNeededInOutput){
+            Console.WriteLine("\n-- FLAG(MED) -- : NONE of Ensures depend on Any input parameters \n");
+          }
+        Console.WriteLine("All parameters Pass Sanity Check? = " + deepCheck + "\n");
+        Console.WriteLine("Sanity Checking OutPuts:\n");
+        foreach(var outF in desiredMethod.Outs)
+        {
+          deepCheck = true;
+          bool notMentionedAtAll = false; //RED FLAG
+          bool onlyPartiallyMentioned = true; // YELLOW FLAG
+
+          var test = expressionFinder.TraverseFormalSimplified(proofProg,new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(outF),1)).ToList();
+          // de-duplicate/turn traverseFormalToFormal
+          Dictionary<string,Formal> tfs = new Dictionary<string,Formal>();
+          foreach (var extendedF in test)
+          {
+            var name = Printer.ExprToString(extendedF.expr);
+            Formal f = new Formal(extendedF.expr.tok,name,extendedF.expr.Type,true,true,extendedF.expr);
+            if(!(tfs.ContainsKey(name)))
+            {
+              tfs.Add(name,f);
+            }
+            
+          }
+          foreach (var nestedF in tfs.Values)
+          {
+             var sanCheck = simpleEnsSanityCheck(desiredMethod,nestedF,true);
+             deepCheck &= sanCheck;
+             notMentionedAtAll |= sanCheck;
+          }
+          onlyPartiallyMentioned = deepCheck;
+          if(!notMentionedAtAll){
+            Console.WriteLine("\n-- FLAG(HIGH) -- : NONE of output ("+ outF.Name + ") are constrained by the post conditions");
+          }
+          else if(!onlyPartiallyMentioned){
+            Console.WriteLine("\n-- FLAG(Medium) -- : Only some parts of output ("+ outF.Name + ") are constrained by the post conditions");
+          }
+          
+
+        }
+      Console.WriteLine("All Output Pass Sanity Check? = " + deepCheck);
+
+ Console.WriteLine("\n------DONE------\n");
       return true;
     }
 
+public bool simpleEnsSanityCheck(Method desiredMethod, Formal inputF,bool ret)
+{
+          var classStr = ret ? "(output)" : "(parameter)";
+          Console.WriteLine("\tSanity check for" + classStr + " :: "+ inputF.Name);
+          var fullinputF = Printer.GetFullTypeString(desiredMethod.EnclosingClass.EnclosingModuleDefinition, inputF.Type, new HashSet<ModuleDefinition>(),true);
+          foreach (AttributedExpression e in desiredMethod.Ens)
+          {
+            Expression ee = e.E;
+            var ensFormals = GetFormalsFromExpr(desiredMethod,ee);
+            foreach(var f in ensFormals)
+            {
+              var fullF = Printer.GetFullTypeString(desiredMethod.EnclosingClass.EnclosingModuleDefinition, f.Value.Type, new HashSet<ModuleDefinition>(),true);
+              if(inputF.Name == f.Key && fullinputF == fullF)
+              {
+                return true;
+              }
+            }
+          }
+          Console.WriteLine("\t\tSanity Check Failed for: " + inputF.Name);
+          return false;    
+}
+
+public bool simpleReqSanityCheck(Method desiredMethod, Formal inputF,bool ret)
+{
+          var classStr = ret ? "(output)" : "(parameter)";
+          Console.WriteLine("Sanity check " + classStr + " for :: "+ inputF.Name);
+          var fullinputF = Printer.GetFullTypeString(desiredMethod.EnclosingClass.EnclosingModuleDefinition, inputF.Type, new HashSet<ModuleDefinition>(),true);
+          foreach (AttributedExpression e in desiredMethod.Req)
+          {
+            Expression ee = e.E;
+            var ensFormals = GetFormalsFromExpr(desiredMethod,ee);
+            foreach(var f in ensFormals)
+            {
+              var fullF = Printer.GetFullTypeString(desiredMethod.EnclosingClass.EnclosingModuleDefinition, f.Value.Type, new HashSet<ModuleDefinition>(),true);
+              if(inputF.Name == f.Key && fullinputF == fullF)
+              {
+                return true;
+              }
+            }
+          }
+          Console.WriteLine("\tSanity Check Failed for: " + inputF.Name);
+          return false;    
+}
+
+
+//       Dictionary<String, Expression> reqExprs = new Dictionary<String, Expression>();
+//       var expressions = expressionFinder.ListArguments(proofProg, desiredMethod);
+//       Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDict = expressionFinder.GetRawExpressions(proofProg, desiredMethod, expressions, false);
+//       var typeToExpressionDictTest = expressionFinder.GetTypeToExpressionDict(expressions);
+      
+//       var ezTest = expressionFinder.ListArgumentsMethodReq(proofProg,desiredMethod);
+//         Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDicTestt = expressionFinder.GetRawExpressions(proofProg, desiredMethod, ezTest, false);
+
+//       var typeToExpressionDictTest2 = expressionFinder.GetTypeToExpressionDict(ezTest);
+//       // var eliTest = expressionFinder.ListArgumentsCustom(proofProg, desiredMethod.Req[0].E);
+
+// // Dictionary<string, HashSet<ExpressionDepth>> test = GetRawExpressions(proofProg, desiredMethod,
+// //         IEnumerable<ExpressionDepth> expressions, bool addToAvailableExpressions)
+//       foreach (Formal methodP in desiredMethodUnresolved.Ins)
+//       {
+//         Console.WriteLine("==> "+ methodP.DisplayName);
+//         var formals = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(Expression.CreateIdentExpr(methodP),1));
+//       }
 
 public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolvedProgram, string funcName, string lemmaName, string proofModuleName, string baseFuncName, int depth, bool mutationsFromParams,Program proofProg, Program unresolvedProofProgram) {
       if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
@@ -737,21 +847,6 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
 
         includeParser = new IncludeParser(proofProg);
         // var filenameProof = "";
-        // if(desiredLemmm.BodyStartTok.Filename == null)
-        // {
-        //   filenameProof = includeParser.Normalized(proofProg.FullName);
-        // }else{
-        //   filenameProof = includeParser.Normalized(desiredLemmm.BodyStartTok.Filename);
-        // }
-        // foreach (var file in includeParser.GetListOfAffectedFilesBy(filenameProof)) {
-        //   Console.WriteLine("file = " + filenameProof);
-        //   affectedFiles.Add(file);
-        // }
-
-        // foreach (var file in includeParser.GetListOfAffectedFiles(filenameProof)) {
-        //   Console.WriteLine("file = " + filenameProof);
-        //   affectedFiles.Add(file);
-        // }
 
         dafnyVerifier.InitializeBaseFoldersInRemoteServers(proofProg, includeParser.commonPrefix);
 
@@ -1005,11 +1100,6 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
           case Result.Unknown: throw new NotSupportedException();
         }
       }
-      // Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
-      //   "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "NoMatchingTrigger", "Total");
-      // Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
-      //   invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount,
-      //   noMatchingTriggerCount, expressionFinder.availableExpressions.Count);
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
         "InvalidExpr", "IncorrectProof", "ProofPasses", "ReqPasses","vacousPasses","Total");
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25}  {5, -15}",
@@ -1765,6 +1855,15 @@ public static string GetIsMutatedPredMethodInPlace(Method method,List<Tuple<Func
         if(!fMap.ContainsKey(ns.Name))
         {
           fMap.Add(ns.Name,f);
+        }
+      }
+      else if(e is ExprDotName){
+        ExprDotName de = e as ExprDotName;
+        var deName = Printer.ExprToString(de);
+        Formal f = new Formal(de.tok,deName,de.Type,true,true,e);
+        if(!fMap.ContainsKey(deName))
+        {
+          fMap.Add(deName,f);
         }
       }else{
         var subE = e.SubExpressions;
