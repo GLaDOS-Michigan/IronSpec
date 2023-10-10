@@ -617,22 +617,45 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
         Console.WriteLine( Printer.ExprToString(le.Body));
         List<ExpressionDepth> Rhs = mutateOneExpressionRevised(program, decl, new ExpressionDepth(le.RHSs[0],1));
         List<ExpressionDepth> bdy = mutateOneExpressionRevised(program, decl, new ExpressionDepth(le.Body,1));
+        // foreach (var rs in Rhs)
+        // {
+        //   List<Expression> r = new List<Expression>();
+        //   r.Add(rs.expr);
+        //   foreach (var b in bdy)
+        //   {
+        //     var nleExpr = new LetExpr(e.expr.tok,le.LHSs,r,b.expr,true);
+        //     currentExperssions.Add(new ExpressionDepth(nleExpr,1));
+        //   }
+        // }
+        // Console.WriteLine( Printer.ExprToString(le.Body));
+                // foreach (var rs in Rhs)
         foreach (var rs in Rhs)
         {
           List<Expression> r = new List<Expression>();
           r.Add(rs.expr);
-          foreach (var b in bdy)
-          {
-            var nleExpr = new LetExpr(e.expr.tok,le.LHSs,r,b.expr,true);
-            currentExperssions.Add(new ExpressionDepth(nleExpr,1));
-          }
+          // foreach (var b in bdy)
+          // {
+            var RhsLeExpr = new LetExpr(e.expr.tok,le.LHSs,r,le.Body,true);
+            currentExperssions.Add(new ExpressionDepth(RhsLeExpr,1));
+          // }
         }
-        Console.WriteLine( Printer.ExprToString(le.Body));
+        foreach(var b in bdy)
+        {
+          var nleExpr = new LetExpr(e.expr.tok,le.LHSs,le.RHSs,b.expr,true);
+          currentExperssions.Add(new ExpressionDepth(nleExpr,1));
+        }
       }
       if (e.expr is ParensExpression)
       {
         var pE = e.expr as ParensExpression;
-        e.expr = pE.E as BinaryExpr;
+        // e.expr = pE.E as BinaryExpr;
+        List<ExpressionDepth> parensE = mutateOneExpressionRevised(program, decl, new ExpressionDepth(pE.E,1));
+        foreach (var pee in parensE)
+        {
+          ParensExpression pEMutated = new ParensExpression(e.expr.tok,pee.expr);
+          currentExperssions.Add(new ExpressionDepth(pEMutated,1));
+        }
+        
       }
       if(e.expr is BinaryExpr)
       {
@@ -1097,6 +1120,16 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
       //   Console.WriteLine("initial= " + Printer.ExprToString(e.expr));
 
       // }
+      // test
+        currentExperssions = mutateOneExpressionRevised(program,decl,new ExpressionDepth(expression,1));
+      //   Console.WriteLine("COUNT = "+currentExperssionsTEST.Count);
+      //  foreach (var eli in currentExperssionsTEST){
+      //   Console.WriteLine("TEST : = " + Printer.ExprToString(eli.expr));
+      //  }
+//end test
+
+// 
+/*
             List<Expression> conjuncts = Expression.Conjuncts(expression).ToList();
         if(conjuncts.Count == 1)
         {
@@ -1176,6 +1209,7 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
         
         }
         }
+        */
     if(DafnyOptions.O.AllMutations){
       IEnumerable<IEnumerable<ExpressionDepth>> collections = CartesianProductMutations(combinations);
       List<Expression> mutatedLogicalE = new List<Expression>();
@@ -1215,6 +1249,7 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
 
   // var allTogether = Expression.CreateAnd(remainder, e.expr);
 }
+
         currentExperssions.Add(new ExpressionDepth(trueExpr,1));
         currentExperssions.Add(new ExpressionDepth(falseExpr,1));
         return currentExperssions;
@@ -1765,7 +1800,8 @@ public IEnumerable<ExpressionDepth> TraverseFormalSimplified(Program program, Ex
             yield return new ExpressionDepth(minusOneLiteralExpr, exprDepth.depth + 1);
           }
         } else {
-          throw new NotImplementedException();
+          yield return exprDepth;
+          // throw new NotImplementedException();
         }
         // foreach (var v in TraverseType(program, td.BaseType)) {
         //   // var ngv = (Formal)variable;

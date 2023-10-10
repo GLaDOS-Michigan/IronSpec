@@ -653,7 +653,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           }
 
         }
-        if(!noInputIsNeededInOutput){
+        if(!noInputIsNeededInOutput && desiredMethod.Ins.Count > 0){
             Console.WriteLine("\n-- FLAG(MED) -- : NONE of Ensures depend on Any input parameters \n");
           }
         Console.WriteLine("All parameters Pass Sanity Check? = " + deepCheck + "\n");

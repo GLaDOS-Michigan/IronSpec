@@ -58,7 +58,13 @@ static public string GetFullTypeString(ModuleDefinition moduleDef, Type type, Ha
 if (type is UserDefinedType) {
         var typeStr = type.ToString();
         if (type.IsDatatype) {
-          typeStr = type.AsDatatype.ToString();
+          var typeStrAsDataType = type.AsDatatype.ToString();
+          if(typeStrAsDataType == typeStr)
+          {
+            // Console.WriteLine("f = "  + typeStr);
+              typeStr = type.AsDatatype.ToString();
+          }
+
         }
         foreach (var decl in ModuleDefinition.AllTypesWithMembers(moduleDef.TopLevelDecls)) {
           if (decl.ToString() == typeStr) {
@@ -1072,9 +1078,10 @@ if (type is UserDefinedType) {
         PrintFrameSpecLine("modifies", method.Mod.Expressions, ind, method.Mod.HasAttributes() ? method.Mod.Attributes : null);
       }
       PrintSpec("ensures", method.Ens, ind);
-      if (UniqueStringBeforeUnderscore == "") {
-        PrintDecreasesSpec(method.Decreases, ind);
-      }
+      if(method.Decreases.Expressions.Count > 0){
+      // if (UniqueStringBeforeUnderscore == "") {
+        PrintDecreasesSpec(method.Decreases, ind);      
+        }
       wr.WriteLine();
 
       if (method.Body != null && !printSignatureOnly) {

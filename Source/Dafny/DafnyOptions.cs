@@ -198,6 +198,7 @@ namespace Microsoft.Dafny {
     public bool IsRequires = false; // only used in predicate mutations
     public bool AllMutations = false;
     public bool LocalPredicateMutation = false;
+    public bool IsStateMachine = false;
     public string HoleEvaluatorBaseFunctionName = null;
     public int HoleEvaluatorDepth = 1;
     public int HoleEvaluatorExpressionDepth = 1;
@@ -695,6 +696,9 @@ namespace Microsoft.Dafny {
           if (ps.ConfirmArgumentCount(1)) {
             ProofLocation = args[ps.i];
           }
+          return true;
+        case "IsStateMachine":
+          IsStateMachine = true;
           return true;
         case "LocalPredicateMutation":
           LocalPredicateMutation = true;
