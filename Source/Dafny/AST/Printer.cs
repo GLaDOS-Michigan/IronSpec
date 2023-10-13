@@ -3166,7 +3166,11 @@ if (type is UserDefinedType) {
             var mse = (e.Lhs.Resolved as MemberSelectExpr);
             if (mse != null) {
               var f = mse.Member as Function;
-              wr.Write(f.FullDafnyName);
+              if(ModuleForTypes != null && f.FullDafnyName.Contains(ModuleForTypes.Name+".")){
+                wr.Write(f.Name);
+              }else{
+                wr.Write(f.FullDafnyName);
+              }
             } else {
               PrintExpr(e.Lhs, opBindingStrength, false, false, !parensNeeded && isFollowedBySemicolon, -1, keyword);
             }

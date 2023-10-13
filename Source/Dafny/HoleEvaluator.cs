@@ -619,50 +619,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
     return indexes.ToArray();
 }
 
-   public static string GetBaseLemmaListMutationList(Program program,Function fn, ModuleDefinition currentModuleDef,List<Tuple<Function, FunctionCallExpr, Expression>> path) {
-      string res = "";
-      // add all predicates in path
-      foreach (var nwPair in path)
-      {
-          using (var wr = new System.IO.StringWriter()) {
-          var pr = new Printer(wr);
-          pr.ModuleForTypes = currentModuleDef;
-          pr.PrintFunction(nwPair.Item1, 0,false);
-          res += wr.ToString();
-        }
-      res += "\n\n";
-      }
-    // annotate with "BASE_"
-    foreach (var nwPair in path)
-    {
-      var indeciesNormal = AllIndexesOf(res,nwPair.Item1.Name+"(");
-      var indeciesGeneric = AllIndexesOf(res,nwPair.Item1.Name+"<");
-      List<int> indeciesTotal = new List<int>();
-      indeciesTotal.AddRange(indeciesNormal);
-      indeciesTotal.AddRange(indeciesGeneric);
-      // if(indecies.Length == 0){
-      //   indecies = AllIndexesOf(res,nwPair.Item1.Name+"<");
-      // }
-      foreach (var index in indeciesTotal.ToArray().Reverse())
-      {
-        res = res.Insert(index, "BASE_");
-      }
-    }
-    // add "mutated" intermediate predicates
-    // for (int i = 0; i < path.Count - 1; i++)
-    // {
-    //   var nwPair = path[i];
-    //   using (var wr = new System.IO.StringWriter()) {
-    //       var pr = new Printer(wr);
-    //       pr.ModuleForTypes = currentModuleDef;
-    //       pr.PrintFunction(nwPair.Item1, 0,false);
-    //       res += wr.ToString();
-    //     }
-    //   res += "\n\n";
-    // }
 
-      return res;
-    }
 
    public static string GetLocalMutationList(Program program,Function fn, ModuleDefinition currentModuleDef,List<Tuple<Function, FunctionCallExpr, Expression>> path) {
       string res = "";
@@ -831,67 +788,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       return res;
     }
 
-    public static string GetIsWeakerMutationsRoot(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
-      string res = "lemma isAtLeastAsWeak";
-      //  foreach (var nwPair in path) {
-      //   res += "_" + nwPair.Item1.Name;
-      // }
-       res += "_" + path[0].Item1.Name;
-      foreach(var t in fn.TypeArgs)
-      {
-        res += "<"+t+"(0,!new)>";
-        // Console.WriteLine("a = " + t);
-      }
-      res += "(";
-      var sep = "";
-      var p = "";
-      Tuple<string, string> x = new Tuple<string, string>(null, null);
-
-      // foreach (var nwPair in path) {
-      //   res += sep + " ";
-      //   sep = "";
-      //   x = GetFunctionParamList(nwPair.Item1);
-      //   res += x.Item2;
-      //   p += "" + x.Item1; 
-      //   sep = ", ";
-      // }
-        res += sep + " ";
-        sep = "";
-        x = GetFunctionParamListSpec(path[0].Item1);
-        
-        res += x.Item2;
-        p += "" + x.Item1; 
-        sep = ", ";
-      res += ")\n";
-      // if(p != ""){
-      //   res += "requires " + fn.Name+"_BASE("+p+")\n";
-      // }
-      foreach (var req in path[0].Item1.Req) {
-        // res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
-        
-        if(isQuantifier){
-          res += "  requires forall " + x.Item2 + " :: "+ GetNonPrefixedString(req.E, currentModuleDef) + "\n";
-        }else{
-          res += "  requires " + GetNonPrefixedString(req.E, currentModuleDef) + "\n";
-        }
-      }
-      if(p != ""){
-        if(DafnyOptions.O.IsRequires)
-        {
-          res += "requires " + fn.Name+"("+p+")\n";
-          res += "ensures BASE_" + fn.Name+"("+p+")\n{}\n";
-        }else{
-          res += "requires BASE_" + fn.Name+"("+p+")\n";
-          res += "ensures " + fn.Name+"("+p+")\n{}\n";
-        }        
-      }else{
-        res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
-        // res += "  ensures " + fn.Name+"() ==> BASE_" + fn.Name+"()\n{}";
-
-      }
-      return res;
-    }
-
+    
 
     public static string getVacuityLemmaRevised(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
       string res = "lemma isVac";
@@ -983,7 +880,237 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       return res;
     }
 
+       public static string GetBaseLemmaListMutationList(Program program,Function fn, ModuleDefinition currentModuleDef,List<Tuple<Function, FunctionCallExpr, Expression>> path) {
+      string res = "";
+      // add all predicates in path
+      foreach (var nwPair in path)
+      {
+          using (var wr = new System.IO.StringWriter()) {
+          var pr = new Printer(wr);
+          pr.ModuleForTypes = currentModuleDef;
+          pr.PrintFunction(nwPair.Item1, 0,false);
+          res += wr.ToString();
+        }
+      res += "\n\n";
+      }
+    // annotate with "BASE_"
+    foreach (var nwPair in path)
+    {
+      var indeciesNormal = AllIndexesOf(res,nwPair.Item1.Name+"(");
+      var indeciesGeneric = AllIndexesOf(res,nwPair.Item1.Name+"<");
+      List<int> indeciesTotal = new List<int>();
+      indeciesTotal.AddRange(indeciesNormal);
+      indeciesTotal.AddRange(indeciesGeneric);
+      // if(indecies.Length == 0){
+      //   indecies = AllIndexesOf(res,nwPair.Item1.Name+"<");
+      // }
+      foreach (var index in indeciesTotal.ToArray().Reverse())
+      {
+        res = res.Insert(index, "BASE_");
+      }
+    }
+    // add "mutated" intermediate predicates
+    // for (int i = 0; i < path.Count - 1; i++)
+    // {
+    //   var nwPair = path[i];
+    //   using (var wr = new System.IO.StringWriter()) {
+    //       var pr = new Printer(wr);
+    //       pr.ModuleForTypes = currentModuleDef;
+    //       pr.PrintFunction(nwPair.Item1, 0,false);
+    //       res += wr.ToString();
+    //     }
+    //   res += "\n\n";
+    // }
 
+      return res;
+    }
+
+
+    public static string GetIsWeakerMutationsRoot(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
+      string res = "lemma isAtLeastAsWeak";
+      //  foreach (var nwPair in path) {
+      //   res += "_" + nwPair.Item1.Name;
+      // }
+       res += "_" + path[0].Item1.Name;
+      foreach(var t in fn.TypeArgs)
+      {
+        res += "<"+t+"(0,!new)>";
+        // Console.WriteLine("a = " + t);
+      }
+      res += "(";
+      var sep = "";
+      var p = "";
+      Tuple<string, string> x = new Tuple<string, string>(null, null);
+
+      // foreach (var nwPair in path) {
+      //   res += sep + " ";
+      //   sep = "";
+      //   x = GetFunctionParamList(nwPair.Item1);
+      //   res += x.Item2;
+      //   p += "" + x.Item1; 
+      //   sep = ", ";
+      // }
+        res += sep + " ";
+        sep = "";
+        x = GetFunctionParamListSpec(path[0].Item1);
+        
+        res += x.Item2;
+        p += "" + x.Item1; 
+        sep = ", ";
+      res += ")\n";
+      // if(p != ""){
+      //   res += "requires " + fn.Name+"_BASE("+p+")\n";
+      // }
+      foreach (var req in path[0].Item1.Req) {
+        // res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
+        
+        if(isQuantifier){
+          res += "  requires forall " + x.Item2 + " :: "+ GetNonPrefixedString(req.E, currentModuleDef) + "\n";
+        }else{
+          res += "  requires " + GetNonPrefixedString(req.E, currentModuleDef) + "\n";
+        }
+      }
+      if(p != ""){
+        if(DafnyOptions.O.IsRequires)
+        {
+          res += "requires " + fn.Name+"("+p+")\n";
+          res += "ensures BASE_" + fn.Name+"("+p+")\n{}\n";
+        }else{
+          res += "requires BASE_" + fn.Name+"("+p+")\n";
+          res += "ensures " + fn.Name+"("+p+")\n{}\n";
+        }        
+      }else{
+        res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
+        // res += "  ensures " + fn.Name+"() ==> BASE_" + fn.Name+"()\n{}";
+
+      }
+      return res;
+    }
+
+    public static string GetIsWeakerMutationsRootTEST(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
+      string res = "lemma isAtLeastAsWeak";
+      //  foreach (var nwPair in path) {
+      //   res += "_" + nwPair.Item1.Name;
+      // }
+       res += "_" + path[0].Item1.Name;
+      foreach(var t in fn.TypeArgs)
+      {
+        res += "<"+t+"(0,!new)>";
+        // Console.WriteLine("a = " + t);
+      }
+      res += "(";
+      var sep = "";
+      var p = "";
+      Tuple<string, string> x = new Tuple<string, string>(null, null);
+      var temp = "";
+      foreach (var nwPair in path) {
+        res += sep + "\n    ";
+        sep = "";
+        // res += GetFunctionParamList(nwPair.Item1, nwPair.Item1.Name + "_").Item2;
+        res += GetFunctionParamListSpec(nwPair.Item1,nwPair.Item1.Name + "_").Item2;
+        p += "" + x.Item1;  
+        sep = ", ";
+      }
+      // foreach (var nwPair in path) {
+      //   res += sep + " ";
+      //   sep = "";
+      //   x = GetFunctionParamList(nwPair.Item1);
+      //   res += x.Item2;
+      //   p += "" + x.Item1; 
+      //   sep = ", ";
+      // }
+        // res += sep + " ";
+        // sep = "";
+        // x = GetFunctionParamListSpec(path[0].Item1);
+        
+        // res += x.Item2;
+        // p += "" + x.Item1; 
+        // sep = ", ";
+      res += ")\n";
+
+      foreach (var req in path[0].Item1.Req) {
+        res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
+      }
+      res += "  requires BASE_" + fn.Name + "(";
+      sep = "";
+      foreach (var formal in path[0].Item1.Formals) {
+        res += sep + path[0].Item1.Name + "_" + formal.Name;
+        sep = ", ";
+      }
+      res += ")\n";
+
+            for (int i = 0; i < path.Count - 1; i++) {
+        var callExpr = path[i + 1].Item2;
+        var condExpr = path[i + 1].Item3;
+        var requiresOrAndSep = "requires";
+        if (condExpr != null) {
+          if (condExpr is BinaryExpr && (condExpr as BinaryExpr).E1 is LetExpr) {
+            requiresOrAndSep = "  &&";
+          }
+          currentModuleDef = path[i].Item1.EnclosingClass.EnclosingModuleDefinition;
+          var tempStr = $"  {requiresOrAndSep} " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) + "\n";
+          var callExprStr = Printer.ExprToString(callExpr);
+          // tempStr = ReplaceFirst()
+          var indecies = AllIndexesOf(tempStr,callExprStr.Substring(0,callExprStr.IndexOf("(")));
+          foreach (var index in indecies.Reverse())
+          {
+            tempStr = tempStr.Insert(index, "BASE_");
+          }
+          res += tempStr;
+          // res += $"  {requiresOrAndSep} " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) + "\n";
+        }
+        for (int j = 0; j < callExpr.Args.Count; j++) {
+          res += $"  {requiresOrAndSep} ";
+          res += GetPrefixedString(path[i].Item1.Name + "_", callExpr.Args[j], currentModuleDef);
+          res += " == ";
+          res += path[i + 1].Item1.Name + "_" + path[i + 1].Item1.Formals[j].Name + "\n";
+        }
+        foreach (var req in callExpr.Function.Req) {
+          res += $"  {requiresOrAndSep} " + GetPrefixedString(path[i + 1].Item1.Name + "_", req.E, currentModuleDef) + "\n";
+        }
+        res += $"  {requiresOrAndSep} " + "BASE_"+callExpr.Function.Name + "(";
+        sep = "";
+        foreach (var arg in callExpr.Args) {
+          res += sep + GetPrefixedString(path[i].Item1.Name + "_", arg, currentModuleDef);
+          sep = ", ";
+        }
+        res += ")\n";
+      }
+      
+      Console.WriteLine(res);
+      // if(p != ""){
+      //   res += "requires " + fn.Name+"_BASE("+p+")\n";
+      // }
+      foreach (var req in path[0].Item1.Req) {
+        // res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
+        
+        if(isQuantifier){
+          res += "  requires forall " + x.Item2 + " :: "+ GetNonPrefixedString(req.E, currentModuleDef) + "\n";
+        }else{
+          res += "  requires " + GetNonPrefixedString(req.E, currentModuleDef) + "\n";
+        }
+      }
+      if(p != ""){
+        if(DafnyOptions.O.IsRequires)
+        {
+          res += "requires " + fn.Name+"("+p+")\n";
+          res += "ensures BASE_" + fn.Name+"("+p+")\n{}\n";
+        }else{
+          res += "requires BASE_" + fn.Name+"("+p+")\n";
+          res += "ensures " + fn.Name+"("+p+")\n{}\n";
+        }        
+      }else{
+        res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
+        // res += "  ensures " + fn.Name+"() ==> BASE_" + fn.Name+"()\n{}";
+
+      }
+      return res;
+    }
+
+
+
+
+//GetValidityLemma 
  public static string GetValidityLemma(List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, int cnt, int id) {
       string res = "lemma {:timeLimitMultiplier 2} validityCheck";
       if (cnt != -1) {
@@ -2504,6 +2631,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
          {
           istWeakerLemma = GetIsWeakerMutationsRoot(func,MutationsPaths[0].GetRange(MutationsPaths[0].Count-1,1), null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
          }else{
+         
           istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
         }// var test = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);
       }
@@ -2514,6 +2642,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
         istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
       }else{
+         var ee  = GetIsWeakerMutationsRootTEST(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,false);
         istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
       }
