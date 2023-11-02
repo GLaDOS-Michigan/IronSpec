@@ -329,7 +329,7 @@ public void clearTasks()
         // Console.WriteLine($"sending request {(request as VerificationRequest).Path}");
         AsyncUnaryCall<VerificationResponse> task = serversList[serverId].VerifyAsync(
           request as VerificationRequest,
-          deadline: DateTime.UtcNow.AddMinutes(210));
+          deadline: DateTime.UtcNow.AddMinutes(1000));
         requestToCall[request] = task;
       }
       else {

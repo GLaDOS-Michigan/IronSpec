@@ -521,6 +521,13 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
           currentExperssions.Add(new ExpressionDepth(sseMutatedE1,1));
         }
       }
+      if (e.expr is IdentifierExpr)
+      {
+        var ie = e.expr as IdentifierExpr;
+       var t = new IdentifierExpr(ie.tok, "ie"+ie.Name);
+
+
+      }
       if(e.expr is NestedMatchExpr)
       {
         var nme = e.expr as NestedMatchExpr;
@@ -531,7 +538,7 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
           //    public NestedMatchExpr(IToken tok, Expression source, [Captured] List<NestedMatchCaseExpr> cases, bool usesOptionalBraces, Attributes attrs = null) : base(tok) {
           List<NestedMatchCaseExpr> mutatedCases = new List<NestedMatchCaseExpr>();
           for(int j = 0;j < me.Cases.Count; j++){
-            if(!(j == i))
+            if(!(j == i) && j<nme.Cases.Count)
             {
               mutatedCases.Add(nme.Cases[j]);
             }
@@ -843,7 +850,7 @@ public List<ExpressionDepth> mutateOneExpressionRevised(Program program, MemberD
       else if(e.expr is UnaryOpExpr)
       {
         // Console.WriteLine("Unary Expr");
-        var ue = e.expr as UnaryOpExpr;
+      var ue = e.expr as UnaryOpExpr;
         if(ue.Op == UnaryOpExpr.Opcode.Not) // NOT
         {
             //DeleteNot

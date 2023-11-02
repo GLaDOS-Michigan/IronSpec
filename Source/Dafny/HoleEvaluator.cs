@@ -1008,7 +1008,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         sep = "";
         // res += GetFunctionParamList(nwPair.Item1, nwPair.Item1.Name + "_").Item2;
         res += GetFunctionParamListSpec(nwPair.Item1,nwPair.Item1.Name + "_").Item2;
-        p += "" + x.Item1;  
+        // p += "" + nwPair.Item1;  
         sep = ", ";
       }
       // foreach (var nwPair in path) {
@@ -1027,8 +1027,9 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         // p += "" + x.Item1; 
         // sep = ", ";
       res += ")\n";
-
+    var bdyAssert = "";
       foreach (var req in path[0].Item1.Req) {
+        currentModuleDef = path[0].Item1.EnclosingClass.EnclosingModuleDefinition;
         res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
       }
       res += "  requires BASE_" + fn.Name + "(";
@@ -1048,7 +1049,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
             requiresOrAndSep = "  &&";
           }
           currentModuleDef = path[i].Item1.EnclosingClass.EnclosingModuleDefinition;
-          var tempStr = $"  {requiresOrAndSep} " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) + "\n";
+          var tempStr = $"  {requiresOrAndSep} " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) ;
           var callExprStr = Printer.ExprToString(callExpr);
           // tempStr = ReplaceFirst()
           var indecies = AllIndexesOf(tempStr,callExprStr.Substring(0,callExprStr.IndexOf("(")));
@@ -1056,7 +1057,9 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           {
             tempStr = tempStr.Insert(index, "BASE_");
           }
-          res += tempStr;
+          bdyAssert = tempStr + " && " +GetPrefixedString(path[i].Item1.Name + "_", callExpr, currentModuleDef) +";";
+          bdyAssert = "assert " + bdyAssert.Substring(2);
+          res += tempStr+ "\n";
           // res += $"  {requiresOrAndSep} " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) + "\n";
         }
         for (int j = 0; j < callExpr.Args.Count; j++) {
@@ -1077,33 +1080,24 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         res += ")\n";
       }
       
-      Console.WriteLine(res);
+      
       // if(p != ""){
       //   res += "requires " + fn.Name+"_BASE("+p+")\n";
       // }
-      foreach (var req in path[0].Item1.Req) {
-        // res += "  requires " + GetPrefixedString(path[0].Item1.Name + "_", req.E, currentModuleDef) + "\n";
-        
-        if(isQuantifier){
-          res += "  requires forall " + x.Item2 + " :: "+ GetNonPrefixedString(req.E, currentModuleDef) + "\n";
-        }else{
-          res += "  requires " + GetNonPrefixedString(req.E, currentModuleDef) + "\n";
-        }
+      res += "  ensures " + fn.Name + "(";
+      sep = "";
+      foreach (var formal in path[0].Item1.Formals) {
+        res += sep + path[0].Item1.Name + "_" + formal.Name;
+        sep = ", ";
       }
-      if(p != ""){
-        if(DafnyOptions.O.IsRequires)
-        {
-          res += "requires " + fn.Name+"("+p+")\n";
-          res += "ensures BASE_" + fn.Name+"("+p+")\n{}\n";
-        }else{
-          res += "requires BASE_" + fn.Name+"("+p+")\n";
-          res += "ensures " + fn.Name+"("+p+")\n{}\n";
-        }        
-      }else{
-        res += "  ensures BASE_" + fn.Name+"() ==> " + fn.Name+"()\n{}";
-        // res += "  ensures " + fn.Name+"() ==> BASE_" + fn.Name+"()\n{}";
-
+      res += ")\n";
+      // res += "ensures " + fn.Name+"("+GetFunctionParamList(fn);+")\n{}\n";
+      if(bdyAssert.Contains("requires"))
+      {
+        bdyAssert = "assert " + bdyAssert.Substring(bdyAssert.IndexOf("requires")+8);
       }
+      res +=  " {\n" + bdyAssert + "\n}";
+      // Console.WriteLine(res);
       return res;
     }
 
@@ -1149,11 +1143,18 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         var condExpr = path[i + 1].Item3;
         var requiresOrAndSep = "requires";
         if (condExpr != null) {
-          if (condExpr is BinaryExpr && (condExpr as BinaryExpr).E1 is LetExpr) {
+          if (condExpr is BinaryExpr && 
+                ((condExpr as BinaryExpr).E0 is LetExpr ||
+                 (condExpr as BinaryExpr).E1 is LetExpr) )
+          {
             requiresOrAndSep = "  &&";
           }
           currentModuleDef = path[i].Item1.EnclosingClass.EnclosingModuleDefinition;
-          res += $"  {requiresOrAndSep} " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) + "\n";
+          res += $"  {requiresOrAndSep} " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, null) + "\n";//          res += $"  {requiresOrAndSep} " + GetPrefixedString(path[i].Item1.Name + "_", condExpr, currentModuleDef) + "\n";
+
+           if (condExpr is LetExpr) {
+            requiresOrAndSep = "  &&";
+          }
         }
         for (int j = 0; j < callExpr.Args.Count; j++) {
           res += $"  {requiresOrAndSep} ";
@@ -1435,9 +1436,10 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           }
         }
         //MERGE
+                desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
+
+            // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunctionUnresolved);
             expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunction);
-        // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
-        desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
         desiredFunctionMutationRoot = GetFunctionFromUnresolved(unresolvedProgram,DafnyOptions.O.MutationRootName);
         // desiredMethodUnresolved = GetMethodFromUnresolved(unresolvedProofProgram,lemmaName);
         desiredFunctionMutationRootResolved = GetFunction(program, DafnyOptions.O.MutationRootName);
@@ -1543,7 +1545,8 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       expressionFinder.availableExpressions = duplicateMutations.Values.Cast<Microsoft.Dafny.ExpressionFinder.ExpressionDepth>().ToList();
       int numFailiedAfter1stPass = 0;
       int remainingVal = expressionFinder.availableExpressions.Count;
-      int mutationCap = expressionFinder.availableExpressions.Count < 500 ? expressionFinder.availableExpressions.Count : expressionFinder.availableExpressions.Count; 
+      int mutationCap = expressionFinder.availableExpressions.Count < 50 ? expressionFinder.availableExpressions.Count : expressionFinder.availableExpressions.Count; 
+      // int mutationCap = 50; 
       Console.WriteLine("--- Begin Is At Least As Weak Pass -- " + remainingVal);
       for (int i = 0; i < mutationCap; i++) {
         desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
@@ -2270,7 +2273,9 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       string paramNames = "";
       var sep = "";
       foreach (var param in func.Formals) {
-        parameterNameTypes += sep + namePrefix + param.Name + ":" + Printer.GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type, new HashSet<ModuleDefinition>(),true);
+          parameterNameTypes += sep + namePrefix + param.Name + ":" + param.Type.ToString();
+
+        // parameterNameTypes += sep + namePrefix + param.Name + ":" + Printer.GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type, new HashSet<ModuleDefinition>(),true);
             // parameterNameTypes += sep + namePrefix + param.Name + ":" + Printer.GetFullTypeString(func.EnclosingClass.EnclosingModuleDefinition, param.Type, new HashSet<ModuleDefinition>());
         paramNames += sep + namePrefix + param.Name;
         sep = ", ";
@@ -2631,8 +2636,9 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
          {
           istWeakerLemma = GetIsWeakerMutationsRoot(func,MutationsPaths[0].GetRange(MutationsPaths[0].Count-1,1), null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
          }else{
-         
-          istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
+                 istWeakerLemma = GetIsWeakerMutationsRootTEST(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
+
+          // istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
         }// var test = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);
       }
       }else{
@@ -2642,9 +2648,9 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
         istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
       }else{
-         var ee  = GetIsWeakerMutationsRootTEST(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
+        //  var ee  = GetIsWeakerMutationsRootTEST(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,false);
-        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
+        istWeakerLemma = GetIsWeakerMutationsRootTEST(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
       }
       }
     
@@ -2837,6 +2843,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       if(vacTest)
       {
         validityCheck = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1,0);
+        // Console.WriteLine(validityCheck);
       }
       var lemmaName = lemma.Name;
       var funcName = func.Name;
@@ -3014,7 +3021,9 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             code = code.Insert(lemmaLoc-1,validityCheck+"\n");
           }
 
-          if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
+          if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles && vacTest)
+            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{lemmaName}_VAC_{cnt}.dfy", code);
+          else if(DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
             File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{lemmaName}_{cnt}.dfy", code);
         }
          string env = DafnyOptions.O.Environment.Remove(0, 22);

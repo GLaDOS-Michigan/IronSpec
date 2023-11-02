@@ -654,7 +654,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
 
         }
         if(!noInputIsNeededInOutput && desiredMethod.Ins.Count > 0){
-            Console.WriteLine("\n-- FLAG(MED) -- : NONE of Ensures depend on Any input parameters \n");
+            Console.WriteLine("\n-- FLAG(HIGH) -- : NONE of Ensures depend on Any input parameters \n");
           }
         Console.WriteLine("All parameters Pass Sanity Check? = " + deepCheck + "\n");
         Console.WriteLine("Sanity Checking OutPuts:\n");
@@ -711,7 +711,8 @@ public bool simpleEnsSanityCheck(Method desiredMethod, Formal inputF,bool ret)
             foreach(var f in ensFormals)
             {
               var fullF = Printer.GetFullTypeString(desiredMethod.EnclosingClass.EnclosingModuleDefinition, f.Value.Type, new HashSet<ModuleDefinition>(),true);
-              if(inputF.Name == f.Key && fullinputF == fullF)
+              // if(inputF.Name == f.Key && fullinputF == fullF)
+              if(inputF.Name == f.Key)
               {
                 return true;
               }
@@ -1629,6 +1630,7 @@ public async Task<bool>writeOutputs(int index)
         }
         foreach (var ret in method.Outs)
       {
+        // var getType = GetPrefixedStringType("", ret.Type,method.EnclosingClass.EnclosingModuleDefinition);
           var resovledReturns = ret.Name+":"+Printer.GetFullTypeString(method.EnclosingClass.EnclosingModuleDefinition, ret.Type, new HashSet<ModuleDefinition>(),true);
           returns.Add(resovledReturns);
           extraParams.Add(resovledReturns);
@@ -1641,6 +1643,17 @@ public async Task<bool>writeOutputs(int index)
       return paramsAndBodys;
 
     }
+
+    public static string GetPrefixedStringType(string prefix,Type type, ModuleDefinition currentModuleDef) {
+      using (var wr = new System.IO.StringWriter()) {
+        var pr = new Printer(wr);
+        pr.Prefix = prefix;
+        pr.ModuleForTypes = currentModuleDef;
+        pr.PrintType(type);
+        return wr.ToString();
+      }
+    }
+
       public static string GetIsBasePredMethodInPlace(Method method,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr,Boolean isReq)
     {
       string res = "predicate BASE_"+ method.Name+"_Pred";
@@ -1719,7 +1732,7 @@ public async Task<bool>writeOutputs(int index)
         res += "{\n";
         foreach (string bodyE in paramsAndBodies[1])
         {
-          res += "&& " +  bodyE + "\n";
+          res += "&& (" +  bodyE + ")\n";
         }
         //  res += "&& " +  Printer.ExprToString(ee) + "\n";
         res += "}\n";
@@ -1816,7 +1829,7 @@ public static string GetIsMutatedPredMethodInPlace(Method method,List<Tuple<Func
         }
         foreach (string bodyE in paramsAndBodies[1])
         {
-          res += "&& " +  bodyE + "\n";
+          res += "&& (" +  bodyE + ")\n";
         }
         //  res += "&& " +  Printer.ExprToString(ee) + "\n";
         res += "}\n";
@@ -1864,6 +1877,16 @@ public static string GetIsMutatedPredMethodInPlace(Method method,List<Tuple<Func
         if(!fMap.ContainsKey(deName))
         {
           fMap.Add(deName,f);
+        }
+
+      }else if(e is UnaryOpExpr && (e as UnaryOpExpr).Op == UnaryOpExpr.Opcode.Cardinality)
+      {
+        var ue = e as UnaryOpExpr;
+        var ueName = Printer.ExprToString(ue);
+        Formal f = new Formal(ue.tok,ueName,ue.Type,true,true,e);
+        if(!fMap.ContainsKey(ueName))
+        {
+          fMap.Add(ueName,f);
         }
       }else{
         var subE = e.SubExpressions;
@@ -2158,7 +2181,7 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
       string isVacTest = "";
 
 
-      var paramsAndBodies = GetExtraOldParams(meth,null,null,null);
+      var paramsAndBodies = GetExtraOldParams(meth,null,null,null); //FIX
 
       if (isWeaker)
       {

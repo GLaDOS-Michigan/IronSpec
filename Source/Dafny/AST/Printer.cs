@@ -67,8 +67,19 @@ if (type is UserDefinedType) {
 
         }
         foreach (var decl in ModuleDefinition.AllTypesWithMembers(moduleDef.TopLevelDecls)) {
+          // if(typeStr.Contains("Optional"))
+          // {
+          //   typeStr = typeStr.Substring(0,typeStr.IndexOf("<"));
+          // }
+          if(typeStr.IndexOf("<") > 0)//&& !typeStr.Contains("Optional")
+          {
+            typeStr = typeStr.Substring(0,typeStr.IndexOf("<"));
+          }
           if (decl.ToString() == typeStr) {
             var moduleName = GetFullModuleName(moduleDef);
+            // if(ModuleForTypes != null && f.FullDafnyName.Contains(ModuleForTypes.Name+".")){
+            //   Console.WriteLine("");
+            // }
             var result = (moduleName == "") ? typeStr : (moduleName + "." + typeStr);
             if(full)
             {
@@ -78,7 +89,7 @@ if (type is UserDefinedType) {
               result += "<";
               var sep = "";
               foreach (var arg in type.TypeArgs) {
-                result += sep + GetFullTypeString(moduleDef, arg, new HashSet<ModuleDefinition>());
+                result += sep + GetFullTypeString(moduleDef, arg, new HashSet<ModuleDefinition>(),true);
                 sep = ", ";
               }
               result += ">";
@@ -104,7 +115,7 @@ if (type is UserDefinedType) {
         }
         foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
           if (imp is ModuleDecl && !(imp as ModuleDecl).Signature.IsAbstract) {
-            var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type, seenModules);
+            var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type, seenModules,full);
             if (result != "") {
               if(result.Contains("<D>") && typeStr == "Optional"){
                 var index = result.IndexOf("<D>");
@@ -116,7 +127,7 @@ if (type is UserDefinedType) {
           }
         }
         // couldn't find the type definition here, so we should search the parent
-        return GetFullTypeString(moduleDef.EnclosingModule, type, seenModules);
+        return GetFullTypeString(moduleDef.EnclosingModule, type, seenModules,full);
       } else if (type is CollectionType) {
         var ct = type as CollectionType;
         var result = ct.CollectionTypeName + "<";
