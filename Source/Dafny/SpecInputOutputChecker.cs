@@ -895,7 +895,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
       List<Tuple<ExpressionFinder.ExpressionDepth,Expression,bool>> inPlaceMutationList =
       new List<Tuple<ExpressionFinder.ExpressionDepth,Expression,bool>>();
       //collect all mutations (ens)
-      for (int i = 0; i < desiredMethod.Ens.Count; i++)
+      for (int i = 0; i < desiredMethodUnresolved.Ens.Count; i++)
       {
         var e = desiredMethod.Ens[i];
         var ensList = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(e.E,1));
@@ -925,7 +925,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
         }
         
       }
-      for (int i = 0; i < desiredMethod.Req.Count; i++)
+      for (int i = 0; i < desiredMethodUnresolved.Req.Count; i++)
       {
         var r = desiredMethod.Req[i];
         var reqList = expressionFinder.TraverseFormal(proofProg,new ExpressionFinder.ExpressionDepth(r.E,1));
@@ -1592,17 +1592,43 @@ public async Task<bool>writeOutputs(int index)
           ee = mutated;
          }
          var ensOld = IfExprContainsOldExpr(method,ee);
-         if(ensOld.Item1 != null)
+         var ensOldList = IfExprContainsOldExprList(method,ee);
+         if(ensOldList != null)
          {
-            //strip "OLD()
-            var removedOld = Printer.ExprToString(ee).Replace(ensOld.Item1,ensOld.Item3);
-            bodyExprs.Add(removedOld);
+          var removedOld = Printer.ExprToString(ee);
+          foreach (var ensOldValue in ensOldList.Values)
+          {
+             
+            if(ensOldValue.Item1.IndexOf(".") > 0)
+            {
+              removedOld = removedOld.Replace("old("+ensOldValue.Item3.Substring(0,ensOldValue.Item3.IndexOf("_OLD")),"("+ensOldValue.Item3);
+            }else{
+              removedOld = removedOld.Replace(ensOldValue.Item1,ensOldValue.Item3);
+            }
+            
             //updated Params
-            var ensOldPrefix = ensOld.Item3.Substring(0,ensOld.Item3.IndexOf("_OLD"));
-            var updatedP = ensOld.Item3+":"+ensOld.Item2;
+            // var ensOldValuePrefix = ensOldValue.Item3.Substring(0,ensOldValue.Item3.IndexOf("_OLD"));
+            var updatedP = ensOldValue.Item3+":"+ensOldValue.Item2;
             if(!extraParams.Contains(updatedP)){
               extraParams.Add(updatedP);
             }
+          }
+          bodyExprs.Add(removedOld);
+            // //strip "OLD()
+            // var removedOld = "";
+            // if(ensOld.Item1.IndexOf(".") > 0)
+            // {
+            //   removedOld = Printer.ExprToString(ee).Replace("old("+ensOld.Item3.Substring(0,ensOld.Item3.IndexOf("_OLD")),"("+ensOld.Item3);
+            // }else{
+            //   removedOld = Printer.ExprToString(ee).Replace(ensOld.Item1,ensOld.Item3);
+            // }
+            // bodyExprs.Add(removedOld);
+            // //updated Params
+            // var ensOldPrefix = ensOld.Item3.Substring(0,ensOld.Item3.IndexOf("_OLD"));
+            // var updatedP = ensOld.Item3+":"+ensOld.Item2;
+            // if(!extraParams.Contains(updatedP)){
+            //   extraParams.Add(updatedP);
+            // }
          }
          else{
             bodyExprs.Add(Printer.ExprToString(ee));
@@ -1916,6 +1942,73 @@ public static string GetIsMutatedPredMethodInPlace(Method method,List<Tuple<Func
       }
       return fMap;
     }
+
+    public static Dictionary<string,Tuple<string, string, string>> IfExprContainsOldExprList(Method meth,Expression e)
+    {
+      Dictionary<string,Tuple<string, string, string>> listOfTups = new Dictionary<string,Tuple<string, string, string>>();
+      Tuple<string, string,string> x = new Tuple<string, string,string>(null, null,null);
+      if(e is OldExpr)
+      {
+        // return true;
+        string it3 = Printer.ExprToString(e.SubExpressions.First())+"_OLD";
+
+        if(e.SubExpressions.First() is ExprDotName)
+        {
+        var subLhs = e.SubExpressions.First();
+        while (subLhs is ExprDotName)
+        {
+          var tempLhs = (subLhs as ExprDotName).Lhs;
+          if(tempLhs is ExprDotName){
+            subLhs = tempLhs;
+          }else{
+            break;
+          }
+        }
+
+          string lhs = Printer.ExprToString((e.SubExpressions.First() as ExprDotName).Lhs);
+          string subLhsStr =Printer.ExprToString((subLhs as ExprDotName).Lhs);
+          it3 = subLhsStr + "_OLD";
+          // manual workaround
+          string fType = Printer.GetFullTypeString(meth.EnclosingClass.EnclosingModuleDefinition, (subLhs as ExprDotName).Lhs.Type, new HashSet<ModuleDefinition>(),false);
+          // string fType = Printer.GetFullTypeString(meth.EnclosingClass.EnclosingModuleDefinition, (e.SubExpressions.First() as ExprDotName).Lhs.Type, new HashSet<ModuleDefinition>(),false);
+          if(fType.Contains("ICryptographicMaterialsManagerCallHistory"))
+          {
+            fType = fType.Replace("ICryptographicMaterialsManagerCallHistory","ICryptographicMaterialsManager");
+          }
+          //
+          x = new Tuple<string, string, string>( Printer.ExprToString(e),fType,it3);
+          listOfTups.Add(Printer.ExprToString(e),x);
+          return  listOfTups;
+          // it3 = Printer.ExprToString(e.SubExpressions.First()).Replace(lhs,lhs+"_OLD");
+        }
+        x = new Tuple<string, string, string>( Printer.ExprToString(e),Printer.GetFullTypeString(meth.EnclosingClass.EnclosingModuleDefinition, e.Type, new HashSet<ModuleDefinition>(),true),it3);
+        listOfTups.Add(Printer.ExprToString(e),x);
+        return  listOfTups;
+      }
+      else
+      {
+        var subE = e.SubExpressions;
+        // var r = false;
+        foreach (Expression subEE in subE)
+        {
+          if(x.Item1 == null){
+            var subDictionary = IfExprContainsOldExprList(meth,subEE);
+            foreach (var subT in subDictionary.Keys)
+            {
+              if(!listOfTups.ContainsKey(subT))
+              {
+                listOfTups.Add(subT,subDictionary[subT]);
+              }
+            }
+            // listOfTups.AddRange(IfExprContainsOldExprList(meth,subEE));
+          }
+        }
+        return listOfTups;
+        // return e;
+      }
+    }
+
+
     public static Tuple<string, string, string> IfExprContainsOldExpr(Method meth,Expression e)
     {
       Tuple<string, string,string> x = new Tuple<string, string,string>(null, null,null);
@@ -1923,11 +2016,32 @@ public static string GetIsMutatedPredMethodInPlace(Method method,List<Tuple<Func
       {
         // return true;
         string it3 = Printer.ExprToString(e.SubExpressions.First())+"_OLD";
+
         if(e.SubExpressions.First() is ExprDotName)
         {
+        var subLhs = e.SubExpressions.First();
+        while (subLhs is ExprDotName)
+        {
+          var tempLhs = (subLhs as ExprDotName).Lhs;
+          if(tempLhs is ExprDotName){
+            subLhs = tempLhs;
+          }else{
+            break;
+          }
+        }
+
           string lhs = Printer.ExprToString((e.SubExpressions.First() as ExprDotName).Lhs);
-          it3 = lhs + "_OLD";
-          x = new Tuple<string, string, string>( Printer.ExprToString(e),Printer.GetFullTypeString(meth.EnclosingClass.EnclosingModuleDefinition, (e.SubExpressions.First() as ExprDotName).Lhs.Type, new HashSet<ModuleDefinition>(),true),it3);
+          string subLhsStr =Printer.ExprToString((subLhs as ExprDotName).Lhs);
+          it3 = subLhsStr + "_OLD";
+          // manual workaround
+          string fType = Printer.GetFullTypeString(meth.EnclosingClass.EnclosingModuleDefinition, (subLhs as ExprDotName).Lhs.Type, new HashSet<ModuleDefinition>(),false);
+          // string fType = Printer.GetFullTypeString(meth.EnclosingClass.EnclosingModuleDefinition, (e.SubExpressions.First() as ExprDotName).Lhs.Type, new HashSet<ModuleDefinition>(),false);
+          if(fType.Contains("ICryptographicMaterialsManagerCallHistory"))
+          {
+            fType = fType.Replace("ICryptographicMaterialsManagerCallHistory","ICryptographicMaterialsManager");
+          }
+          //
+          x = new Tuple<string, string, string>( Printer.ExprToString(e),fType,it3);
           return  x;
           // it3 = Printer.ExprToString(e.SubExpressions.First()).Replace(lhs,lhs+"_OLD");
         }
@@ -2355,8 +2469,8 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
           // args.Add("/proc:*" + meth.Name +"*");
          }
 
-        var changingFilePath = includeParser.Normalized(meth.BodyStartTok.Filename);
-        var constraintFuncChangingFilePath = includeParser.Normalized(meth.BodyStartTok.Filename);
+        var changingFilePath = includeParser.Normalized(unresolvedMeth.BodyStartTok.Filename);
+        var constraintFuncChangingFilePath = includeParser.Normalized(unresolvedMeth.BodyStartTok.Filename);
 //                   // Console.WriteLine("hereerere 3 " + changingFilePath + " :: " + constraintFuncChangingFilePath);
 //                   foreach (var p in changingFilePath.Split("/"))
 //                   {

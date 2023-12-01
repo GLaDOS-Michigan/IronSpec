@@ -1380,10 +1380,12 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         PrintAllMethods(proofProg, lemmaName);
         return false;
       }
+      var filenameProof = "";
+      if(desiredLemmm != null){
       Console.WriteLine(getVacuityLemma(desiredLemmm));
       Console.WriteLine("-----\n------\n");
               includeParser = new IncludeParser(proofProg);
-        var filenameProof = "";
+        // var filenameProof = "";
         if(desiredLemmm.BodyStartTok.Filename == null)
         {
           filenameProof = includeParser.Normalized(proofProg.FullName);
@@ -1394,6 +1396,21 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           Console.WriteLine("file = " + filenameProof);
           affectedFiles.Add(file);
         }
+      }else{
+        Console.WriteLine("-----\n------\n");
+              includeParser = new IncludeParser(proofProg);
+        
+        if(desiredMethod.BodyStartTok.Filename == null)
+        {
+          filenameProof = includeParser.Normalized(proofProg.FullName);
+        }else{
+          filenameProof = includeParser.Normalized(desiredMethod.BodyStartTok.Filename);
+        }
+        foreach (var file in includeParser.GetListOfAffectedFilesBy(filenameProof)) {
+          Console.WriteLine("file = " + filenameProof);
+          affectedFiles.Add(file);
+        }
+      }
 
         foreach (var file in includeParser.GetListOfAffectedFiles(filenameProof)) {
           Console.WriteLine("file = " + filenameProof);
@@ -2729,6 +2746,10 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             {
               fnIndex = code.IndexOf("predicate " + funcName);
             }
+            if(func.IsGhost && fnIndex == -1)//&& fnIndex == -1
+            {
+              fnIndex = code.IndexOf("ghost predicate " + funcName);
+            }
           }else{
             Console.WriteLine("TYPE = " + func.WhatKind);
             fnIndex = code.IndexOf("function " + funcName + "(");
@@ -2752,6 +2773,10 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           if(isWeaker){
             if(func.WhatKind == "predicate"){
               fnIndex = code.IndexOf("predicate " + funcName);
+              if(func.IsGhost && fnIndex == -1)//&& fnIndex == -1
+              {
+                fnIndex = code.IndexOf("ghost predicate " + funcName);
+              }
             }else{
               fnIndex = code.IndexOf("function " + funcName);
             }
