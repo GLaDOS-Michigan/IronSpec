@@ -801,7 +801,13 @@ if (type is UserDefinedType) {
       Contract.Requires(name != null);
       Contract.Requires(typeArgs != null);
 
+    if(kind == "function method") //temp hacky [remove for auction?] [add for div/harmonic]
+    {
+      // wr.Write(kind);//
+      wr.Write("function");
+      }else{
       wr.Write(kind);
+    }
       PrintAttributes(attrs);
 
       if (ArrowType.IsArrowTypeName(name)) {
@@ -975,6 +981,10 @@ if (type is UserDefinedType) {
 
       if (PrintModeSkipFunctionOrMethod(f.IsGhost, f.Attributes, f.Name)) { return; }
       Indent(indent);
+      if(f.IsGhost)
+      {
+        //  wr.Write("ghost ");
+      }
       PrintClassMethodHelper(f.FunctionDeclarationKeywords, f.Attributes, f.Name, f.TypeArgs);
       if (f.SignatureIsOmitted) {
         wr.Write(" ...");
