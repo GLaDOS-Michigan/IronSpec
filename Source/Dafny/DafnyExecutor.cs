@@ -89,7 +89,7 @@ namespace Microsoft.Dafny {
             var expectedOutput =
               $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
             var expectedInconclusiveOutputStart =
-              $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+              $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{MutationEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
             var result = IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
             if (result != Result.IncorrectProof) {
               Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer {result.ToString()} #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");
@@ -106,7 +106,7 @@ namespace Microsoft.Dafny {
             var expectedOutput =
               $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToPostConditionPosition[p]},0): Error: A postcondition might not hold on this return path.";
             var expectedInconclusiveOutputStart =
-              $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+              $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{inputFileName[p]}.dfy({processToLemmaStartPosition[p]},{MutationEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
             var result = IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
             if (result != Result.IncorrectProof) {
               Console.WriteLine($"{sw.ElapsedMilliseconds / 1000}:: correct answer {result.ToString()} #{processToCnt[p]}: {Printer.ExprToString(processToExpr[p])}");

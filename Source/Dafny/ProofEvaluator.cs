@@ -267,8 +267,8 @@ var execTime = output.ExecutionTimeInMs;
             Console.WriteLine($"don't support traversing {Printer.ExprToString(appSuf.Lhs)}");
             continue;
           }
-          var ensuresPredicateName = HoleEvaluator.GetFullLemmaNameString(lemma.EnclosingClass.EnclosingModuleDefinition, Printer.ExprToString(appSuf.Lhs));
-          var ensuresPredicate = HoleEvaluator.GetFunction(program, ensuresPredicateName);
+          var ensuresPredicateName = MutationEvaluator.GetFullLemmaNameString(lemma.EnclosingClass.EnclosingModuleDefinition, Printer.ExprToString(appSuf.Lhs));
+          var ensuresPredicate = MutationEvaluator.GetFunction(program, ensuresPredicateName);
           if (ensuresPredicate == null) {
             throw new NotSupportedException($"{ensuresPredicateName} not found");
           }
@@ -457,7 +457,7 @@ var execTime = output.ExecutionTimeInMs;
     }
 
     public async Task<bool> Evaluate(Program program, string lemmaName, int depth, int expressionDepth) {
-      if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
+      if (DafnyOptions.O.ServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
         return false;
       }
@@ -468,7 +468,7 @@ var execTime = output.ExecutionTimeInMs;
           tasksListDictionary.Add(task.Path, task);
         }
       }
-      dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPortList, $"output_{lemmaName}");
+      dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.ServerIpPortList, $"output_{lemmaName}");
       expressionFinder = new ExpressionFinder(this);
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
 
@@ -558,8 +558,8 @@ var execTime = output.ExecutionTimeInMs;
       // foreach (var ens in desiredLemma.Ens) {
       //   if (ens.E is ApplySuffix) {
       //     var appSuf = ens.E as ApplySuffix;
-      //     var ensuresPredicateName = HoleEvaluator.GetFullLemmaNameString(desiredLemma.EnclosingClass.EnclosingModuleDefinition, Printer.ExprToString(appSuf.Lhs));
-      //     var ensuresPredicate = HoleEvaluator.GetFunction(program, ensuresPredicateName);
+      //     var ensuresPredicateName = MutationEvaluator.GetFullLemmaNameString(desiredLemma.EnclosingClass.EnclosingModuleDefinition, Printer.ExprToString(appSuf.Lhs));
+      //     var ensuresPredicate = MutationEvaluator.GetFunction(program, ensuresPredicateName);
       //     Console.WriteLine(ensuresPredicate.FullDafnyName);
       //   }
       // }

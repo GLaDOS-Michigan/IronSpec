@@ -28,7 +28,7 @@ namespace Microsoft.Dafny {
     NoMatchingTrigger = 6,
     vacousProofPass = 7
   }
-  public class HoleEvaluator {
+  public class MutationEvaluator {
     private string UnderscoreStr = "";
     private static Random random = new Random();
     private Cloner cloner = new Cloner();
@@ -428,7 +428,6 @@ public async Task<bool>writeFailedOutputs(int index)
           }
         }
         if (currExprCondParentTuple.Item1 is ITEExpr) {
-          // Console.WriteLine($"ite expr here: {Printer.ExprToString(currExprCondParentTuple.Item1)}");
           var iteExpr = currExprCondParentTuple.Item1 as ITEExpr;
 
           // add Condition
@@ -436,7 +435,7 @@ public async Task<bool>writeFailedOutputs(int index)
             iteExpr.Test, currExprCondParentTuple.Item2, currExprCondParentTuple.Item3));
 
           // add then path
-          	          Expression thenCond;
+          Expression thenCond;
           if (currExprCondParentTuple.Item2 != null && currExprCondParentTuple.Item2 is LetExpr) {
             var prevLet = currExprCondParentTuple.Item2 as LetExpr;
             thenCond = Expression.CreateLet(prevLet.tok, prevLet.LHSs, prevLet.RHSs, 
@@ -788,7 +787,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       foreach(var t in fn.TypeArgs)
       {
         res += "<"+t+"(0,!new)>";
-        // Console.WriteLine("a = " + t);
       }
       res += "(";
       var sep = "";
@@ -850,7 +848,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       foreach(var t in fn.TypeArgs)
       {
         res += "<"+t+"(0,!new)>";
-        // Console.WriteLine("a = " + t);
       }
       res += "(";
       var sep = "";
@@ -1022,7 +1019,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       foreach(var t in fn.TypeArgs)
       {
         res += "<"+t+"(0,!new)>";
-        // Console.WriteLine("a = " + t);
       }
       res += "(";
       var sep = "";
@@ -1083,7 +1079,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       foreach(var t in fn.TypeArgs)
       {
         res += "<"+t+"(0,!new)>";
-        // Console.WriteLine("a = " + t);
       }
       res += "(";
       var sep = "";
@@ -1457,27 +1452,21 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
 
 
     public async Task<bool> EvaluateFilterStrongerAndSame(Program program, Program unresolvedProgram, string funcName, string lemmaName, string proofModuleName, string baseFuncName, int depth, bool mutationsFromParams,Program proofProg, Program unresolvedProofProgram) {
-      // Console.WriteLine("here " + DafnyOptions.O.EvaluateAllAtOnce);
-      if(proofModuleName != null)
-      {
-        // Console.WriteLine("MOUDLE = " + proofModuleName);
-      }
-      // var mutationRoot = null
       if(DafnyOptions.O.MutationRootName == null)
       {
-        DafnyOptions.O.MutationRootName = DafnyOptions.O.HoleEvaluatorFunctionName;
+        DafnyOptions.O.MutationRootName = DafnyOptions.O.MutationTarget;
       }
       Console.WriteLine("mutationsFromParams = " + mutationsFromParams);
-      if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
-        Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
+      if (DafnyOptions.O.ServerIpPortList == null) {
+        Console.WriteLine("ip port list is not given. Please specify with /serverIpPortList");
         return false;
       }
-      Console.WriteLine(DafnyOptions.O.HoleEvaluatorServerIpPortList);
+      Console.WriteLine(DafnyOptions.O.ServerIpPortList);
       if (DafnyOptions.O.HoleEvaluatorCommands != null) {
         var input = File.ReadAllText(DafnyOptions.O.HoleEvaluatorCommands);
         tasksList = Google.Protobuf.JsonParser.Default.Parse<TasksList>(input);
       }
-      dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPortList, $"output_{funcName}");
+      dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.ServerIpPortList, $"output_{funcName}");
       expressionFinder = new ExpressionFinder(this);
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       int timeLimitMultiplier = 2;
@@ -1537,7 +1526,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
 
       UnderscoreStr = RandomString(8);
       dafnyVerifier.sw = Stopwatch.StartNew();
-      Console.WriteLine($"hole evaluation begins for func {funcName}");
+      Console.WriteLine($"mutation evaluation begins for func {funcName}");
       Function desiredFunction = null;
       Function desiredFunctionUnresolved = null;
       Method desiredMethod = null;
@@ -1627,7 +1616,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       }
 
       
-        // calculate holeEvaluatorConstraint Invocation
         if (constraintFunc != null) {
           Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDictForInputs = new Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>>();
           foreach (var formal in baseFunc.Formals) {
@@ -1939,55 +1927,29 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
 
                 }
           }else{
-                UpdateCombinationResultVacAwareList(i,vacIndex.Contains(i));
+            UpdateCombinationResultVacAwareList(i,vacIndex.Contains(i));
           
-                writeOutputs(i);
-                foundCorrectExpr = false;
-                foundCorrectExpr |= combinationResults[i] == Result.FalsePredicate;
-                // Console.WriteLine(foundCorrectExpr);
-                var t = isDafnyVerifySuccessful(i);
-                if(foundCorrectExpr)
-                {
-                  Console.WriteLine("Mutation that Passes = " + i);
-                  Console.WriteLine("\t ==> " +  Printer.ExprToString(expressionFinder.availableExpressions[i].expr));
-                  passingIndecies.Add(i);
-                }else if (combinationResults[i] == Result.vacousProofPass)
-                {
-                  Console.WriteLine("Mutation that Passes = " + i + " ** is vacous!");
-                  Console.WriteLine("\t ==> " +  Printer.ExprToString(expressionFinder.availableExpressions[i].expr));
+            writeOutputs(i);
+            foundCorrectExpr = false;
+            foundCorrectExpr |= combinationResults[i] == Result.FalsePredicate;
+            // Console.WriteLine(foundCorrectExpr);
+            var t = isDafnyVerifySuccessful(i);
+            if(foundCorrectExpr)
+            {
+              Console.WriteLine("Mutation that Passes = " + i);
+              Console.WriteLine("\t ==> " +  Printer.ExprToString(expressionFinder.availableExpressions[i].expr));
+              passingIndecies.Add(i);
+            }else if (combinationResults[i] == Result.vacousProofPass)
+            {
+              Console.WriteLine("Mutation that Passes = " + i + " ** is vacous!");
+              Console.WriteLine("\t ==> " +  Printer.ExprToString(expressionFinder.availableExpressions[i].expr));
 
-                }
-              }
+            }
+          }
         }
-                Console.WriteLine("--- Finish Test -- ");
+      Console.WriteLine("--- Finished Mutation Testing -- ");
 
-            // dafnyVerifier.Cleanup(); -- re add
-
-    //   for (int i = 0; i < expressionFinder.availableExpressions.Count; i++) {
-    //     UpdateCombinationResult(i);
-    //     // foundCorrectExpr |= combinationResults[i] == Result.CorrectProof;
-    //   }
-
-      // Until here, we only check depth 1 of expressions.
-      // Now we try to check next depths
-      // int numberOfSingleExpr = expressionFinder.availableExpressions.Count;
-      // for (int dd = 2; dd <= depth; dd++) {
-
-        // var prevDepthExprStartIndex = expressionFindeTest.availableExpressions.Count;
-        // expressionFinder.CalcNextDepthAvailableExpressions();
-        // Console.WriteLine(expressionFinder.combinationResults.Count);
-        // Console.WriteLine("DEPTH = " + expressionFindeTest.availableExpressions.Count + " :: " + prevDepthExprStartIndex);
-      //   for (int i = prevDepthExprStartIndex; i < expressionFinder.availableExpressions.Count; i++) {
-      //     var expr = expressionFinder.availableExpressions[i];
-      //     PrintExprAndCreateProcess(program, desiredFunction, expr, i);
-      //     desiredFunction.Body = topLevelDeclCopy.Body;
-      //   }
-      //   await dafnyVerifier.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs();
-      //   for (int i = prevDepthExprStartIndex; i < expressionFinder.availableExpressions.Count; i++) {
-      //     UpdateCombinationResult(i);
-      //   }
-      // }
-      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000} :: finish exploring, try to calculate implies graph");
+      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000} :: finished exploring");
       int correctProofCount = 0;
       int correctProofByTimeoutCount = 0;
       int incorrectProofCount = 0;
@@ -2007,11 +1969,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           case Result.Unknown: throw new NotSupportedException();
         }
       }
-      // Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
-      //   "InvalidExpr", "IncorrectProof", "FalsePredicate", "CorrectProof", "CorrectProofByTimeout", "NoMatchingTrigger", "Total");
-      // Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15} {6, -15}",
-      //   invalidExprCount, incorrectProofCount, falsePredicateCount, correctProofCount, correctProofByTimeoutCount,
-      //   noMatchingTriggerCount, expressionFinder.availableExpressions.Count);
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25} {5, -15}",
         "InvalidExpr", "IncorrectProof", "ProofPasses", "1st pass","vacousPasses","Total");
       Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4, -25}  {5, -15}",
@@ -2019,7 +1976,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       string executionTimesSummary = "";
       string verboseExecTimesSummary = "";
 
-      // executionTimes.Sort();
       foreach (var pair in verboseExecTimes)
         {
             string key = pair.Key;
@@ -2032,20 +1988,19 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
             string value = pair.Value.ToString();
             verboseExecTimesSummary +="( " + key + ") :: " + value + "\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummaryVerboseEli.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummaryVerbose.txt",
       verboseExecTimesSummary);
       for (int i = 0; i < executionTimes.Count; i++) {
         executionTimesSummary += $"{i}, {executionTimes[i].ToString()}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummaryEli.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
             executionTimesSummary);
 
       string startTimesSummary = "";
-      // startTimes.Sort();
       for (int i = 0; i < startTimes.Count; i++) {
         startTimesSummary += $"{i}, {(startTimes[i] - startTimes[0]).ToString()}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummaryEli.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummary.txt",
             startTimesSummary);
 
                   Console.WriteLine("--- START Mutation Classifications -- ");
@@ -2120,7 +2075,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
     Console.WriteLine("Elapsed Time (Classifications) is {0} ms", ClassificationsStopWatch.ElapsedMilliseconds);
     Console.WriteLine("TOTAL Elapsed Time is {0} ms", ClassificationsStopWatch.ElapsedMilliseconds+fullProofElapsedTime);
 
-// print classifications
+    // print classifications
 
     foreach (var kvp in classheirarchy)
     {
@@ -2134,80 +2089,54 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       }
       Console.WriteLine("root = (" + kvp.Key + "):" +Printer.ExprToString(expressionFinder.availableExpressions[kvp.Key].expr)+ "\n"+ weakList + "\n---");
     }
+    
     Console.WriteLine("Total Alive Mutations = " + classheirarchy.Keys.Count);
-      // for (int i = 0; i < bitArrayList.Count; i++) {
-      //   var ba = bitArrayList[i];
-      //   Console.WriteLine("------------------------------");
-      //   Console.WriteLine(i + " : " +
-      //                     Printer.ExprToString(availableExpressions[i]) + " : " +
-      //                     combinationResults[i].ToString());
-      //   Console.WriteLine(ToBitString(ba));
-      //   Console.WriteLine("------------------------------");
-      // }
-      // return true;
 
-      // int correctExpressionCount = combinationResults.Count(elem => elem.Value == Result.CorrectProof);
-      // if (correctExpressionCount == 0) {
-      //   Console.WriteLine("Couldn't find any correct answer. Printing 0 error ones");
-      //   for (int i = 0; i < availableExpressions.Count; i++) {
-      //     if (combinationResults[i] == Result.InvalidExpr) {
-      //       var p = dafnyMainExecutor.dafnyProcesses[i];
-      //       Console.WriteLine(p.StartInfo.Arguments);
-      //       Console.WriteLine(Printer.ExprToString(dafnyMainExecutor.processToExpr[p]));
-      //     }
-      //   }
-      //   return false;
-      // }
-      // The 0th process represents no change to the predicate, and
-      // if that is a correct predicate, it means the proof already 
-      // goes through and no additional conjunction is needed.
-      if (combinationResults[0] == Result.CorrectProof || combinationResults[0] == Result.CorrectProofByTimeout) {
-        Console.WriteLine("proof already goes through and no additional conjunction is needed!");
-        return true;
-      }
-      await dafnyVerifier.FinalizeCleanup();
+    if (combinationResults[0] == Result.CorrectProof || combinationResults[0] == Result.CorrectProofByTimeout) {
+      Console.WriteLine("proof already goes through and no additional conjunction is needed!");
       return true;
-      List<int> correctExpressionsIndex = new List<int>();
-      for (int i = 0; i < mutationCap; i++) {
-        if (combinationResults[i] == Result.CorrectProof || combinationResults[i] == Result.CorrectProofByTimeout)
-          correctExpressionsIndex.Add(i);
-      }
-      // for (int i = 0; i < correctExpressionsIndex.Count; i++) {
-      //   Console.WriteLine($"correct Expr #{correctExpressionsIndex[i],3}: {Printer.ExprToString(availableExpressions[correctExpressionsIndex[i]])}");
-      // }
-      for (int i = 0; i < correctExpressionsIndex.Count; i++) {
-        for (int j = i + 1; j < correctExpressionsIndex.Count; j++) {
-          {
-            PrintImplies(program, desiredFunction, correctExpressionsIndex[i], correctExpressionsIndex[j]);
-            PrintImplies(program, desiredFunction, correctExpressionsIndex[j], correctExpressionsIndex[i]);
-          }
-        }
-      }
-      dafnyImpliesExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(true);
-      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish calculating implies, printing the dot graph");
-      string graphVizOutput = $"digraph \"{funcName}_implies_graph\" {{\n";
-      graphVizOutput += "  // The list of correct expressions\n";
-      for (int i = 0; i < correctExpressionsIndex.Count; i++) {
-        graphVizOutput += $"  {correctExpressionsIndex[i]} [label=\"{Printer.ExprToString(expressionFinder.availableExpressions[correctExpressionsIndex[i]].expr)}\"];\n";
-      }
-      graphVizOutput += "\n  // The list of edges:\n";
-      foreach (var p in dafnyImpliesExecutor.dafnyProcesses) {
-        var availableExprAIndex = dafnyImpliesExecutor.processToAvailableExprAIndex[p];
-        var availableExprBIndex = dafnyImpliesExecutor.processToAvailableExprBIndex[p];
-        // skip connecting all nodes to true
-        if (Printer.ExprToString(expressionFinder.availableExpressions[availableExprAIndex].expr) == "true" ||
-            Printer.ExprToString(expressionFinder.availableExpressions[availableExprBIndex].expr) == "true")
-          continue;
-        var output = dafnyImpliesExecutor.dafnyOutput[p];
-        if (output.EndsWith("0 errors\n")) {
-          Console.WriteLine($"edge from {availableExprAIndex} to {availableExprBIndex}");
-          graphVizOutput += $"  {availableExprAIndex} -> {availableExprBIndex};\n";
-        }
-      }
-      graphVizOutput += "}\n";
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}graph_{funcName}_implies.dot", graphVizOutput);
-      Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: end");
-      return true;
+    }
+    await dafnyVerifier.FinalizeCleanup();
+    return true;
+
+    // List<int> correctExpressionsIndex = new List<int>();
+    // for (int i = 0; i < mutationCap; i++) {
+    //   if (combinationResults[i] == Result.CorrectProof || combinationResults[i] == Result.CorrectProofByTimeout)
+    //     correctExpressionsIndex.Add(i);
+    // }
+    //   for (int i = 0; i < correctExpressionsIndex.Count; i++) {
+    //     for (int j = i + 1; j < correctExpressionsIndex.Count; j++) {
+    //       {
+    //         PrintImplies(program, desiredFunction, correctExpressionsIndex[i], correctExpressionsIndex[j]);
+    //         PrintImplies(program, desiredFunction, correctExpressionsIndex[j], correctExpressionsIndex[i]);
+    //       }
+    //     }
+    //   }
+    //   dafnyImpliesExecutor.startAndWaitUntilAllProcessesFinishAndDumpTheirOutputs(true);
+    //   Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: finish calculating implies, printing the dot graph");
+    //   string graphVizOutput = $"digraph \"{funcName}_implies_graph\" {{\n";
+    //   graphVizOutput += "  // The list of correct expressions\n";
+    //   for (int i = 0; i < correctExpressionsIndex.Count; i++) {
+    //     graphVizOutput += $"  {correctExpressionsIndex[i]} [label=\"{Printer.ExprToString(expressionFinder.availableExpressions[correctExpressionsIndex[i]].expr)}\"];\n";
+    //   }
+    //   graphVizOutput += "\n  // The list of edges:\n";
+    //   foreach (var p in dafnyImpliesExecutor.dafnyProcesses) {
+    //     var availableExprAIndex = dafnyImpliesExecutor.processToAvailableExprAIndex[p];
+    //     var availableExprBIndex = dafnyImpliesExecutor.processToAvailableExprBIndex[p];
+    //     // skip connecting all nodes to true
+    //     if (Printer.ExprToString(expressionFinder.availableExpressions[availableExprAIndex].expr) == "true" ||
+    //         Printer.ExprToString(expressionFinder.availableExpressions[availableExprBIndex].expr) == "true")
+    //       continue;
+    //     var output = dafnyImpliesExecutor.dafnyOutput[p];
+    //     if (output.EndsWith("0 errors\n")) {
+    //       Console.WriteLine($"edge from {availableExprAIndex} to {availableExprBIndex}");
+    //       graphVizOutput += $"  {availableExprAIndex} -> {availableExprBIndex};\n";
+    //     }
+    //   }
+    //   graphVizOutput += "}\n";
+    //   await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}graph_{funcName}_implies.dot", graphVizOutput);
+    //   Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: end");
+    //   return true;
     }
 
 
@@ -2242,8 +2171,8 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
     }
 
 public async Task<bool> Evaluate(Program program, Program unresolvedProgram, string funcName, string baseFuncName, int depth) {
-      if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
-        Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
+      if (DafnyOptions.O.ServerIpPortList == null) {
+        Console.WriteLine("ip port list is not given. Please specify with /serverIpPortList");
         return false;
       }
       if (DafnyOptions.O.HoleEvaluatorCommands != null) {
@@ -2253,7 +2182,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
           tasksListDictionary.Add(task.Path, task);
         }
       }
-      dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPortList, $"output_{funcName}");
+      dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.ServerIpPortList, $"output_{funcName}");
       expressionFinder = new ExpressionFinder(this);
       bool runOnce = DafnyOptions.O.HoleEvaluatorRunOnce;
       int timeLimitMultiplier = 2;
@@ -2301,7 +2230,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
 
       UnderscoreStr = RandomString(8);
       dafnyVerifier.sw = Stopwatch.StartNew();
-      Console.WriteLine($"hole evaluation begins for func {funcName}");
+      Console.WriteLine($"mutation evaluation begins for func {funcName}");
       Function desiredFunction = null;
       Function desiredFunctionUnresolved = null;
       Function topLevelDeclCopy = null;
@@ -2315,7 +2244,6 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
         dafnyVerifier.InitializeBaseFoldersInRemoteServers(program, includeParser.commonPrefix);
         affectedFiles.Add(filename);
         affectedFiles = affectedFiles.Distinct().ToList();
-        // calculate holeEvaluatorConstraint Invocation
         if (constraintFunc != null) {
           Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDictForInputs = new Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>>();
           foreach (var formal in baseFunc.Formals) {
@@ -2779,7 +2707,6 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
         includesList += "include \"" +includeParser.NormalizedTo(program.FullName,q.IncludedFilename) + "\"\n";
 
       }
-            // Console.WriteLine("--------------\n");
 
           pr.PrintProgram(program, true);
           // Console.WriteLine("----\n" + Printer.ModuleDefinitionToString(program.DefaultModuleDef,DafnyOptions.PrintModes.Everything));
@@ -2799,7 +2726,6 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
               code = code + "/*";
             }else{
               //Comment out single 'proof' lemma
-              // Console.WriteLine("=----> " + lemma.Name);
               // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
               // if(lemmaLoc == -1 )
               // {
@@ -2820,7 +2746,6 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
           //     lemmaLoc = code.IndexOf(lemma.Name+"(");
           //   }
           //   int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-          //   // Console.WriteLine("here = " + lemmaLocEns);
           //   code = code.Insert(lemmaLocEns-1,"ensures false;\n");
           // }
 
@@ -2834,7 +2759,6 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
             code = code.Insert(fnIndex-1,revisedVac+"\n");
             // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
             // int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-            // // Console.WriteLine("here = " + lemmaLocEns);
             // code = code.Insert(lemmaLocEns-1,"ensures false;\n");
           }
           
@@ -2865,7 +2789,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
         List<string> args = new List<string>();
 
         foreach (var arg in argList) {
-          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams") ) {
+          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/mutationTarget") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams") ) {
             args.Add(arg);
 ///mutationsFromParams
           }
@@ -2878,14 +2802,8 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
         // args.Add("/proc:*" + lemma.CompileName );
 
         var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
-                  // Console.WriteLine("hereerere 2");
 
         var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
-                  // Console.WriteLine("hereerere 3 " + changingFilePath + " :: " + constraintFuncChangingFilePath);
-                  foreach (var p in changingFilePath.Split("/"))
-                  {
-                    // Console.WriteLine(p);
-                  }
 
         var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
 
@@ -2894,14 +2812,12 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
         args.Add("/compile:0");
       //  List<ProofEvaluator.ExprStmtUnion> exprStmtList = new List<ProofEvaluator.ExprStmtUnion>();
       //   dafnyVerifier.runDafnyProofCheck(code,args,exprStmtList,0);
-      // Console.WriteLine("code = " + code);
         dafnyVerifier.runDafny(code, args,
             expr, cnt, lemmaForExprValidityPosition, lemmaForExprValidityStartPosition,$"{remoteFolderPath.Path}/{constraintFuncChangingFilePath}");
        
       }
       else
       {
-        Console.WriteLine("HEHREHREHREHREHREHR __ Duplcate");
         DuplicateAllFiles(program, workingDir, cnt);
 
         Expression newFuncBody = null;
@@ -2961,7 +2877,6 @@ public void MutationClassification(Program program, Program proofProg,Function f
   // mutatedPredA = GetBaseLemmaListArbitMutation(program,func,null,MutationsPaths[0],expressionFinder.availableExpressions[firstCnt],"a");
   // mutatedPredB = GetBaseLemmaListArbitMutation(program,func,null,MutationsPaths[0],expressionFinder.availableExpressions[sndCnt],"b");
   // lemmaName = GetIsWeakerClassificationLemma(func,MutationsPaths[0], null, null,"a_", "b_");
-  // Console.WriteLine(" .....mutatedPred= " + mutatedPredA);
   string code = "";
 
   using (var wr = new System.IO.StringWriter()) {
@@ -3007,7 +2922,7 @@ public void MutationClassification(Program program, Program proofProg,Function f
       List<string> args = new List<string>();
 
       foreach (var arg in argList) {
-        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams") ) {
+        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/mutationTarget") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams") ) {
           args.Add(arg);
         }
       }
@@ -3111,7 +3026,6 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           //     pr1.PrintFunction(func, 0,false);
           //     var origFunc = wr1.ToString();
           //     Console.WriteLine(origFunc);
-          //     // func.Name = "EEEE";
           //   }
           // }
           func.Body = expr.expr; // Replace Whole Body
@@ -3195,7 +3109,6 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             code = code.Insert(fnIndex-1,revisedVac+"\n");
             // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
             // int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-            // // Console.WriteLine("here = " + lemmaLocEns);
             // code = code.Insert(lemmaLocEns-1,"ensures false;\n");
           }
           
@@ -3207,7 +3120,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         List<string> args = new List<string>();
 
         foreach (var arg in argList) {
-          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams") ) {
+          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/mutationTarget") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams") ) {
             args.Add(arg);
           }
         }
@@ -3217,9 +3130,8 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           // args.Add("/proc:*" + lemma.Name +"*");
          }
         // args.Add("/proc:*" + lemma.CompileName );
-        foreach (var arg in args) {
-          // Console.WriteLine("hereerere "  + arg);
-        }
+        // foreach (var arg in args) {
+        // }
         var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
                 // var test = includeParser.NormalizedTo(program.FullName,func.BodyStartTok.Filename);
 
@@ -3443,7 +3355,6 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           if((vacTest && includeProof)){
             int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
             int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-            // Console.WriteLine("here = " + lemmaLocEns);
             // code = code.Insert(lemmaLocEns-1,"ensures false;\n");
             code = code.Insert(lemmaLoc-1,validityCheck+"\n");
           }
@@ -3458,7 +3369,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         List<string> args = new List<string>();
 
         foreach (var arg in argList) {
-          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams") ) {
+          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/mutationTarget") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams") ) {
             args.Add(arg);
           }
         }
@@ -3500,7 +3411,6 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         }else{
           foreach (var depn in includesSet)
             {
-              // Console.WriteLine("HERE => " + $"{remoteFilePathLemma}/{depn}");
               var lastDire = constraintFuncChangingFilePathLemma.LastIndexOf("/");
               var normalizedDepn = depn;
               if(lastDire > 0){
@@ -3564,7 +3474,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         var argList = env.Split(' ');
         List<string> args = new List<string>();
         foreach (var arg in argList) {
-          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")) {
+          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/mutationTarget") && arg.StartsWith("/")) {
             args.Add(arg);
           }
         }
@@ -3702,7 +3612,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       var argList = env.Split(' ');
       string args = "";
       foreach (var arg in argList) {
-        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && !arg.StartsWith("/proc:") && args.StartsWith("/")) {
+        if (!arg.EndsWith(".dfy") && !arg.StartsWith("/mutationTarget") && !arg.StartsWith("/proc:") && args.StartsWith("/")) {
           args += arg + " ";
         }
       }

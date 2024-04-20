@@ -803,9 +803,12 @@ if (type is UserDefinedType) {
 
     if(kind == "function method") //temp hacky [remove for auction?] [add for div/harmonic]
     {
-      // wr.Write(kind);//
-      wr.Write("function");
+      if(DafnyOptions.O.FunctionMethodFlag){
+          wr.Write("function");
       }else{
+        wr.Write(kind);//
+      }
+    }else{
       wr.Write(kind);
     }
       PrintAttributes(attrs);

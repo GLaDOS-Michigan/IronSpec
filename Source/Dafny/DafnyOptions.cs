@@ -184,7 +184,7 @@ namespace Microsoft.Dafny {
 
     public string FindHoleFromFunctionName = null;
     public string ProofEvaluatorLemmaName = null;
-    public string HoleEvaluatorFunctionName = null;
+    public string MutationTarget = null;
     public string ProofLemmaName = null;
     public string ProofModuleName = null;
     public string ProofLocation = null;
@@ -193,6 +193,7 @@ namespace Microsoft.Dafny {
     public bool EvaluateAllAtOnce = false;
     public bool ProofOnly = false;
     public bool CheckInputAndOutputSpecified = false;
+    public bool FunctionMethodFlag = false;
 
     public bool InPlaceMutation = false;
     public bool IsRequires = false; // only used in predicate mutations
@@ -209,7 +210,7 @@ namespace Microsoft.Dafny {
     // public string HoleEvaluatorWorkingDirectory = "/tmp/";
     public string HoleEvaluatorWorkingDirectory = "./outputLogs/";
 
-    public string HoleEvaluatorServerIpPortList = null;
+    public string ServerIpPortList = null;
     public string HoleEvaluatorInvariant = null;
     public string HoleEvaluatorConstraint = null;
     public string HoleEvaluatorRemoveFileLine = null;
@@ -671,9 +672,9 @@ namespace Microsoft.Dafny {
           }
           return true;
 
-        case "holeEval":
+        case "mutationTarget":
           if (ps.ConfirmArgumentCount(1)) {
-            HoleEvaluatorFunctionName = args[ps.i];
+            MutationTarget = args[ps.i];
           }
           return true;
         // MutationRootName
@@ -712,6 +713,9 @@ namespace Microsoft.Dafny {
           return true;
         case "checkInputAndOutputSpecified":
           CheckInputAndOutputSpecified = true;
+          return true;
+        case "functionMethodFlag":
+          FunctionMethodFlag = true;
           return true;
         case "inPlaceMutation":
           InPlaceMutation = true;
@@ -767,9 +771,9 @@ namespace Microsoft.Dafny {
           HoleEvaluatorRunOnce = true;
           return true;
         
-        case "holeEvalServerIpPortList":
+        case "serverIpPortList":
           if (ps.ConfirmArgumentCount(1)) {
-            HoleEvaluatorServerIpPortList = args[ps.i];
+            ServerIpPortList = args[ps.i];
           }
           return true;
 

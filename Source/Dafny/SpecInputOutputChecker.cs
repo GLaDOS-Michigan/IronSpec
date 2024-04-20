@@ -473,7 +473,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
 
 
     public async Task<bool> EvaluateInputOutputCheck(Program program, Program unresolvedProgram, string funcName, string lemmaName, string proofModuleName, string baseFuncName, int depth, bool mutationsFromParams,Program proofProg, Program unresolvedProofProgram) {
-      if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
+      if (DafnyOptions.O.ServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
         return false;
       }
@@ -765,7 +765,7 @@ public bool simpleReqSanityCheck(Method desiredMethod, Formal inputF,bool ret)
 //       }
 
 public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolvedProgram, string funcName, string lemmaName, string proofModuleName, string baseFuncName, int depth, bool mutationsFromParams,Program proofProg, Program unresolvedProofProgram) {
-      if (DafnyOptions.O.HoleEvaluatorServerIpPortList == null) {
+      if (DafnyOptions.O.ServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /holeEvalServerIpPortList");
         return false;
       }
@@ -790,7 +790,7 @@ public async Task<bool> EvaluateMethodInPlace(Program program, Program unresolve
         }
         return false;
       }
-            dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.HoleEvaluatorServerIpPortList, $"output_{funcName}");
+            dafnyVerifier = new DafnyVerifierClient(DafnyOptions.O.ServerIpPortList, $"output_{funcName}");
 
       CG = GetCallGraph(baseFunc);
       Function func = GetFunction(program, funcName);
@@ -2454,7 +2454,7 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
         List<string> args = new List<string>();
 
         foreach (var arg in argList) {
-          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/holeEval") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams")  && !arg.StartsWith("/inPlaceMutation") ) {
+          if (!arg.EndsWith(".dfy") && !arg.StartsWith("/mutationTarget") && arg.StartsWith("/")&& !arg.StartsWith("/proofName") && !arg.StartsWith("/mutationsFromParams")  && !arg.StartsWith("/inPlaceMutation") ) {
             args.Add(arg);
 ///mutationsFromParams
           }

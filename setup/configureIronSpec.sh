@@ -18,33 +18,38 @@ done
 echo ListOfNodeIds = $ListOfNodeIds
 echo Username = $Username
 
-#Calculate IP addresses of nodes
+#Calculate IP addresses of nodes and create ipPorts.txt
+touch ipPorts.txt
+# > ipPorts.txt
 for id in $ListOfNodeIds; do
     echo "Getting IP for Node ID = $id"
-    ListOfIps+="$(ssh $Username@clnode${id}.clemson.cloudlab.us ifconfig | grep "130.127" | awk '{print $2}') "
+    nodeId="$(ssh $Username@clnode${id}.clemson.cloudlab.us ifconfig | grep "130.127" | awk '{print $2}')"
+    echo "$nodeId:50051" >> ipPorts.txt
+    ListOfIps+="$nodeId"
     ListOfIps+=" "
 done
 
-RootIP+="$(echo $ListOfIps | awk '{print $1}')"
-echo "Configuring ssh keys between rootnode and all others..."
-echo "rootIpPort = $RootIP"
-(echo ""; echo ""; echo "";) | ssh $Username@${RootIP} "ssh-keygen -q"
-tmpFile=$(mktemp)
-echo $tmpFile
-scp $Username@${RootIP}:.ssh/id_rsa.pub ${tmpFile}
-for ipPort in $ListOfIps
-do    
-    ssh $Username@${ipPort} ls
-    scp ${tmpFile} $Username@${ipPort}:.ssh/rootSSHPublicKey.rsa
-    ssh $Username@${ipPort} "cat .ssh/rootSSHPublicKey.rsa >> .ssh/authorized_keys";
-done
+
+# RootIP+="$(echo $ListOfIps | awk '{print $1}')"
+# echo "Configuring ssh keys between rootnode and all others..."
+# echo "rootIpPort = $RootIP"
+# (echo ""; echo ""; echo "";) | ssh $Username@${RootIP} "ssh-keygen -q"
+# tmpFile=$(mktemp)
+# echo $tmpFile
+# scp $Username@${RootIP}:.ssh/id_rsa.pub ${tmpFile}
+# for ipPort in $ListOfIps
+# do    
+#     ssh $Username@${ipPort} ls
+#     scp ${tmpFile} $Username@${ipPort}:.ssh/rootSSHPublicKey.rsa
+#     ssh $Username@${ipPort} "cat .ssh/rootSSHPublicKey.rsa >> .ssh/authorized_keys";
+# done
 
 for ip in $ListOfIps; do
     echo "Testing ssh connection to ID = $id"
     ssh $Username@${ip} ls;
 done
 
-echo "---- SSH Key configuration done ----"
+# echo "---- SSH Key configuration done ----"
 
 echo "---- Installing And Building Dependencies ----"
 
@@ -68,7 +73,7 @@ for ip in $ListOfIps; do
     #clone IRONSPEC repo
     
     #add user-specific elements
-    ssh $Username@${ip} "(sed "s/\[username\]/edgoldwe/" $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs)";
+    ssh $Username@${ip} "(sed "s/\[username\]/$Username/" $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs)";
     #buld IRONSPEC
     ssh $Username@${ip} "(make exe)"
 
@@ -94,9 +99,9 @@ done
 
 
 
-# sed "s/[username]/$1/" ./setup/nodeRS.sh > tmp.sh && mv tmp.sh ./setup/nodeRS.sh
-# sed "s/[username]/$1/" ./setup/nodeRS.sh > tmp.sh && mv tmp.sh ./setup/nodeRS.sh
-# echo "Configuring DafnyVerifier.cs"
+# # # sed "s/[username]/$1/" ./setup/nodeRS.sh > tmp.sh && mv tmp.sh ./setup/nodeRS.sh
+# # # sed "s/[username]/$1/" ./setup/nodeRS.sh > tmp.sh && mv tmp.sh ./setup/nodeRS.sh
+# # # echo "Configuring DafnyVerifier.cs"
 
 
 

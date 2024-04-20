@@ -305,7 +305,7 @@ namespace Microsoft.Dafny {
       string err = Dafny.Main.ParseCheck(dafnyFiles, programName, reporter, out var dafnyProgram);
       Dafny.Main.Parse(dafnyFiles, programName, reporter, out var dafnyUnresolvedProgram);
       ProofEvaluator proofEvaluator = null;
-      HoleEvaluator holeEvaluator = null;
+      MutationEvaluator mutationEvaluator = null;
       SpecInputOutputChecker specInputOutputChecker = null;
       try {
         if (DafnyOptions.O.FindHoleFromFunctionName != null) {
@@ -336,7 +336,7 @@ namespace Microsoft.Dafny {
         Dafny.Main.Parse(proofFiles, df1.FilePath, reporter, out var dafnyUnresolvedProofProgram);
         var foundDesiredFunction = specInputOutputChecker.EvaluateMethodInPlace(dafnyProgram,
             dafnyUnresolvedProgram,
-            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.MutationTarget,
             DafnyOptions.O.ProofLemmaName,
             null,
             DafnyOptions.O.HoleEvaluatorBaseFunctionName,
@@ -357,7 +357,7 @@ namespace Microsoft.Dafny {
         Dafny.Main.Parse(proofFiles, df1.FilePath, reporter, out var dafnyUnresolvedProofProgram);
         var foundDesiredFunction = specInputOutputChecker.EvaluateInputOutputCheck(dafnyProgram,
             dafnyUnresolvedProgram,
-            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.MutationTarget,
             DafnyOptions.O.ProofLemmaName,
             null,
             DafnyOptions.O.HoleEvaluatorBaseFunctionName,
@@ -365,13 +365,13 @@ namespace Microsoft.Dafny {
             DafnyOptions.O.MutationsFromParams,dafnyProofProgram,dafnyUnresolvedProofProgram);
                     return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
       }
-      if (DafnyOptions.O.HoleEvaluatorFunctionName != null 
+      if (DafnyOptions.O.MutationTarget != null 
           && DafnyOptions.O.ProofLemmaName != null
           && DafnyOptions.O.ProofModuleName != null) {
-         holeEvaluator = new HoleEvaluator();
-        var foundDesiredFunction = holeEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
+         mutationEvaluator = new MutationEvaluator();
+        var foundDesiredFunction = mutationEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
             dafnyUnresolvedProgram,
-            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.MutationTarget,
             DafnyOptions.O.ProofLemmaName,
             DafnyOptions.O.ProofModuleName,
             DafnyOptions.O.HoleEvaluatorBaseFunctionName,
@@ -379,8 +379,8 @@ namespace Microsoft.Dafny {
             DafnyOptions.O.MutationsFromParams,null,null);
         return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
       }
-      if (DafnyOptions.O.HoleEvaluatorFunctionName != null && DafnyOptions.O.ProofLemmaName != null) {
-         holeEvaluator = new HoleEvaluator();
+      if (DafnyOptions.O.MutationTarget != null && DafnyOptions.O.ProofLemmaName != null) {
+         mutationEvaluator = new MutationEvaluator();
       if(DafnyOptions.O.ProofLocation != null){
         var df1 = new DafnyFile(DafnyOptions.O.ProofLocation);
          var proofFiles = new List<DafnyFile>();
@@ -388,9 +388,9 @@ namespace Microsoft.Dafny {
         string programName1 = dafnyFileNames.Count == 1 ? dafnyFileNames[0] : "the_program";
         string err1 = Dafny.Main.ParseCheck(proofFiles, df1.FilePath, reporter, out var dafnyProofProgram);
         Dafny.Main.Parse(proofFiles, df1.FilePath, reporter, out var dafnyUnresolvedProofProgram);
-        var foundDesiredFunction = holeEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
+        var foundDesiredFunction = mutationEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
             dafnyUnresolvedProgram,
-            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.MutationTarget,
             DafnyOptions.O.ProofLemmaName,
             null,
             DafnyOptions.O.HoleEvaluatorBaseFunctionName,
@@ -399,9 +399,9 @@ namespace Microsoft.Dafny {
                     return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
 
       }else{
-        var foundDesiredFunction = holeEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
+        var foundDesiredFunction = mutationEvaluator.EvaluateFilterStrongerAndSame(dafnyProgram,
             dafnyUnresolvedProgram,
-            DafnyOptions.O.HoleEvaluatorFunctionName,
+            DafnyOptions.O.MutationTarget,
             DafnyOptions.O.ProofLemmaName,
             null,
             DafnyOptions.O.HoleEvaluatorBaseFunctionName,
@@ -428,18 +428,18 @@ namespace Microsoft.Dafny {
               DafnyOptions.O.HoleEvaluatorExpressionDepth);
           return foundDesiredLemma.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
         }
-        if (DafnyOptions.O.HoleEvaluatorFunctionName != null) {
-          holeEvaluator = new HoleEvaluator();
-          var foundDesiredFunction = holeEvaluator.Evaluate(dafnyProgram,
+        if (DafnyOptions.O.MutationTarget != null) {
+          mutationEvaluator = new MutationEvaluator();
+          var foundDesiredFunction = mutationEvaluator.Evaluate(dafnyProgram,
               dafnyUnresolvedProgram,
-              DafnyOptions.O.HoleEvaluatorFunctionName,
+              DafnyOptions.O.MutationTarget,
               DafnyOptions.O.HoleEvaluatorBaseFunctionName,
               DafnyOptions.O.HoleEvaluatorDepth);
           return foundDesiredFunction.Result ? ExitValue.SUCCESS : ExitValue.COMPILE_ERROR;
         }
         if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
-          holeEvaluator = new HoleEvaluator();
-          var foundDesiredFunction = holeEvaluator.EvaluateAfterRemoveFileLine(dafnyProgram,
+          mutationEvaluator = new MutationEvaluator();
+          var foundDesiredFunction = mutationEvaluator.EvaluateAfterRemoveFileLine(dafnyProgram,
               dafnyUnresolvedProgram,
               DafnyOptions.O.HoleEvaluatorRemoveFileLine,
               DafnyOptions.O.HoleEvaluatorBaseFunctionName,
@@ -448,9 +448,9 @@ namespace Microsoft.Dafny {
         }
       }
       catch (Exception e) {
-        if (holeEvaluator != null) {
-          holeEvaluator.dafnyVerifier.Cleanup();
-          await holeEvaluator.dafnyVerifier.FinalizeCleanup();
+        if (mutationEvaluator != null) {
+          mutationEvaluator.dafnyVerifier.Cleanup();
+          await mutationEvaluator.dafnyVerifier.FinalizeCleanup();
         }
         if (proofEvaluator != null) {
           proofEvaluator.dafnyVerifier.Cleanup();

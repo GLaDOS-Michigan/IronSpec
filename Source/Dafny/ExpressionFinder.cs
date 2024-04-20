@@ -22,7 +22,7 @@ namespace Microsoft.Dafny {
 
     private int prevDepthExprStartIndex = 1;
     private int numberOfSingleExpr = 0;
-    private HoleEvaluator holeEval = null;
+    private MutationEvaluator mutationEval = null;
     private ProofEvaluator proofEval = null;
 
     private SpecInputOutputChecker specInputOutputChecker = null;
@@ -116,8 +116,8 @@ namespace Microsoft.Dafny {
       }
     }
 
-    public ExpressionFinder(HoleEvaluator holeEval) {
-      this.holeEval = holeEval;
+    public ExpressionFinder(MutationEvaluator mutationEval) {
+      this.mutationEval = mutationEval;
     }
     public ExpressionFinder(ProofEvaluator proofEval) {
       this.proofEval = proofEval;
@@ -152,8 +152,8 @@ namespace Microsoft.Dafny {
     public bool IsGoodExprCombinationToExecute(int indexI, int indexJ) {
       Contract.Requires(indexI >= 0 && indexI < availableExpressions.Count);
       Contract.Requires(indexJ >= 0 && indexJ < availableExpressions.Count);
-      if ((!HoleEvaluator.IsGoodResult(combinationResults[indexI])) ||
-          (!HoleEvaluator.IsGoodResult(combinationResults[indexJ]))) {
+      if ((!MutationEvaluator.IsGoodResult(combinationResults[indexI])) ||
+          (!MutationEvaluator.IsGoodResult(combinationResults[indexJ]))) {
         return false;
       }
       BitArray combinedBitArray = new BitArray(bitArrayList[indexI]);
@@ -192,7 +192,7 @@ namespace Microsoft.Dafny {
         // Console.WriteLine($"{ToBitString(countBitArray)} {ToBitString(zeroBitArray)} {countBitArray.Equals(zeroBitArray)}");
         if (bitArrayStringToIndex.ContainsKey(subsetString)) {
           int index = bitArrayStringToIndex[subsetString];
-          if (!HoleEvaluator.IsGoodResult(combinationResults[index]))
+          if (!MutationEvaluator.IsGoodResult(combinationResults[index]))
             return false;
         }
         Increment(ref countBitArray);

@@ -47,7 +47,7 @@ namespace Microsoft.Dafny {
             func.Attributes, func.SignatureEllipsis);
       List<Tuple<Function, FunctionCallExpr, Expression>> p = new List<Tuple<Function, FunctionCallExpr, Expression>>();
       p.Add(new Tuple<Function, FunctionCallExpr, Expression>(rootFunc, null, null));
-      string lemmaForExprValidityString = HoleEvaluator.GetValidityLemma(p, null, constraintExpr, -1,0);
+      string lemmaForExprValidityString = MutationEvaluator.GetValidityLemma(p, null, constraintExpr, -1,0);
       int lemmaForExprValidityPosition = 0;
       int lemmaForExprValidityStartPosition = 0;
 
@@ -97,7 +97,7 @@ namespace Microsoft.Dafny {
         var expectedOutput =
           $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
         var expectedInconclusiveOutputStart =
-          $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({lemmaStartPosition},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+          $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({lemmaStartPosition},{MutationEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
         Result result = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
         if (result != Result.IncorrectProof) {
           // correctExpressions.Add(dafnyMainExecutor.processToExpr[p]);
@@ -177,10 +177,10 @@ namespace Microsoft.Dafny {
         timeLimitMultiplierLength++;
         timeLimitMultiplier /= 10;
       }
-      HoleEvaluator.validityLemmaNameStartCol = 30 + timeLimitMultiplierLength;
+      MutationEvaluator.validityLemmaNameStartCol = 30 + timeLimitMultiplierLength;
       UnderscoreStr = RandomString(8);
       holeFinderExecutor.sw = Stopwatch.StartNew();
-      Function func = HoleEvaluator.GetFunction(program, funcName);
+      Function func = MutationEvaluator.GetFunction(program, funcName);
       if (func == null) {
         Console.WriteLine($"couldn't find function {funcName}. List of all functions:");
         foreach (var kvp in program.ModuleSigs) {
@@ -193,7 +193,7 @@ namespace Microsoft.Dafny {
       // calculate holeEvaluatorConstraint Invocation
       Function constraintFunc = null;
       if (DafnyOptions.O.HoleEvaluatorConstraint != null) {
-        constraintFunc = HoleEvaluator.GetFunction(program, DafnyOptions.O.HoleEvaluatorConstraint);
+        constraintFunc = MutationEvaluator.GetFunction(program, DafnyOptions.O.HoleEvaluatorConstraint);
         if (constraintFunc == null) {
           Console.WriteLine($"constraint function {DafnyOptions.O.HoleEvaluatorConstraint} not found!");
           return null;
@@ -222,7 +222,7 @@ namespace Microsoft.Dafny {
         }
         Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr.expr)}");
       }
-      var CG = HoleEvaluator.GetCallGraph(func);
+      var CG = MutationEvaluator.GetCallGraph(func);
       Function nullFunc = new Function(
         func.tok, "nullFunc", func.HasStaticKeyword, func.IsGhost,
         func.TypeArgs, func.Formals, func.Result, func.ResultType,
@@ -249,7 +249,7 @@ namespace Microsoft.Dafny {
       var expectedOutput =
         $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({position},0): Error: A postcondition might not hold on this return path.";
       var expectedInconclusiveOutputStart = 
-        $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({lemmaStartPosition},{HoleEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
+        $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{fileName}.dfy({lemmaStartPosition},{MutationEvaluator.validityLemmaNameStartCol}): Verification inconclusive";
       Console.WriteLine(expectedInconclusiveOutputStart);
       var nullChangeResult = DafnyExecutor.IsCorrectOutput(output, expectedOutput, expectedInconclusiveOutputStart);
       if (nullChangeResult != Result.IncorrectProof) {
