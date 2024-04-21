@@ -308,22 +308,6 @@ namespace Microsoft.Dafny {
       MutationEvaluator mutationEvaluator = null;
       SpecInputOutputChecker specInputOutputChecker = null;
       try {
-        if (DafnyOptions.O.FindHoleFromFunctionName != null) {
-          var holeFinder = new HoleFinder();
-          Function holeFunc = null;
-          if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
-            holeFunc = holeFinder.FindHoleAfterRemoveFileLine(dafnyProgram,
-                DafnyOptions.O.HoleEvaluatorRemoveFileLine,
-                DafnyOptions.O.FindHoleFromFunctionName);
-          } else {
-            holeFunc = holeFinder.FindHole(dafnyProgram,
-                DafnyOptions.O.FindHoleFromFunctionName);
-          }
-          if (holeFunc != null) {
-            Console.WriteLine($"hole is at func :{holeFunc.FullDafnyName}");
-          }
-          return ExitValue.SUCCESS;
-        }
       if(DafnyOptions.O.InPlaceMutation) //works for methods
       {
           Console.WriteLine("Assumes Proof location");
