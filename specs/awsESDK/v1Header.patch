@@ -1,0 +1,15 @@
+239c239,240
+<   opaque function ReadV1MessageType(
+---
+>   // opaque 
+>   function {:opaque} ReadV1MessageType(
+262c263,264
+<   opaque function ReadV1ReservedBytes(
+---
+>   // opaque 
+>   function {:opaque} ReadV1ReservedBytes(
+282c284,285
+<   opaque function ReadV1HeaderIvLength(
+---
+>   // opaque 
+>   function {:opaque} ReadV1HeaderIvLength(

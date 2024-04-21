@@ -1,0 +1,40 @@
+78c78,79
+<   opaque ghost predicate CorrectlyReadRange(
+---
+>   // opaque 
+>   ghost predicate {:opaque} CorrectlyReadRange(
+177c178,179
+<   opaque function Read(
+---
+>   // opaque 
+>   function {:opaque} Read(
+214c216,217
+<   opaque function ReadUInt16(
+---
+>   // opaque 
+>   function {:opaque} ReadUInt16(
+233c236,237
+<   opaque function ReadUInt32(
+---
+>   // opaque 
+>   function {:opaque} ReadUInt32(
+252c256,257
+<   opaque function ReadUInt64(
+---
+>   // opaque 
+>   function {:opaque} ReadUInt64(
+272c277,278
+<   opaque function ReadShortLengthSeq(
+---
+>   // opaque
+>   function {:opaque} ReadShortLengthSeq(
+299c305,306
+<   opaque function ReadUint32Seq(
+---
+>   // opaque
+>   function {:opaque} ReadUint32Seq(
+327c334,335
+<   opaque function ReadUint64Seq(
+---
+>   // opaque 
+>   function {:opaque} ReadUint64Seq(

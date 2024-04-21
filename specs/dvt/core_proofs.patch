@@ -1,0 +1,15 @@
+39a40,53
+>     predicate non_slashable_attestations(
+>         dv: DVState
+>     )
+>     {
+>         forall a: Attestation, a': Attestation
+>                 | 
+>                 && a in dv.all_attestations_created
+>                 && is_valid_attestation(a, dv.dv_pubkey)
+>                 && a' in dv.all_attestations_created
+>                 && is_valid_attestation(a', dv.dv_pubkey)     
+>                 ::
+>                 && !is_slashable_attestation_data_eth_spec(a.data, a'.data)
+>                 && !is_slashable_attestation_data_eth_spec(a'.data, a.data)
+>     }

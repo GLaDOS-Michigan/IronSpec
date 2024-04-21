@@ -14,7 +14,7 @@ IronSpec brings together three different spec-testing techniques; Automatic Sani
 * bazel-4.0.0
 * dotnet-6 
 
-NOTE: All dependencies can be installed by running `./setup/configureIronspec.sh`
+> **_NOTE:_** All dependencies will be installed when running `./setup/configureIronspec.sh` - detailed below
 
 # Setup
 
@@ -26,31 +26,26 @@ In cloudlab, a default profile is available titled "IronSpecConfigNodes" and is 
 
 After creating a cloudlab experiment, make note of all the id's of the nodes from the Node column in the experiment page. For example the id of Node "clnode008" is 008.
 
-<!-- make sure to replace placeholder values in appropriate locations in each of the following scripts. (i.e. [username], [root_ip], [list_of_ips], [list_of_node_ids]) -->
-<!-- ##### Find ip addresses
-
-Note the IP addresses of the machines intended to use inFind the ip addresses of all nodes in the experiment, using running `echoIp.sh` in `/setup` from a local machine will help. -->
 
 ##### Setup ssh keys
 
-The first step is to set up the ssh keys between all of the cloudlab nodes. Do this from a local machine (non-cloudlab). 
+The first step is to set up the ssh keys between all of the cloudlab nodes. 
+
+**Make sure to follow these steps from a local machine (non-cloudlab).** 
 
 Run `./setup/configureSSHKeys.sh [username] [list_of_node_ids]`
 
-`username` is your cloudlab username
-`list_of_node_ids` is a list of the cloudlab node ids seperated by spaces. 
+* `username`: cloudlab username
+* `list_of_node_ids`: A list of the cloudlab node ids seperated by spaces. 
 
-For example if the list of nodes included, run: `clnode008 and clnode015` - `./setup/configureSSHKeys.sh [username] 008 015`
+For example if the list of nodes included, run: `clnode008, clnode010 and clnode015` - `./setup/configureSSHKeys.sh [username] 008 010 015`
 
-<!-- Populate `nodeRS.sh` in `/setup` with the IP addresses found in the previous step. `rootIpPort` should be the Ip of the root node, and the remaining IP addresses should be entered on line 8 (including the root).
-
-To test if this step has worked up to this point, run `testRS.sh` in `/setup` from the root node in the cloudlab experiment (the [list_of_node_ids] on line 6 should contain the ids of all nodes in the experiment excluding the root node).  -->
 
 ##### Setup cloudlab nodes
 
 Run `./setup/configureIronSpec.sh [username] [list_of_node_ids]`
 
-From the cloudlab node that will act as the "root" node for the experiment. (i.e the node with the smallest id)
+**From the cloudlab node that will act as the "root" node for the experiment. (i.e the node with the smallest id)**
 
 This script will install all the dependencies on each node in the experiment, build IronSpec, and start the dafny-GRPC servers on all of the nodes at port `:50051`. This step may take some time to complete.
 
@@ -60,8 +55,6 @@ If there is ever a need to start or stop the dafny-GRPC servers run either:
 
 
 > **_NOTE:_**  to check if a grpc server is running `pidof server Dafny`
-
-
 
 # Specs
 
@@ -97,22 +90,22 @@ To run all automatic experiments (Both Mutation Testing and Automatic Sanity Che
 
 > **_NOTE:_** Running `./runExperiments.sh` will automatically clone all external specs into the `./spec` directory to the originally tested commit hash. Additionally small patches will be applied to external specs to accomodate for small changes between Dafny versions.
 
-Output and logs for all experiments will be found in `./experimentOutput` split for each spec and for each experiment. The end of each file ending in `..._output.txt` for each experiemnt will show the final results.
+Output and logs for each experiment will be found in `./experimentOutput` split into different sub-directories for each spec and for each experiment. The tail of each produced file's name ending in `..._output.txt` for each experiemnt will show the final results.
 
 **After `./runExperiments.sh` finishes, check `./experimentOutput/finalResults.txt` for a recreation of Tables 3 and 4 from the paper based on the results of running `./runExperiments.sh`** 
 
-> **_NOTE:_**  The original experimental setup consisted of 1 root node and 20 nodes running the dafny-GRPC servers to parralleize checking verification conditions. Using a different configuration will impact the total time to run each experiment. The time difference is not strictly linear based on the number of nodes. There is a minimum time needed 
+> **_NOTE:_**  The original experimental setup consisted of 1 root node and 20 nodes running the dafny-GRPC servers to parralleize checking verification conditions. Using a different configuration will impact the total time to run each experiment. The time difference is not strictly linear based on the number of nodes. Having too few nodes may cause verification timeouts that result from overloading the various nodes. 
 
 
 ##### Mutation Testing 
 
 The general command to run mutation testing follow this form:
 
-`./Binaries/Dafny` [Standard Dafny Arguments] [IronSpec Arguemnts] [full path to the file containing mutation target] `&> output.txt`
+`./Binaries/Dafny [Standard Dafny Arguments] [IronSpec Arguemnts] [full-path-to-the-file-containing-mutation-target] &> output.txt`
 
 For example to test the specification for a Max method (`/specs/max/maxPredMutations.dfy`), run the following command from the root node:
 ```
-./Binaries/Dafny /compile:0 /timeLimit:1520 /trace /arith:5 /noCheating:1 /holeEval:maxExample.maxSpec /proofName:maxTest.maxT /proofLocation:"$(pwd)/specs/max/lemmaMaxTestCorrect.dfy" /holeEvalServerIpPortList:ipPorts.txt $(pwd)/specs/max/maxPredMutations.dfy &> output.txt
+./Binaries/Dafny /compile:0 /timeLimit:1520 /trace /arith:5 /noCheating:1 /mutationTarget:maxExample.maxSpec /proofName:maxTest.maxT /proofLocation:"$(pwd)/specs/max/lemmaMaxTestCorrect.dfy" /holeEvalServerIpPortList:ipPorts.txt $(pwd)/specs/max/maxPredMutations.dfy &> output.txt
 ```
 
 After executing this command, see the output in a file named `output.txt` and the tail of the output will look like this:
@@ -129,7 +122,7 @@ root = (0):(a > b ==> c == a) && (b + 1 > a ==> c == b)
 Total Alive Mutations = 1
 
 ```
-This output indicates that there is a single alive mutation to investigate with ID 0 - `(a > b ==> c == a) && (b + 1 > a ==> c == b)` 
+This output indicates that there is a single alive mutation(with ID 0) to investigate - `(a > b ==> c == a) && (b + 1 > a ==> c == b)` 
 
 Full experiment logs can be found in `./outputLogs` which will contain the logs for each mutation and the intermediary files genereated for the different mutation testing passes. Any `.txt` file contains the output from the dafny verifier for each mutation. There are many `.dfy` files genereated to test the different mutation passes (i.e. weaker, vac, full, classification)
 
@@ -144,17 +137,19 @@ The general command to run mutation testing follow this form:
 ```
 
 # SpecTesting Proof(STPs) Examples
+A brief description and some examples are included in `./STPS` 
 
-# Directory Structure
+STPs are just dafny proofs, so running STPS requires no additional instrumentation other than just running Dafny. 
+
 
 # IronSpec arguments
 
 | Argument    | Description |
 | -------- | ------- |
-| /holeEval:[name] | Name of predicate for mutation target|
-| /proofName:[name]  | Name of lemma for full end-to-end proof    |
+| /mutationTarget:[name] | Full Name of predicate for mutation target. In Dafny, this includes the module name followed by the predicate name. For example, if the predicate's name is `spec` located in module `Example`, the full name is: `Example.spec` |
+| /proofName:[name]  | Name of lemma for full end-to-end proof. Also follows `Module.Name` format |
 | /proofLocation:[name] | Full path to `.dfy` file containing lemma targeted for /proofName     |
-| /holeEvalServerIpPortList:[name]    | Name of `.txt` file containing the ip addresses and ports for other     |
+| /serverIpPortList:[name]    | Name of `.txt` file containing the ip addresses and ports for other. If configured using `./configureIronSpec.sh` a file named `ipPorts.txt` will be created with the correct formating     |
 |/inPlaceMutation  | This flag indicates that the mutation target is for a method with pre/post conditions rather than a predicate. In this case /proofName is the name of the method to mutate the spec and the proof to check. |  
 | /mutationRootName:[name] | If the mutation target is different from the high-level safety property of the system, make sure to specify the high level safety property with this flag. | 
-| /checkInputAndOutputSpecified | Argument to indicate the use of the ASC. When using this flag, /holeEval and /mutationRootName should be set to a predicate in the same file, this is irrelevant. /proofName should be set to the method that is being tested with the ASC  | 
+| /checkInputAndOutputSpecified | Argument to indicate the use of the ASC. When using this flag, /holeEval and /mutationRootName should be set to a predicate in the same file, the contents of the predicate are irrelevant. /proofName should be set to the method that is being tested with the ASC  | 

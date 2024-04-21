@@ -1,0 +1,27 @@
+93a96,99
+>   predicate wrapper()
+>   {true}
+>   
+> 
+1261c1267
+<       ensures (r.Err? && r.err.Inval?) ==> ino in old(data) && old(data[ino].DirFile?)
+---
+>       ensures (r.Err? && r.err.Inval?) ==> ino in old(data) && old(data)[ino].DirFile?
+1265,1270c1271,1276
+<       && ino in old(data) && old(data[ino].ByteFile?)
+<       && has_modify_attrs(old(data[ino].attrs), attrs)
+<       && (var file := old(
+<       var d0 := data[ino];
+<       var d' := ByteFs.write_data_holes(d0.data, off as nat, bs.data);
+<       ByteFile(d', attrs));
+---
+>       && ino in old(data) && old(data)[ino].ByteFile?
+>       && has_modify_attrs(old(data)[ino].attrs, attrs)
+>       && (var file := 
+>       var d0 := old(data)[ino];
+>       var d' := ByteFs.write_data_holes(d0.data, off as nat, old(bs.data));
+>       ByteFile(d', attrs);
+1272c1278
+<       && data == old(data[ino := file]))
+---
+>       && data == old(data)[ino := file])

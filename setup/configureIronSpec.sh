@@ -73,7 +73,7 @@ for ip in $ListOfIps; do
     #clone IRONSPEC repo
     
     #add user-specific elements
-    ssh $Username@${ip} "(sed "s/\[username\]/$Username/" $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs)";
+    # ssh $Username@${ip} "(sed "s/\[username\]/$Username/" $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs)";
     #buld IRONSPEC
     ssh $Username@${ip} "(make exe)"
 
