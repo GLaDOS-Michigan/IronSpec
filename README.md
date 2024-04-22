@@ -103,9 +103,9 @@ The general command to run mutation testing follow this form:
 
 `./Binaries/Dafny [Standard Dafny Arguments] [IronSpec Arguemnts] [full-path-to-the-file-containing-mutation-target] &> output.txt`
 
-For example to test the specification for a Max method (`/specs/max/maxPredMutations.dfy`), run the following command from the root node:
+For example to test the specification for a Max method (`/specs/max/maxSpec.dfy`), run the following command from the root node:
 ```
-./Binaries/Dafny /compile:0 /timeLimit:1520 /trace /arith:5 /noCheating:1 /mutationTarget:maxExample.maxSpec /proofName:maxTest.maxT /proofLocation:"$(pwd)/specs/max/lemmaMaxTestCorrect.dfy" /holeEvalServerIpPortList:ipPorts.txt $(pwd)/specs/max/maxPredMutations.dfy &> output.txt
+./Binaries/Dafny /compile:0 /timeLimit:1520 /trace /arith:5 /noCheating:1 /mutationTarget:maxExample.maxSpec /proofName:maxTest.maxT /proofLocation:"$(pwd)/specs/max/lemmaMaxTestCorrect.dfy" /holeEvalServerIpPortList:ipPorts.txt $(pwd)/specs/max/maxSpec.dfy &> output.txt
 ```
 
 After executing this command, see the output in a file named `output.txt` and the tail of the output will look like this:
