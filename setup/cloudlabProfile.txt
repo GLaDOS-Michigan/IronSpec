@@ -1,0 +1,30 @@
+"""Configurable number of nodes, generic default profile for using the IronSpec specification testing framework 
+"""
+import geni.portal as portal
+
+
+portal.context.defineParameter( "nodes", "Number of Nodes", portal.ParameterType.INTEGER, 21 )
+portal.context.defineParameter( "node_type", "Node Type", portal.ParameterType.STRING, "c8220" )
+
+# Retrieve the values the user specifies during instantiation.
+params = portal.context.bindParameters()
+
+request = portal.context.makeRequestRSpec()
+
+# Check parameter validity.
+if params.nodes < 1:
+    portal.context.reportError( portal.ParameterError( "You must choose at least 1 node." ) )
+
+DEFAULT_DISK_IMAGE = "urn:publicid:IDN+emulab.net+image+emulab-ops:UBUNTU20-64-STD"
+DEFAULT_LAN_SOCKET = "eth1"
+
+lan = request.LAN()
+
+for i in range( params.nodes ):
+    node = request.RawPC( "node_" + str( i ) )
+    node.hardware_type = params.node_type
+    node.disk_image = DEFAULT_DISK_IMAGE
+    n_iface = node.addInterface(DEFAULT_LAN_SOCKET)
+    lan.addInterface(n_iface)
+
+portal.context.printRequestRSpec(request)

@@ -22,7 +22,7 @@ The recomended environment to to run IronSpec is using [CloudLab](https://www.cl
 
 IronSpec is designed to use one root node and `n` distributed nodes for verification performance. The root node is responsible for generating the specification mutations and verification conditions, the `n` separate nodes are used to parallelize checking verification conditions. The `n` additional nodes are not necessary to run IronSpec, they are used to help increase the performance and reduce experiment runtime. 
 
-In cloudlab, a default profile is available titled "IronSpecConfigNodes" and is configured to use 21, c8220 nodes - this can be modified in the experiment instantiation to change the configuration. A copy of this profile can be found in `./setup.cloudlabProfile.txt`
+In cloudlab, a default profile is available titled "IronSpecConfigNodes" and is configured to use 21, c8220 nodes - this can be modified in the experiment instantiation to change the configuration. A copy of this profile can be found in `./setup/cloudlabProfile.txt`
 
 After creating a cloudlab experiment, make note of all the id's of the nodes from the Node column in the experiment page. For example the id of Node "clnode008" is 008.
 
@@ -86,7 +86,7 @@ In the following table are the list of all specs. For the open-source specs, the
 
 # Running IronSpec
 
-To run all automatic experiments (Both Mutation Testing and Automatic Sanity Checking experiments) described in the OSDI paper, run: `./runExperiments.sh`
+To run all automatic experiments (Both Mutation Testing and Automatic Sanity Checking experiments) described in the OSDI paper, run: `./runAllExperiments.sh`
 
 > **_NOTE:_** Running `./runExperiments.sh` will automatically clone all external specs into the `./spec` directory to the originally tested commit hash. Additionally small patches will be applied to external specs to accomodate for small changes between Dafny versions.
 
@@ -96,6 +96,7 @@ Output and logs for each experiment will be found in `./experimentOutput` split 
 
 > **_NOTE:_**  The original experimental setup consisted of 1 root node and 20 nodes running the dafny-GRPC servers to parralleize checking verification conditions. Using a different configuration will impact the total time to run each experiment. The time difference is not strictly linear based on the number of nodes. Having too few nodes may cause verification timeouts that result from overloading the various nodes. 
 
+To run either just the mutation testing experiments or just the ASC experiments, utilize either `./runMutationTestingExperiments.sh` or `./runASCExperiments.sh`. If running either of these, make sure to also run `./cleanExperimentOutput.sh` beforehand.
 
 ##### Mutation Testing 
 
