@@ -289,7 +289,7 @@ echo -e "Starting Mutation Testing for qbft AdversaryNext"
 
 mkdir experimentOutput/qbft/AdversaryNext
 
-./Binaries/Dafny /compile:0 /timeLimit:1520 /trace /arith:5 /noCheating:1 /mutationTarget:L1_Adversary.AdversaryNext /proofName:L1_Theorems.lemmaConsistencyAndStability    /proofLocation:"$(pwd)/specs/qbft/qbft-formal-spec-and-verification/dafny/ver/L1/theorems.dfy" /serverIpPortList:ipPorts.txt /holeEvalCons:L1_InstrDSStateInvariantsDefs.allIndInv /holeEvalBase:L1_InstrumentedSpecs.DSInstrNextNodeMultiple $(pwd)/specs/qbft/qbft-formal-spec-and-verification/dafny/ver/L1/distr_system_spec/adversary.dfy &> experimentOutput/qbft/AdversaryNext/qbft-adversaryNext_output.txt
+./Binaries/Dafny /compile:0 /timeLimit:3520 /trace /arith:5 /noCheating:1 /mutationTarget:L1_Adversary.AdversaryNext /proofName:L1_Theorems.lemmaConsistencyAndStability    /proofLocation:"$(pwd)/specs/qbft/qbft-formal-spec-and-verification/dafny/ver/L1/theorems.dfy" /serverIpPortList:ipPorts.txt /holeEvalCons:L1_InstrDSStateInvariantsDefs.allIndInv /holeEvalBase:L1_InstrumentedSpecs.DSInstrNextNodeMultiple $(pwd)/specs/qbft/qbft-formal-spec-and-verification/dafny/ver/L1/distr_system_spec/adversary.dfy &> experimentOutput/qbft/AdversaryNext/qbft-adversaryNext_output.txt
 
 mkdir experimentOutput/qbft/AdversaryNext/outputLogs
 cp ./outputLogs/* experimentOutput/qbft/AdversaryNext/outputLogs
@@ -325,8 +325,6 @@ git clone https://github.com/Consensys/distributed-validator-formal-specs-and-ve
 cd distributed-validator-formal-specs-and-verification
 git reset --hard fed55f5ea4d0ebf1b7d21b2c6fc1ecb79b5c3dd3
 patch src/specs/consensus/consensus.dfy ../consensus.patch
-# patch src/proofs/no_slashable_attestations/supporting_lemmas/ind_inv_implies_safety/core_proofs.dfy ../core_proofs.patch
-# patch src/proofs/no_slashable_attestations/supporting_lemmas/ind_inv_implies_safety/ind_inv_implies_safety.dfy ../ind_inv_implies_safety.patch
 patch src/specs/dv/dv_attestation_creation.dfy ../dvAttestationCreation.patch
 
 cd ../../..

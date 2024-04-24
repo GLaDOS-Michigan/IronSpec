@@ -154,3 +154,4 @@ STPs are just dafny proofs, so running STPS requires no additional instrumentati
 |/inPlaceMutation  | This flag indicates that the mutation target is for a method with pre/post conditions rather than a predicate. In this case /proofName is the name of the method to mutate the spec and the proof to check. |  
 | /mutationRootName:[name] | If the mutation target is different from the high-level safety property of the system, make sure to specify the high level safety property with this flag. | 
 | /checkInputAndOutputSpecified | Argument to indicate the use of the ASC. When using this flag, /holeEval and /mutationRootName should be set to a predicate in the same file, the contents of the predicate are irrelevant. /proofName should be set to the method that is being tested with the ASC  | 
+|/isRequires | Tests for mutations that are stronger than original, rather than weaker|

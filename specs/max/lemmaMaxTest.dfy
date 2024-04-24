@@ -1,5 +1,5 @@
 
-include "./maxPredMutations.dfy"
+include "./maxSpec.dfy"
 
 module maxTest{
 

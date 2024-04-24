@@ -1183,7 +1183,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       return res;
     }
 
-    public static string GetIsWeakerMutationsRootTEST(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
+    public static string GetIsWeakerMutationsRootFull(Function fn,List<Tuple<Function, FunctionCallExpr, Expression>> path, ModuleDefinition currentModuleDef, Expression constraintExpr, Boolean isQuantifier) {
       string res = "lemma isAtLeastAsWeak";
       //  foreach (var nwPair in path) {
       //   res += "_" + nwPair.Item1.Name;
@@ -1207,21 +1207,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         // p += "" + nwPair.Item1;  
         sep = ", ";
       }
-      // foreach (var nwPair in path) {
-      //   res += sep + " ";
-      //   sep = "";
-      //   x = GetFunctionParamList(nwPair.Item1);
-      //   res += x.Item2;
-      //   p += "" + x.Item1; 
-      //   sep = ", ";
-      // }
-        // res += sep + " ";
-        // sep = "";
-        // x = GetFunctionParamListSpec(path[0].Item1);
-        
-        // res += x.Item2;
-        // p += "" + x.Item1; 
-        // sep = ", ";
       res += ")\n";
     var bdyAssert = "";
       foreach (var req in path[0].Item1.Req) {
@@ -1293,7 +1278,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         bdyAssert = "assert " + bdyAssert.Substring(bdyAssert.IndexOf("requires")+8);
       }
       res +=  " {\n" + bdyAssert + "\n}";
-      // Console.WriteLine(res);
       return res;
     }
 
@@ -1642,10 +1626,9 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           }
         }
         //MERGE
-                desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
-
-            // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunctionUnresolved);
-            expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunction);
+        desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
+        // expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunctionUnresolved);
+        expressionFinder.CalcDepthOneAvailableExpresssionsFromFunctionBody(program, desiredFunction);
         desiredFunctionMutationRoot = GetFunctionFromUnresolved(unresolvedProgram,DafnyOptions.O.MutationRootName);
         // desiredMethodUnresolved = GetMethodFromUnresolved(unresolvedProofProgram,lemmaName);
         desiredFunctionMutationRootResolved = GetFunction(program, DafnyOptions.O.MutationRootName);
@@ -1695,8 +1678,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       }
 
       }
-
-
       
       int initialCount = expressionFinder.availableExpressions.Count;
       ExpressionFinder expressionFindeTest = new ExpressionFinder(this);
@@ -1707,10 +1688,8 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           Console.WriteLine("mutated (from params) = " +  Printer.ExprToString(simpleAdditiveMutation));
           expressionFinder.availableExpressions.Add(new ExpressionFinder.ExpressionDepth(simpleAdditiveMutation,1));
         }
-                foreach (ExpressionFinder.ExpressionDepth e in expressionFindeTest.availableExpressions){
-          // Console.WriteLine(" >> " + Printer.ExprToString(e));
-        }
-                int comboCount = 0;
+
+        int comboCount = 0;
 
         if(depth > 1 ){
         for(int i = 1; i < expressionFindeTest.availableExpressions.Count;i++){
@@ -2660,18 +2639,18 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       string lemmaForExprValidityString = ""; // remove validityCheck
       string basePredicateString = GetBaseLemmaList(func,null);
       string isStrongerLemma = "";
-      string istWeakerLemma = "";
+      string isWeakerLemma = "";
       string mutationBaseString = ""; 
 
-        // istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
+        // isWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
          mutationBaseString = GetBaseLemmaListMutationList(program,func,null,MutationsPaths[0]);
 
       if(expr.expr is QuantifierExpr){
         isStrongerLemma = GetIsStronger(func,Paths[0], null, null,true);
-        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
+        isWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
       }else{
         isStrongerLemma = GetIsStronger(func,Paths[0], null, null,false);
-        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
+        isWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
       }
 
       int lemmaForExprValidityPosition = 0;
@@ -2737,7 +2716,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
           }
           if(isWeaker){
             fnIndex = code.IndexOf("predicate " + funcName);
-            code = code.Insert(fnIndex-1,istWeakerLemma+"\n");
+            code = code.Insert(fnIndex-1,isWeakerLemma+"\n");
           }
           // if((vacTest && includeProof)){
           //   int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
@@ -2947,7 +2926,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       string mutationBaseString = "";    
       string lemmaForExprValidityString = ""; // remove validityCheck
       string isStrongerLemma = "";
-      string istWeakerLemma = "";
+      string isWeakerLemma = "";
             // string mutationBaseString = ""; 
 
       if(constraintExpr == null)
@@ -2963,28 +2942,28 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
          }
        if(expr.expr is QuantifierExpr){
         isStrongerLemma = GetIsStronger(func,Paths[0], null, null,true);
-        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
+        isWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,true);
       }else{
         isStrongerLemma = GetIsStronger(func,Paths[0], null, null,false);
-        if(DafnyOptions.O.IsStateMachine)
+        if(DafnyOptions.O.IsStateMachine || DafnyOptions.O.IsRequires)
          {
-          istWeakerLemma = GetIsWeakerMutationsRoot(func,MutationsPaths[0].GetRange(MutationsPaths[0].Count-1,1), null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
+          isWeakerLemma = GetIsWeakerMutationsRoot(func,MutationsPaths[0].GetRange(MutationsPaths[0].Count-1,1), null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
          }else{
-                 istWeakerLemma = GetIsWeakerMutationsRootTEST(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
+                 isWeakerLemma = GetIsWeakerMutationsRootFull(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
 
-          // istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
-        }// var test = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);
+        // isWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
+        }
       }
       }else{
          basePredicateString = GetBaseLemmaList(func,null);
          mutationBaseString = GetBaseLemmaListMutationList(program,func,null,MutationsPaths[0]);
          if(expr.expr is QuantifierExpr){
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
-        istWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
+        isWeakerLemma = GetIsWeakerMutationsRoot(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
       }else{
-        //  var ee  = GetIsWeakerMutationsRootTEST(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
+        //  var ee  = GetIsWeakerMutationsRootFull(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, null,false);
         isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,false);
-        istWeakerLemma = GetIsWeakerMutationsRootTEST(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
+        isWeakerLemma = GetIsWeakerMutationsRootFull(mutationRootFn,MutationsPaths[0], null, null,false);//GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
       }
       }
     
@@ -2995,10 +2974,10 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
 
       // if(expr.expr is QuantifierExpr){
       //   isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,true);
-      //   istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
+      //   isWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,true);
       // }else{
       //   isStrongerLemma = GetIsStronger(func,Paths[0], null, constraintExpr.expr,false);
-      //   istWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
+      //   isWeakerLemma = GetIsWeaker(func,Paths[0], null, constraintExpr.expr,false);
       // }
 
       int lemmaForExprValidityPosition = 0;
@@ -3013,11 +2992,6 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         using (var wr = new System.IO.StringWriter()) {
           var pr = new Printer(wr, DafnyOptions.PrintModes.NoIncludes);
           pr.UniqueStringBeforeUnderscore = UnderscoreStr;
-          // if (expr.HasCardinality) {
-          //   func.Body = Expression.CreateAnd(expr, func.Body);
-          // } else {
-          //   func.Body = Expression.CreateAnd(func.Body, expr);
-          // }
           // if(DafnyOptions.O.LocalPredicateMutation)
           // {
           //   Console.WriteLine("--Function is Mutated--");
@@ -3096,7 +3070,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
             }else{
               fnIndex = code.IndexOf("function " + funcName);
             }
-            code = code.Insert(fnIndex-1,istWeakerLemma+"\n");
+            code = code.Insert(fnIndex-1,isWeakerLemma+"\n");
           }
           if((vacTest)){
             // string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, constraintExpr.expr,false);
@@ -3129,11 +3103,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
          }else if(includeProof && moduleName == null){
           // args.Add("/proc:*" + lemma.Name +"*");
          }
-        // args.Add("/proc:*" + lemma.CompileName );
-        // foreach (var arg in args) {
-        // }
         var changingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
-                // var test = includeParser.NormalizedTo(program.FullName,func.BodyStartTok.Filename);
 
         var constraintFuncChangingFilePath = includeParser.Normalized(func.BodyStartTok.Filename);
         var remoteFolderPath = dafnyVerifier.DuplicateAllFiles(cnt, changingFilePath);
@@ -3205,7 +3175,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
               func.Name = "MUTATED_"+func.Name;
             }
           }
-/// apply mutation to spec //
+      // apply mutation to spec //
       using (var wrSpec = new System.IO.StringWriter()) {
         var prSpec = new Printer(wrSpec, DafnyOptions.PrintModes.NoIncludes);
         prSpec.UniqueStringBeforeUnderscore = UnderscoreStr;
@@ -3248,7 +3218,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
             File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}NotAtLeastAsWeak_{cnt}.dfy", code);
     }
-/// end add mutation
+        // end add mutation
        HashSet<string> includesSet = new HashSet<string>();
 
         using (var wr = new System.IO.StringWriter()) {
