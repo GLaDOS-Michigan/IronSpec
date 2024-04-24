@@ -1,0 +1,20 @@
+diff --git a/../../../specs/qbft/qbft-formal-spec-and-verification/dafny/ver/L1/theorems.dfy b/dafny/ver/L1/theorems.dfy
+index 097280b..91a830c 100644
+--- a/../../../specs/qbft/qbft-formal-spec-and-verification/dafny/ver/L1/theorems.dfy
++++ b/dafny/ver/L1/theorems.dfy
+@@ -5,6 +5,7 @@ include "support_lemmas/trace_defs.dfy"
+ include "support_lemmas/trace_instrumented_lemmas.dfy"
+ include "support_lemmas/trace_general_lemmas.dfy"
+ include "theorems_defs.dfy"
++include "support_lemmas/instrumented_specs.dfy"
+ 
+ 
+ module L1_Theorems {
+@@ -15,6 +16,7 @@ module L1_Theorems {
+     import opened L1_TraceInstrumentedLemmas
+     import opened L1_TraceGeneralLemmas    
+     import opened L1_TheoremsDefs
++    import opened L1_InstrumentedSpecs
+ 
+ 
+     predicate consistency(t: Trace)

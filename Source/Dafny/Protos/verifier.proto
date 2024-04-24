@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+option csharp_namespace = "Microsoft.Dafny";
+
+package DafnyExecutorServer;
+
+// Interface exported by the server.
+service DafnyVerifierService {
+  // Run Dafny on the given code and returns the output
+  rpc Verify(VerificationRequest) returns (VerificationResponse) {}
+  rpc CloneAndVerify(CloneAndVerifyRequest) returns (VerificationResponse) {}
+  rpc CreateTmpFolder(CreateDir) returns (TmpFolder) {}
+  rpc RemoveFolder(TmpFolder) returns (Empty) {}
+  rpc DuplicateFolder(TmpFolder) returns (TmpFolder) {}
+  rpc WriteToRemoteFile(VerificationRequest) returns (Empty) {}
+}
+
+message CreateDir {
+  // changes the owner of the created directory (if specified)
+  string owner = 1;
+}
+
+message Empty {
+}
+
+// NOTE: This request will delete the cloned folder at the end of this operation.
+message CloneAndVerifyRequest {
+  // Path to the base folder that needs to be cloned
+  string directoryPath = 1;
+  // Dafny code that needs to be verified given by actual code
+  string code = 2;
+  // The location where the code should be written in the dafny server
+  string modifyingFile = 3;
+  // List of arguments to be passed to Dafny
+  repeated string arguments = 4;
+  // How long should it wait for the Dafny request? 
+  // This value will be given to `timeout` command in Linux (e.g. 10s, 1m)
+  string timeout = 5;
+}
+
+message TmpFolder {
+  // Path to the temporary folder
+  string path = 1;
+  string modifyingFile = 2;
+  // changes the owner of the created directory (if specified)
+  string owner = 3;
+}
+
+// Three modes:
+// 1. code != "" && path == "":
+//    In this case, the given code will be written to a temporary file and
+//    will be verified. This mode assumes the given code doesn't include any
+//    other file, and is standalone.
+// 2. code == "" && path != "":
+//    In this case, the current code already written in the given path will be
+//    verified.
+// 3. code != "" && path != "":
+//    In this case, the given code will be written to the given path, and then
+//    will be verified. This mode is useful in case the given code is dependent
+//    on other files that include each other.
+message VerificationRequest {
+  // Dafny code that needs to be verified given by actual code
+  string code = 1;
+  // The location where the code should be written in the dafny server
+  string path = 2;
+  // List of arguments to be passed to Dafny
+  repeated string arguments = 3;
+  // How long should it wait for the Dafny request? 
+  // This value will be given to `timeout` command in Linux (e.g. 10s, 1m)
+  string timeout = 4;
+}
+
+// In case the response of CloneAndVerifyRequest is not deleting the
+// cloned
+message VerificationResponse {
+  // Output of Dafny
+  string response = 1;
+  string fileName = 2;
+  uint64 executionTimeInMs = 3;
+}

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+      <OutputType>Exe</OutputType>
+      <AssemblyName>DafnyServer</AssemblyName>
+      <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+      <DefineConstants>TRACE</DefineConstants>
+      <PackageVersion>1.1.0</PackageVersion>
+      <TargetFramework>net6.0</TargetFramework>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net6.0|AnyCPU'">
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <!-- Working around some stange behavior in dotnet publish: https://github.com/dotnet/sdk/issues/10566 -->
+  <PropertyGroup Condition="$(RUNTIME_IDENTIFIER) != ''">
+    <RuntimeIdentifier>$(RUNTIME_IDENTIFIER)</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dafny\DafnyPipeline.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\version.cs" />
+  </ItemGroup>
+</Project>

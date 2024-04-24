@@ -1,0 +1,16 @@
+3a4,7
+> module testWrapper{
+>   import opened Int32
+>   import opened formula
+> 
+158a163,164
+> 
+>   
+159a166,171
+>   lemma proofTarget()
+>   {}
+> 
+>   predicate test(){true}
+> 
+> }
+\ No newline at end of file

@@ -1,0 +1,6 @@
+288,289c288,289
+< 
+<   opaque function DecryptOnlyBranchKeyEncryptionContext(
+---
+> // opaque
+>    function {:opaque} DecryptOnlyBranchKeyEncryptionContext(

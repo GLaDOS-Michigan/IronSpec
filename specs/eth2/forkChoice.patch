@@ -1,0 +1,42 @@
+418c418
+<         method {:timeLimitMultiplier 10} on_block(b: BeaconBlock, pre_state : BeaconState) 
+---
+>         method {:timeLimitMultiplier 10} on_block(b: BeaconBlock, pre_state : BeaconState) returns (store:Store)
+420c420,454
+<             requires storeIsValid(store)
+---
+>             // requires storeIsValid(store)
+>             requires store.genesis_time == GENESIS_TIME
+>             requires store.blocks.Keys == store.block_states.Keys 
+> 
+>             requires  forall r | r in store.blocks.Keys ::
+>                         (store.blocks[r].slot == 0 ==> store.blocks[r] == GENESIS_BLOCK)
+> 
+>             requires  forall b | b in acceptedBlocks :: 
+>                             hash_tree_root(b) in store.blocks.Keys 
+>                             && store.blocks[hash_tree_root(b)] == b
+> 
+>             requires  forall b | b in acceptedBlocks :: 
+>                             (hash_tree_root(b) in store.block_states.Keys 
+>                             && store.block_states[hash_tree_root(b)].latest_block_header == 
+>                                     BeaconBlockHeader(b.slot, b.proposer_index, b.parent_root, DEFAULT_BYTES32))
+>             
+>             requires  acceptedBlocks == store.blocks.Values     
+>                 
+>             requires  forall b | b in acceptedBlocks && b != GENESIS_BLOCK ::
+>                             b.parent_root in store.blocks.Keys
+>                             && store.blocks[b.parent_root].slot < b.slot       
+>                 
+>             requires  forall b | b in acceptedBlocks && b != GENESIS_BLOCK ::
+>                             b.parent_root in store.blocks.Keys
+>                             && b.parent_root in store.block_states.Keys
+>                             && store.blocks[b.parent_root].slot == store.block_states[b.parent_root].slot
+> 
+>             requires forall b | b in store.blocks.Keys ::
+>                             && b  in store.block_states.Keys
+>                             && store.blocks[b].slot == store.block_states[b].slot
+> 
+>             requires forall b | b in acceptedBlocks && b != GENESIS_BLOCK ::
+>                             hash_tree_root(b) in store.blocks.Keys
+>                             && b.parent_root in store.blocks.Keys
+>                             && store.blocks[b.parent_root].slot < store.blocks[hash_tree_root(b)].slot

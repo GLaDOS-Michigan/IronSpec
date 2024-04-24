@@ -1,0 +1,22 @@
+30,31c30,31
+<         var byz := s.all_nodes - s.honest_nodes_status.Keys;
+<         |byz| <= f(|s.all_nodes|)
+---
+>         // var byz := s.all_nodes - s.honest_nodes_status.Keys;
+>         |s.all_nodes - s.honest_nodes_status.Keys| <= f(|s.all_nodes|)
+34c34
+<     predicate Init<D(!new, 0)>(
+---
+>     predicate InitConsensus<D(!new, 0)>(
+45a46
+>        
+67,70c68,71
+<             && var n := output.safe_get().node;
+<             && n in s.honest_nodes_status.Keys 
+<             && n in honest_nodes_validity_predicates.Keys
+<             && s.honest_nodes_status[n] in {DECIDED}
+---
+>             // && var n := output.safe_get().node;
+>             && output.safe_get().node in s.honest_nodes_status.Keys 
+>             && output.safe_get().node in honest_nodes_validity_predicates.Keys
+>             && s.honest_nodes_status[output.safe_get().node] in {DECIDED}

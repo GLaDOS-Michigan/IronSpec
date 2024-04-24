@@ -1,0 +1,12 @@
+184c184
+<                 ConsensusSpec.Init(ci, s.all_nodes, s.honest_nodes_states.Keys)
+---
+>                 ConsensusSpec.InitConsensus(ci, s.all_nodes, s.honest_nodes_states.Keys)
+205c205
+<         && ( forall k1: nat, k2: nat :: 
+---
+>         && ( forall k1: nat, k2: nat | 
+209c209
+<                 ==> 
+---
+>                 :: 

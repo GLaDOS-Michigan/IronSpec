@@ -1,0 +1,5 @@
+96c96,97
+<   opaque function {:vcs_split_on_every_assert} ReadEncryptedDataKeysSection(
+---
+>   // opaque 
+>   function {:opaque} {:vcs_split_on_every_assert} ReadEncryptedDataKeysSection(

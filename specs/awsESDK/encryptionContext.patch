@@ -1,0 +1,10 @@
+491c491,492
+<   opaque function {:vcs_split_on_every_assert} ReadAADSection(
+---
+>   // opaque 
+>   function {:opaque} {:vcs_split_on_every_assert} ReadAADSection(
+544c545,546
+<   opaque function KeysToSet<K(==), V(==)>(pairs: Linear<K, V>): set<K>
+---
+>   // opaque 
+>   function {:opaque} KeysToSet<K(==), V(==)>(pairs: Linear<K, V>): set<K>

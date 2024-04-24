@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option csharp_namespace = "Microsoft.Dafny";
+
+package DafnyExecutorArguments;
+
+message VerificationTaskArgs {
+  // Dafny code that needs to be verified
+  string path = 1;
+  // List of arguments to be passed to Dafny
+  repeated string arguments = 2;
+}
+
+message TasksList {
+  repeated VerificationTaskArgs tasks = 1;
+}
