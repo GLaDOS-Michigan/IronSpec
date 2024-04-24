@@ -4,7 +4,6 @@ Specification Testing framework prototype for [Dafny](https://github.com/dafny-l
 
 IronSpec brings together three different spec-testing techniques; Automatic Sanity Checking(ASC), automatic specification mutation testing, and a Methodology for writing Spec Testing Proofs (STPs).
 
-
 # Dependencies
 
 * [IronSpec-dafny-grpc-server](https://github.com/GLaDOS-Michigan/IronSpec-dafny-grpc-server)
@@ -13,6 +12,9 @@ IronSpec brings together three different spec-testing techniques; Automatic Sani
 * g++-8
 * bazel-4.0.0
 * dotnet-6 
+
+The prototype is built off of Dafny v3.8.1
+
 
 > **_NOTE:_** All dependencies will be installed when running `./setup/configureIronspec.sh` - detailed below
 
