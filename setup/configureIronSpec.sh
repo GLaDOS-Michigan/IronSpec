@@ -71,11 +71,12 @@ for ip in $ListOfIps; do
     ssh $Username@${ip} "(cd $ROOTPWD/IronSpec-dafny-grpc-server; bazel-4.0.0 build --cxxopt="-g" --cxxopt="--std=c++17" //src:server)";
 
     #clone IRONSPEC repo
-    
+    git clone https://github.com/GLaDOS-Michigan/IronSpec.git
+
     #add user-specific elements
-    ssh $Username@${ip} "(sed "s/\[username\]/$Username/" $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/dafny-holeEval/Source/Dafny/DafnyVerifier.cs)";
+    ssh $Username@${ip} "(sed "s/\[username\]/$Username/" $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs)";
     #buld IRONSPEC
-    ssh $Username@${ip} "(make exe)"
+    ssh $Username@${ip} "($ROOTPWD/IronSpec; make exe)"
 
 done
 
@@ -88,7 +89,7 @@ for ip in $ListOfIps; do
     # copying dafny binary to grpc servers
     echo "grpc server started at $ip on port :50051 " &
     # ssh $Username@${ip} "(cd $ROOTPWD/IronSpec-dafny-grpc-server; ls)"
-    ssh $Username@${ip} "(cd $ROOTPWD/IronSpec-dafny-grpc-server; ./bazel-bin/src/server -v -d $ROOTPWD/dafny-holeEval/Binaries/Dafny & disown -a)" &> ${output_dir}/node_${ip}.txt &  
+    ssh $Username@${ip} "(cd $ROOTPWD/IronSpec-dafny-grpc-server; ./bazel-bin/src/server -v -d $ROOTPWD/IronSpec/Binaries/Dafny & disown -a)" &> ${output_dir}/node_${ip}.txt &  
 done
 
 for((cnt=0;cnt<$numberOfNodes;cnt=cnt+1))
