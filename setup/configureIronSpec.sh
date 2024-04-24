@@ -71,7 +71,7 @@ for ip in $ListOfIps; do
     ssh $Username@${ip} "(cd $ROOTPWD/IronSpec-dafny-grpc-server; bazel-4.0.0 build --cxxopt="-g" --cxxopt="--std=c++17" //src:server)";
 
     #clone IRONSPEC repo
-    git clone https://github.com/GLaDOS-Michigan/IronSpec.git
+    ssh $Username@${ip} "($ROOTPWD/IronSpec; git clone https://github.com/GLaDOS-Michigan/IronSpec.git)"
 
     #add user-specific elements
     ssh $Username@${ip} "(sed "s/\[username\]/$Username/" $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs)";
