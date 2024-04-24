@@ -28,6 +28,8 @@ In cloudlab, a default profile is available titled "IronSpecConfigNodes" and is 
 
 After creating a cloudlab experiment, make note of all the id's of the nodes from the Node column in the experiment page. For example the id of Node "clnode008" is 008.
 
+##### Clone repo
+If using Cloudlab, clone this repo in the `/proj/[projName]` repo. This is shared disk space in Cloudlab and will speedup setup.
 
 ##### Setup ssh keys
 
@@ -45,7 +47,9 @@ For example if the list of nodes included, run: `clnode008, clnode010 and clnode
 
 ##### Setup cloudlab nodes
 
-Run `./setup/configureIronSpec.sh [username] [list_of_node_ids]`
+Run `./setup/cloudlabConfigureIronSpec.sh [username] [list_of_node_ids]`
+
+(use `./setup/configureIronSpec.sh [username] [list_of_node_ids]` if did not clone this repo in `/proj/[projName]`)
 
 **From the cloudlab node that will act as the "root" node for the experiment. (i.e the node with the smallest id)**
 

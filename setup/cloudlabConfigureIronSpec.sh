@@ -32,52 +32,49 @@ for id in $ListOfNodeIds; do
     ListOfIps+=" "
 done
 
-
 for ip in $ListOfIps; do
     echo "Testing ssh connection to ID = $ip"
     ssh $Username@${ip} ls;
 done
 
-echo "---- Installing And Building Dependencies ----"
-
 cd ..
 ROOTPWD=$(pwd)
 echo "pwd is $ROOTPWD"
 cd -
-for ip in $ListOfIps; do
-    echo "-- cloning repos and installing dependencies for node $ip -- "
-    #clone IRONSPEC repo
-    ssh $Username@${ip} "(cd $ROOTPWD; git clone https://github.com/GLaDOS-Michigan/IronSpec.git)"
-    # # clone grpc server repo
-    ssh $Username@${ip} "(cd $ROOTPWD; git clone https://github.com/GLaDOS-Michigan/IronSpec-dafny-grpc-server.git)";
 
+
+echo "---- Cloning  grpc server repo ----"
+
+# clone grpc server repo
+git clone https://github.com/GLaDOS-Michigan/IronSpec-dafny-grpc-server.git
+#add user-specific elements
+sed "s/username/$Username/" $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs
+# make z3
+cd IronSpec
+make z3-ubuntu
+cd ..
+
+echo "---- Installing And Building Dependencies ----"
+
+for ip in $ListOfIps; do
+    echo "-- installing dependencies for node $ip -- "
     # install global dependencies
     ssh $Username@${ip} "(cd $ROOTPWD/IronSpec; ./setup/node_prep.sh)";
     ssh $Username@${ip} "(cd $ROOTPWD/IronSpec; ./setup/install_dotnet_ubuntu_20.04.sh)";
-
-    # #add user-specific elements
-    ssh $Username@${ip} "(sed "s/username/$Username/" $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs)";
-
     # #build IRONSPEC
     ssh $Username@${ip} "(cd $ROOTPWD/IronSpec; make exe)"
-
-    # # make z3
-    ssh $Username@${ip} "(cd $ROOTPWD/IronSpec; make z3-ubuntu)" 
-
-    # # build dafny grpc server
+    # build dafny grpc server
     ssh $Username@${ip} "(cd $ROOTPWD/IronSpec-dafny-grpc-server; bazel-4.0.0 build --cxxopt="-g" --cxxopt="--std=c++17" //src:server)";
-
 done
 
 echo "---- Done Installing Dependencies ----"
 
 
-# echo "---- Starting Dafny GRPC Server(s) ----"
+echo "---- Starting Dafny GRPC Server(s) ----"
 
 for ip in $ListOfIps; do
     # copying dafny binary to grpc servers
     echo "grpc server started at $ip on port :50051 " &
-    # ssh $Username@${ip} "(cd $ROOTPWD/IronSpec-dafny-grpc-server; ls)"
     ssh $Username@${ip} "(cd $ROOTPWD/IronSpec-dafny-grpc-server; ./bazel-bin/src/server -v -d $ROOTPWD/IronSpec/Binaries/Dafny & disown -a)" &> ${output_dir}/node_${ip}.txt &  
 done
 
