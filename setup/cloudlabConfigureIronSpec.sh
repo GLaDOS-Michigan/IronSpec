@@ -23,7 +23,7 @@ echo Username = $Username
 #Calculate IP addresses of nodes and create ipPorts.txt
 rm -f ipPorts.txt
 touch ipPorts.txt
-# > ipPorts.txt
+
 for id in $ListOfNodeIds; do
     echo "Getting IP for Node ID = $id"
     nodeId="$(ssh $Username@clnode${id}.clemson.cloudlab.us ifconfig | grep "130.127" | awk '{print $2}')"
@@ -45,14 +45,15 @@ cd -
 
 echo "---- Cloning  grpc server repo ----"
 
+cd ..
 # clone grpc server repo
 git clone https://github.com/GLaDOS-Michigan/IronSpec-dafny-grpc-server.git
+cd -
 #add user-specific elements
 sed "s/username/$Username/" $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs > ./tmp.cs && mv ./tmp.cs $ROOTPWD/IronSpec/Source/Dafny/DafnyVerifier.cs
 # make z3
-cd IronSpec
+cd IronSpec/
 make z3-ubuntu
-cd ..
 
 echo "---- Installing And Building Dependencies ----"
 
@@ -73,7 +74,6 @@ echo "---- Done Installing Dependencies ----"
 echo "---- Starting Dafny GRPC Server(s) ----"
 
 for ip in $ListOfIps; do
-    # copying dafny binary to grpc servers
     echo "grpc server started at $ip on port :50051 " &
     ssh $Username@${ip} "(cd $ROOTPWD/IronSpec-dafny-grpc-server; ./bazel-bin/src/server -v -d $ROOTPWD/IronSpec/Binaries/Dafny & disown -a)" &> ${output_dir}/node_${ip}.txt &  
 done

@@ -17,7 +17,6 @@ The prototype is built off of Dafny v3.8.1
 
 
 > **_NOTE:_** All dependencies will be installed when running `./setup/configureIronspec.sh` - detailed below
-
 # Setup
 
 The recomended environment to to run IronSpec is using [CloudLab](https://www.cloudlab.us/):
@@ -27,6 +26,26 @@ IronSpec is designed to use one root node and `n` distributed nodes for verifica
 In cloudlab, a default profile is available titled "IronSpecConfigNodes" and is configured to use 21, c8220 nodes - this can be modified in the experiment instantiation to change the configuration. A copy of this profile can be found in `./setup/cloudlabProfile.txt`
 
 After creating a cloudlab experiment, make note of all the id's of the nodes from the Node column in the experiment page. For example the id of Node "clnode008" is 008.
+
+## Getting Started
+
+To check basic functionality, it is sufficient to follow the following "Setup" steps with a single cloudlab node. After setup, to test to make sure that everything is installed and configured correctly, run `./runMaxMutations.sh` to run the mutation framework on a simple Max Spec found in: `./specs/max/maxSpec.dfy`
+
+
+After executing this command, see the output in a file `./experimentOutput/MaxSpecCorrect/maxSpecCorrect_output.txt` and the tail of the output will look like this:
+
+```
+...
+...
+--- END Mutation Classifications -- 
+
+TOTAL Elapsed Time is 15749 ms
+root = (0):(a > b ==> c == a) && (b + 1 > a ==> c == b)
+7 :: 8 :: 42 :: 43 :: 44 :: 48 :: 50 :: 52 :: 60 :: 62 :: 63 
+---
+Total Alive Mutations = 1
+
+```
 
 ##### Clone repo
 If using Cloudlab, clone this repo in the `/proj/[projName]` repo. This is shared disk space in Cloudlab and will speedup setup.
@@ -49,18 +68,17 @@ For example if the list of nodes included, run: `clnode008, clnode010 and clnode
 
 Run `./setup/cloudlabConfigureIronSpec.sh [username] [list_of_node_ids]`
 
-(use `./setup/configureIronSpec.sh [username] [list_of_node_ids]` if did not clone this repo in `/proj/[projName]`)
+(use `./setup/configureIronSpec.sh [username] [list_of_node_ids]` if the repo was not cloned this repo in `/proj/[projName]`)
 
 **From the cloudlab node that will act as the "root" node for the experiment. (i.e the node with the smallest id)**
 
 This script will install all the dependencies on each node in the experiment, build IronSpec, and start the dafny-GRPC servers on all of the nodes at port `:50051`. This step may take some time to complete.
 
-If there is ever a need to start or stop the dafny-GRPC servers run either:
+If there is ever a need to start or stop or see the PID of the dafny-GRPC servers run:
 `./setup/startDafnyServers.sh [username] [list_of_node_ids]`
 `./setup/stopDafnyServers.sh [username] [list_of_node_ids]`
+`./setup/checkDafnyPID.sh [username] [list_of_node_ids]`
 
-
-> **_NOTE:_**  to check if a grpc server is running `pidof server Dafny`
 
 # Specs
 

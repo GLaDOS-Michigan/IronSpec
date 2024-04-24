@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo -e "Running IronSpec Experiments \n"
+echo -e "Cleaning previous experiment output \n"
 
 # clean up output from any previous experiments
 if [ -d "$(pwd)/experimentOutput" ]; then rm -Rf $(pwd)/experimentOutput; fi
