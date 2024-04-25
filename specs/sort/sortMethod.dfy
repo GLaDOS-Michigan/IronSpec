@@ -4,10 +4,15 @@ module sort{
 
 import opened sortSpec
 
-
-lemma merge_sort(input:seq<int>) returns (output:seq<int>)
-    ensures SortSpec(input, output)
+    predicate SortSpec(input:seq<int>, output:seq<int>)
     {
+        forall idx | (0 <= idx && idx < |output|-1) :: output[idx] <= output[idx+1]
+    }
+
+
+method merge_sort(input:seq<int>) returns (output:seq<int>)
+    ensures forall idx | (0 <= idx && idx < |output|-1) :: output[idx] <= output[idx+1]
+{
     if |input| <= 1 {
         output := input;
     } else {
@@ -23,12 +28,13 @@ lemma merge_sort(input:seq<int>) returns (output:seq<int>)
         return output;
 
     }
-    }
+}
 
-lemma merge(seqa:seq<int>, seqb:seq<int>) returns (output:seq<int>)
-    requires IsSorted(seqa)
-    requires IsSorted(seqb)
-    ensures SortSpec(seqa+seqb, output)
+method merge(seqa:seq<int>, seqb:seq<int>) returns (output:seq<int>)
+    requires forall idx | (0 <= idx && idx < |seqa|-1) :: seqa[idx] <= seqa[idx+1]
+    requires forall idx | (0 <= idx && idx < |seqb|-1) :: seqb[idx] <= seqb[idx+1]
+    // ensures SortSpec(seqa+seqb,output)
+    ensures forall idx | (0 <= idx && idx < |output|-1) :: (output)[idx] <= (output)[idx+1]
     decreases |seqa|+|seqb|
     {
     var ai := 0;
