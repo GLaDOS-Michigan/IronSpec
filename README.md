@@ -34,7 +34,7 @@ After creating a CloudLab experiment, make note of all the unique numerical name
 To check basic functionality, it is sufficient to follow the following "Setup" steps with a single CloudLab node. After setup, to test to make sure that everything is installed and configured correctly, run `./runSimpleExperiments.sh` to run the mutation framework on a simple Max Spec found in: `./specs/max/maxSpec.dfy` and the Automatic Sanity Checker on `./specs/sort/sortMethod.dfy`
 
 
-After executing this command, see the output in a file `./experimentOutput/MaxSpecCorrect/maxSpecCorrect_output.txt` and the tail of the output will look like this:
+After executing this command, see the output in a file `./experimentOutput/MaxSpecCorrect/maxSpecCorrect_output.txt` and the tail of the output will look something like this (the mutation IDs may be slightly different, and the mutation at the root may be a different equivalent mutations):
 
 ```
 ...
@@ -50,6 +50,7 @@ Total Alive Mutations = 1
 ```
 
 and the output in `./experimentOutput/sortASC/sortASC_output.txt` with a high serverity flag being raised `-- FLAG(HIGH) -- : NONE of Ensures depend on Any input parameters `
+
 
 ##### Clone repo
 If using CloudLab, clone this repo in the `/proj/[cloudlabProjectName]/` repo. This is shared disk space in CloudLab and will speed up setup.
