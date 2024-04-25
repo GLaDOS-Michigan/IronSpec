@@ -2,7 +2,7 @@
 
 Specification Testing framework prototype for [Dafny](https://github.com/dafny-lang/dafny) Specifications. 
 
-IronSpec brings together three different spec-testing techniques; Automatic Sanity Checking(ASC), automatic specification mutation testing, and a Methodology for writing Spec Testing Proofs (STPs).
+IronSpec brings together three different spec-testing techniques; Automatic Sanity Checking(ASC), automatic specification mutation testing, and a Methodology for writing Spec Testing Proofs (STPs). This repo contains the framework for the automated aspects of IronSpec, mutation testing and the ASC. 
 
 # Dependencies
 
@@ -23,13 +23,15 @@ The recommended environment to run IronSpec is using [CloudLab](https://www.clou
 
 IronSpec is designed to use one root node and `n` distributed nodes for verification performance. The root node is responsible for generating the specification mutations and verification conditions, the `n` separate nodes are used to parallelize checking verification conditions. The `n` additional nodes are not necessary to run IronSpec, they are used to help increase the performance and reduce experiment runtime. 
 
-In cloudlab, a default profile is available titled "IronSpecConfigNodes" and is configured to use 21, c8220 nodes - this can be modified in the experiment instantiation to change the configuration. A copy of this profile can be found in `./setup/cloudlabProfile.txt`
+In CloudLab, a default profile is available titled "IronSpecConfigNodes" and is configured to use 21, c8220 nodes - this can be modified in the experiment instantiation to change the configuration. A copy of this profile can be found in `./setup/cloudlabProfile.txt`
 
-After creating a cloudlab experiment, make note of all the unique numerical names of the nodes from the Node column in the experiment page List View. For example, the IDs of Nodes "clnode008" and "clnode059" are 008 and 059 respectively.
+After creating a CloudLab experiment, make note of all the unique numerical names of the nodes from the Node column in the experiment page List View. For example, the IDs of Nodes "clnode008" and "clnode059" are 008 and 059 respectively.
+
+> **_NOTE:_**  IronSpec should work on other CloudLab hardware, but if not using nodes from the Clemson cluster, some of the setup scripts will break. This can be fixed by replacing `.clemson.cloudlab.us` with the appropriate extension. 
 
 ## Getting Started
 
-To check basic functionality, it is sufficient to follow the following "Setup" steps with a single cloudlab node. After setup, to test to make sure that everything is installed and configured correctly, run `./runSimpleExperiments.sh` to run the mutation framework on a simple Max Spec found in: `./specs/max/maxSpec.dfy` and the Automatic Sanity Checker on `./specs/sort/sortMethod.dfy`
+To check basic functionality, it is sufficient to follow the following "Setup" steps with a single CloudLab node. After setup, to test to make sure that everything is installed and configured correctly, run `./runSimpleExperiments.sh` to run the mutation framework on a simple Max Spec found in: `./specs/max/maxSpec.dfy` and the Automatic Sanity Checker on `./specs/sort/sortMethod.dfy`
 
 
 After executing this command, see the output in a file `./experimentOutput/MaxSpecCorrect/maxSpecCorrect_output.txt` and the tail of the output will look like this:
@@ -50,25 +52,26 @@ Total Alive Mutations = 1
 and the output in `./experimentOutput/sortASC/sortASC_output.txt` with a high serverity flag being raised `-- FLAG(HIGH) -- : NONE of Ensures depend on Any input parameters `
 
 ##### Clone repo
-If using Cloudlab, clone this repo in the `/proj/[cloudlabProjectName]/` repo. This is shared disk space in Cloudlab and will speed up setup.
+If using CloudLab, clone this repo in the `/proj/[cloudlabProjectName]/` repo. This is shared disk space in CloudLab and will speed up setup.
 
 ##### Setup SSH keys
 
-The first step is to set up the SSH keys between all of the cloudlab nodes. (This is necessary even when using a single node)
+The first step is to set up the SSH keys between all of the CloudLab nodes. (This is necessary even when using a single node)
 
-**Make sure to follow these steps from a local machine (non-cloudlab).** 
+**Make sure to follow these steps from a local machine (non-CloudLab).** 
 
 Run `./setup/configureSSHKeys.sh [username] [list_of_node_ids]`
 
-* `username`: cloudlab username
-* `list_of_node_ids`: A list of the cloudlab node IDs separated by spaces. 
+* `username`: CloudLab username
+* `list_of_node_ids`: A list of the CloudLab node IDs separated by spaces. 
 
 For example, if the list of nodes is included, run: `clnode008, clnode010 and clnode015` - `./setup/configureSSHKeys.sh [username] 008 010 015`
 
+> **_NOTE:_**  To avoid cloning twice, it is recomended to just copy `./setup/configureSSHKeys.sh` to your local machine.
 
-##### Setup cloudlab nodes
+##### Setup CloudLab nodes
 
-Run `./setup/cloudlabConfigureIronSpec.sh [username] [list_of_node_ids]` **From the cloudlab node that will act as the "root" node for the experiment. (i.e the node with the smallest id)**
+Run `./setup/cloudlabConfigureIronSpec.sh [username] [list_of_node_ids]` **From the CloudLab node that will act as the "root" node for the experiment. (i.e the node with the smallest id)**
 
 (use `./setup/configureIronSpec.sh [username] [list_of_node_ids]` if the repo was not cloned this repo in `/proj/[cloudlabProjectName]/`)
 
@@ -134,10 +137,9 @@ Output and logs for each experiment will be found in `./experimentOutput` split 
 > **_NOTE:_** Some results in appearing in`./experimentOutput/finalResults.txt` may differ slightly from Table 4 in the included pdf. 
 > * The time taken for each experiment will vary based on the number of nodes, the CPU load at each node, and the black-box nature of z3, so there may be some variance in timing.
 > * The number of alive mutations for the `Div`spec will appear higher (8 vs 3). This is due to a limitation in the final step of the mutation framework that is incompatible with this type of spec in classifying alive mutations into a DAG. The result of reducing the 8 alive mutations to 3 is calculated manually with the assistance of Dafny. Details on how to achieve this are included in comments in `./specs/div/div.dfy`.
-> * The number of generated mutations for QBFT NetworkInit, QBFT AdversaryInit, and DVT AdversaryNext should be 44, 35, and 110 respectively. These are updated results due to an improvement in avoiding producing duplicate mutations and will be adjusted in the camera-ready version. The difference in mutations is due to duplicate or logically equivalent mutations so does not affect the final number of alive mutations.
-> * The number of alive mutations for QBFT AdversaryNext should be 4. This is the result of an increased timeout allowance for the mutation classification step - the same information is included in the 4 alive mutations as in the previous 7, so this improvement over the original values in table 4 as it further minimizes the manual effort to inspect more mutations. With this same timeout allowance increase, there is expected to be one more alive mutation for DVT AdversaryNext.
+> * The number of generated mutations for QBFT NetworkInit, QBFT AdversaryInit, and DVT AdversaryNext should be 44, 35, and 110 respectively. These are updated results due to an improvement in avoiding producing duplicate mutations and will be adjusted in the camera-ready version. The orignal numbers are from older experiments, and are typos. The difference in mutations is due to duplicate or logically equivalent mutations so this difference does not affect the final number of alive mutations or even the total set of mutations tested, just accounts for duplicated mutations.
+> * The number of alive mutations for QBFT AdversaryNext should be 4. This is the result of an increased timeout allowance for the mutation classification step - the same information is included in the 4 alive mutations as in the previous 7, so this improvement over the original values in table 4 as it further minimizes the manual effort to inspect more mutations. As a consequence of this same timeout allowance increase, there is expected to be one more alive mutation for DVT AdversaryNext. This alive mutation gives the same hint as the others. 
  
-
 
 To run either the mutation testing experiments or just the ASC experiments, utilize either `./runMutationTestingExperiments.sh` or `./runASCExperiments.sh`. If running either of these, make sure to also run `./cleanExperimentOutput.sh` beforehand.
 
@@ -193,8 +195,8 @@ STPs are just Dafny proofs, so running STPS requires no additional instrumentati
 | /mutationTarget:[name] | Full Name of predicate for mutation target. In Dafny, this includes the module name followed by the predicate name. For example, if the predicate's name is `spec` located in module `Example`, the full name is: `Example.spec` |
 | /proofName:[name] | Name of lemma for full end-to-end proof. Also follows `Module.Name` format |
 | /proofLocation:[name] | Full path to `.dfy` file containing lemma targeted for /proofName |
-| /serverIpPortList:[name] | Name of `.txt` file containing the IP addresses and ports for other node end points. If configured using `./configureIronSpec.sh` a file named `ipPorts.txt` will be created with the correct formatting |
+| /serverIpPortList:[name] | Name of `.txt` file containing the IP addresses and ports for other node end points. If configured using `./configureIronSpec.sh` a file named `ipPorts.txt` will be created with the correct formatting. An example is included: `ipPortsExample.txt` |
 |/inPlaceMutation | This flag indicates that the mutation target is for a method with pre/post conditions rather than a predicate. In this case /proofName is the name of the method to mutate the spec and the proof to check. | 
 | /mutationRootName:[name] | If the mutation target is different from the high-level safety property of the system, make sure to specify the high-level safety property with this flag. | 
-| /checkInputAndOutputSpecified | Argument to indicate the use of the ASC. When using this flag, /holeEval and /mutationRootName should be set to a predicate in the same file, the contents of the predicate are irrelevant. /proofName should be set to the method that is being tested with the ASC | 
+| /checkInputAndOutputSpecified | Argument to indicate the use of the ASC. When using this flag, /mutationTarget and /mutationRootName should be set to a predicate in the same file, the contents of the predicate are irrelevant, but these flags are still needed to run. /proofName should be set to the method that is being tested with the ASC | 
 |/isRequires | Tests for mutations that are stronger than the original, rather than weaker|
