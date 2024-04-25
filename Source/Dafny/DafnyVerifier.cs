@@ -56,7 +56,7 @@ namespace Microsoft.Dafny {
       Parallel.For(0, serversList.Count,
         index => {
           CreateDir createDir = new CreateDir();
-          createDir.Owner = "edgoldwe";
+          createDir.Owner = "username";
           baseFoldersPath[index] = serversList[index].CreateTmpFolder(createDir);
         }
       );
@@ -95,7 +95,7 @@ namespace Microsoft.Dafny {
           var ipPort = ServerIpPortList[index];
           var ip = ipPort.Split(':')[0];
 
-        string arguments = $"-az --rsh=\" ssh -o StrictHostKeyChecking=no\" --include '*/' --include '*\\.dfy' --exclude '*' {commonPrefix}/ edgoldwe@{ip}:{baseFoldersPath[index].Path}/";
+        string arguments = $"-az --rsh=\" ssh -o StrictHostKeyChecking=no\" --include '*/' --include '*\\.dfy' --exclude '*' {commonPrefix}/ username@{ip}:{baseFoldersPath[index].Path}/";
         ProcessStartInfo startInfo = new ProcessStartInfo() { FileName = "/usr/bin/rsync", Arguments = arguments, };
         Process proc = new Process() { StartInfo = startInfo, };
         proc.Start();
