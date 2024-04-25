@@ -1185,9 +1185,9 @@ public async Task<bool>writeFinalOutputs(int index)
       var response = output.Response;
       if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
               if(i == 1){
-                await File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
+                await File.AppendAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
               }else{
-                await File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
+                await File.AppendAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
               }
       }
     }
@@ -1206,9 +1206,9 @@ public async Task<bool>writeOutputs(int index)
       var response = output.Response;
       if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
               if(i == 1){
-                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
+                File.AppendAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
               }else{
-                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
+                File.AppendAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
               }
       }
     }
@@ -2331,7 +2331,7 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
       int lemmaForExprValidityStartPosition = 0;
       int basePredicatePosition = 0;
       int basePredicateStartPosition = 0;
-      var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{meth.Name}_Pred_{cnt}";
+      var workingDir = $"{DafnyOptions.O.EvaluatorWorkingDirectory}/{meth.Name}_Pred_{cnt}";
 //       if (tasksList == null)
 //       {
       string code = "";
@@ -2399,52 +2399,14 @@ public string ReplaceFirst(int pos, string text, string search, string replace)
             // }
             code = code.Insert(targetIndex-1,isVacTest + "\n" + methodMutatedPred + "\n");
           }
-//           // if((vacTest && includeProof)){
-//           //   int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-//           //   if (lemmaLoc == -1)
-//           //   {
-//           //     lemmaLoc = code.IndexOf(lemma.Name+"(");
-//           //   }
-//           //   int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-//           //   // Console.WriteLine("here = " + lemmaLocEns);
-//           //   code = code.Insert(lemmaLocEns-1,"ensures false;\n");
-//           // }
-
-//             if((vacTest)){
-//             string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, null,false);
-//             if(func.WhatKind == "predicate"){
-//               fnIndex = code.IndexOf("predicate " + funcName);
-//             }else{
-//               fnIndex = code.IndexOf("function " + funcName);
-//             }
-//             code = code.Insert(fnIndex-1,revisedVac+"\n");
-//             // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-//             // int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-//             // // Console.WriteLine("here = " + lemmaLocEns);
-//             // code = code.Insert(lemmaLocEns-1,"ensures false;\n");
-//           }
-          
-//           // fnIndex = code.IndexOf("predicate " + funcName);
-//           // code = code.Insert(fnIndex-1,isStrongerLemma+"\n");
-
-
-//           // lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
-//           // code += lemmaForExprValidityString + "\n";
-//           // lemmaForExprValidityPosition = code.Count(f => f == '\n');
-
-//           // basePredicateStartPosition = code.Count(f => f == '\n') + 1;
-//           // code += basePredicateString + "\n";
-//           // basePredicatePosition = code.Count(f => f == '\n');
-
-//           // Console.WriteLine(code.IndexOf("lemma isSame_"+funcName));
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
             if(isWeaker)
             {
-              File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_weaker_{cnt}.dfy", code);
+              File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_weaker_{cnt}.dfy", code);
             }else if (vacTest){
-              File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_vac_{cnt}.dfy", code);
+              File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_vac_{cnt}.dfy", code);
             }else{
-                File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_full_{cnt}.dfy", code);
+                File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_full_{cnt}.dfy", code);
 
             }
           }

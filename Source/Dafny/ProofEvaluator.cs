@@ -699,7 +699,7 @@ var execTime = output.ExecutionTimeInMs;
       for (int i = 0; i < executionTimes.Count; i++) {
         executionTimesSummary += $"{i}, {executionTimes[i]}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}/executionTimeSummary.txt",
             executionTimesSummary);
 
       await dafnyVerifier.FinalizeCleanup();
