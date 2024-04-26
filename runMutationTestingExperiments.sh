@@ -139,7 +139,7 @@ echo -e "Starting Mutation Testing for Token-wre (Incorrect)"
 
 mkdir experimentOutput/Token-wreSpecIncorrect
 
-./Binaries/Dafny /compile:0 /timeLimit:1520 /trace /arith:5 /noCheating:1 /mutationTarget:wrapperModule.TokenRevertExternal.GInv /proofName:wrapperModule.proofStub /mutationRootName:wrapperModule.TokenRevertExternal.GInv    /serverIpPortList:ipPorts.txt $(pwd)/specs/token-wre/token-with-revert-external.dfy &> experimentOutput/Token-wreSpecIncorrect/token-wreIncorrect_output.txt
+./Binaries/Dafny /compile:0 /timeLimit:1520 /trace /arith:5 /noCheating:1 /mutationTarget:wrapperModule.TokenRevertExternal.GInv /proofName:wrapperModule.proofStub /mutationRootName:wrapperModule.TokenRevertExternal.GInv    /serverIpPortList:ipPorts.txt $(pwd)/specs/token-wre/tokenIncorrect.dfy &> experimentOutput/Token-wreSpecIncorrect/token-wreIncorrect_output.txt
 
 mkdir experimentOutput/Token-wreSpecIncorrect/outputLogs
 cp ./outputLogs/* experimentOutput/Token-wreSpecIncorrect/outputLogs
