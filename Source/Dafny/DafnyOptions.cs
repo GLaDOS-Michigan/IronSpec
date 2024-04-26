@@ -207,8 +207,8 @@ namespace Microsoft.Dafny {
     public bool HoleEvaluatorCreateAuxFiles = true;
     public bool ProofEvaluatorCollectAllTriggerMatches = false;
     public bool HoleEvaluatorDumpOutput = false;
-    // public string EvaluatorWorkingDirectory = "/tmp/";
-    public string EvaluatorWorkingDirectory = "./outputLogs/";
+    // public string HoleEvaluatorWorkingDirectory = "/tmp/";
+    public string HoleEvaluatorWorkingDirectory = "./outputLogs/";
 
     public string ServerIpPortList = null;
     public string HoleEvaluatorInvariant = null;
@@ -804,9 +804,9 @@ namespace Microsoft.Dafny {
           }
           return true;
 
-        case "evalWorkingDir":
+        case "holeEvalWorkingDir":
           if (ps.ConfirmArgumentCount(1)) {
-            EvaluatorWorkingDirectory = args[ps.i] + "/";
+            HoleEvaluatorWorkingDirectory = args[ps.i] + "/";
           }
           return true;
 

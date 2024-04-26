@@ -235,9 +235,9 @@ namespace Microsoft.Dafny {
             CheckIfCorrectAnswer(request, response);
             dafnyOutput[request] = response;
             if (DafnyOptions.O.HoleEvaluatorDumpOutput) {
-              await File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{requestToCnt[request]}_0.txt",
+              await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{requestToCnt[request]}_0.txt",
                 request.ToString());
-              await File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{OutputPrefix}_{requestToCnt[request]}_0.txt",
+              await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{OutputPrefix}_{requestToCnt[request]}_0.txt",
                 (requestToExpr.ContainsKey(request) ? "// " + Printer.ExprToString(requestToExpr[request]) + "\n" : "") +
                 (requestToCnt.ContainsKey(request) ? "// " + requestToCnt[request] + "\n" : "") + output + "\n");
             }

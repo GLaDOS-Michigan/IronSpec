@@ -131,9 +131,9 @@ public async Task<bool>writeOutputs(int index)
       var response = output.Response;
       if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
               if(i == 1){
-                await File.AppendAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
+                await File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
               }else{
-                await File.AppendAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
+                await File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
               }
       }
     }
@@ -151,9 +151,9 @@ public async Task<bool>writeFailedOutputs(int index)
       var response = output.Response;
       if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
               if(i == 1){
-                File.AppendAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
+                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", "--VAC TEST--\n"+response + "\n------\n");
               }else{
-                File.AppendAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
+                File.AppendAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}dafnyOutput_{index}.txt", response);
               }
       }
     }
@@ -1441,7 +1441,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         DafnyOptions.O.MutationRootName = DafnyOptions.O.MutationTarget;
       }
       Console.WriteLine("mutationsFromParams = " + mutationsFromParams);
-      // check for serverIpPorts
       if (DafnyOptions.O.ServerIpPortList == null) {
         Console.WriteLine("ip port list is not given. Please specify with /serverIpPortList");
         return false;
@@ -1462,7 +1461,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       }
       validityLemmaNameStartCol = 30 + timeLimitMultiplierLength;
 
-      // Collect all paths from baseFunc to func (mutation target)
+      // Collect all paths from baseFunc to func mutation to mutation root
       Console.WriteLine($"{funcName} {baseFuncName} {depth}");
       if (baseFuncName == null) {
         baseFuncName = funcName;
@@ -1503,6 +1502,11 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       GetAllMutationsPaths(mutationRootFunc,func);
       if (Paths.Count == 0)
         Paths.Add(new List<Tuple<Function, FunctionCallExpr, Expression>>(CurrentPath));
+      // foreach (var p in Paths) {
+      //   Console.WriteLine(GetValidityLemma(p));
+      //   Console.WriteLine("\n----------------------------------------------------------------\n");
+      // }
+      // return true;
 
       UnderscoreStr = RandomString(8);
       dafnyVerifier.sw = Stopwatch.StartNew();
@@ -1536,7 +1540,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
           affectedFiles.Add(file);
           affectedFiles = affectedFiles.Distinct().ToList();
         }
-      // collect information about proof target
+
       if(proofProg != null){
         // dafnyVerifier.InitializeBaseFoldersInRemoteServers(proofProg, includeParser.commonPrefix);
         affectedFiles.Add(filename);
@@ -1568,7 +1572,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         }
       }else{
         Console.WriteLine("-----\n------\n");
-              includeParser = new IncludeParser(proofProg);
+        includeParser = new IncludeParser(proofProg);
         
         if(desiredMethod.BodyStartTok.Filename == null)
         {
@@ -1595,7 +1599,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         affectedFiles = affectedFiles.Distinct().ToList();
       }
 
-        //
+      
         if (constraintFunc != null) {
           Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>> typeToExpressionDictForInputs = new Dictionary<string, HashSet<ExpressionFinder.ExpressionDepth>>();
           foreach (var formal in baseFunc.Formals) {
@@ -1710,7 +1714,6 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         }
       }
       }
-      //remove duplicate mutations
       Console.WriteLine($"expressionFinder.availableExpressions.Count == {expressionFinder.availableExpressions.Count}");
       Hashtable duplicateMutations = new Hashtable();
       foreach (var ed in expressionFinder.availableExpressions)
@@ -1727,7 +1730,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       int numFailiedAfter1stPass = 0;
       int remainingVal = expressionFinder.availableExpressions.Count;
       int mutationCap = expressionFinder.availableExpressions.Count < 50 ? expressionFinder.availableExpressions.Count : expressionFinder.availableExpressions.Count; 
-      // int mutationCap = 50; 
+
       Console.WriteLine("--- Begin Is At Least As Weak Pass -- " + remainingVal);
       for (int i = 0; i < mutationCap; i++) {
         desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
@@ -1811,7 +1814,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
         await dafnyVerifier.startProofTasksAccordingToPriority();
         dafnyVerifier.clearTasks();
         Console.WriteLine("--- END Full Proof Pass -- ");
-      
+     
         FullStopWatch.Stop();
         Console.WriteLine("Elapsed Time is {0} ms", FullStopWatch.ElapsedMilliseconds);
         
@@ -1902,37 +1905,42 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
             string value = pair.Value.ToString();
             verboseExecTimesSummary +="( " + key + ") :: " + value + "\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}/executionTimeSummaryVerbose.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummaryVerbose.txt",
       verboseExecTimesSummary);
       for (int i = 0; i < executionTimes.Count; i++) {
         executionTimesSummary += $"{i}, {executionTimes[i].ToString()}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}/executionTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
             executionTimesSummary);
 
       string startTimesSummary = "";
       for (int i = 0; i < startTimes.Count; i++) {
         startTimesSummary += $"{i}, {(startTimes[i] - startTimes[0]).ToString()}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}/startTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/startTimeSummary.txt",
             startTimesSummary);
 
       Console.WriteLine("--- START Mutation Classifications -- ");
       Stopwatch ClassificationsStopWatch = new Stopwatch();
       ClassificationsStopWatch.Start();
-          Console.WriteLine("Elapsed Time (Classifications) is {0} ms", ClassificationsStopWatch.ElapsedMilliseconds);
-          for (int i = 0; i<passingIndecies.Count;i++)
-          {
-          for(int j = 0; j<passingIndecies.Count;j++){
-            if(i != j){
-            desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
-            MutationClassification(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,passingIndecies[i],passingIndecies[j]);
-            }
+      Console.WriteLine("Elapsed Time (Classifications) is {0} ms", ClassificationsStopWatch.ElapsedMilliseconds);
+
+      for (int i = 0; i<passingIndecies.Count;i++)
+      {
+      // for(int j = i+1; j<passingIndecies.Count;j++){
+      //   desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
+      //   MutationClassification(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,passingIndecies[i],passingIndecies[j]);
+      // }
+        for(int j = 0; j<passingIndecies.Count;j++){
+          if(i != j){
+          desiredFunctionUnresolved.Body = topLevelDeclCopy.Body;
+          MutationClassification(unresolvedProgram, unresolvedProofProgram,desiredFunctionUnresolved,baseLemma,proofModuleName,passingIndecies[i],passingIndecies[j]);
           }
-          }
+        }
+      }
       await dafnyVerifier.startProofTasksAccordingToPriority();
       dafnyVerifier.clearTasks();
-        //
+      //
       for (int i = 0; i<passingIndecies.Count;i++){
         classheirarchy.Add(passingIndecies[i],new List<int>());
         classifyMutationsDag(passingIndecies[i],i,vacIndex.Contains(i));
@@ -1940,7 +1948,7 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
       }
       dafnyVerifier.Cleanup();
 
-  // process classifications
+    // process classifications
     foreach (var k in classheirarchy.Keys)
     {
       foreach (var v in classheirarchy[k])
@@ -1993,6 +2001,8 @@ public static int[] AllIndexesOf(string str, string substr, bool ignoreCase = fa
     }
     await dafnyVerifier.FinalizeCleanup();
     return true;
+
+  
     }
 
 
@@ -2078,7 +2088,11 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       GetAllPaths(baseFunc, func);
       if (Paths.Count == 0)
         Paths.Add(new List<Tuple<Function, FunctionCallExpr, Expression>>(CurrentPath));
-
+      // foreach (var p in Paths) {
+      //   Console.WriteLine(GetValidityLemma(p));
+      //   Console.WriteLine("\n----------------------------------------------------------------\n");
+      // }
+      // return true;
 
       UnderscoreStr = RandomString(8);
       dafnyVerifier.sw = Stopwatch.StartNew();
@@ -2119,7 +2133,6 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
           }
           Console.WriteLine($"constraint expr to be added : {Printer.ExprToString(constraintExpr.expr)}");
         }
-        //generate muations
         expressionFinder.CalcDepthOneAvailableExpresssionsFromFunction(program, desiredFunction);
         desiredFunctionUnresolved = GetFunctionFromUnresolved(unresolvedProgram, funcName);
         if (DafnyOptions.O.HoleEvaluatorRemoveFileLine != null) {
@@ -2157,7 +2170,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
         constraintFuncCode = File.ReadAllText(constraintFunc.BodyStartTok.filename);
         constraintFuncLineCount = constraintFuncCode.Count(f => (f == '\n'));
       }
-      // generate validity lemma
+      
       lemmaForExprValidityString = GetValidityLemma(Paths[0], null, constraintExpr == null ? null : constraintExpr.expr, -1,0);
       lemmaForExprValidityLineCount = lemmaForExprValidityString.Count(f => (f == '\n'));
       Console.WriteLine("VALIDITYLEMMA \n" + lemmaForExprValidityString + " \n --");
@@ -2230,7 +2243,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       for (int i = 0; i < executionTimes.Count; i++) {
         executionTimesSummary += $"{i}, {executionTimes[i]}\n";
       }
-      await File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}/executionTimeSummary.txt",
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/executionTimeSummary.txt",
             executionTimesSummary);
 
       // for (int i = 0; i < bitArrayList.Count; i++) {
@@ -2303,7 +2316,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
         }
       }
       graphVizOutput += "}\n";
-      await File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}graph_{funcName}_implies.dot", graphVizOutput);
+      await File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}graph_{funcName}_implies.dot", graphVizOutput);
       Console.WriteLine($"{dafnyVerifier.sw.ElapsedMilliseconds / 1000}:: end");
       return true;
     }
@@ -2340,6 +2353,52 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       return "";
     }
 
+  // public static string GetFullTypeString(ModuleDefinition moduleDef, Type type) {
+  //     if (moduleDef is null) {
+  //       return type.ToString();
+  //     }
+  //     if (type is UserDefinedType) {
+  //       var udt = type as UserDefinedType;
+  //       if (udt.Name == "nat" || udt.Name == "object?")
+  //         return udt.ToString();
+  //       foreach (var decl in moduleDef.TopLevelDecls) {
+  //         if (decl.ToString() == type.ToString()) {
+  //           var moduleName = GetFullModuleName(moduleDef);
+  //           return (moduleName == "") ? type.ToString() : (moduleName + "." + type.ToString());
+  //         }else{
+  //           return udt.ToString();
+  //         }
+  //       }
+  //       if (moduleDef.Name != "_module") {
+  //         foreach (var imp in ModuleDefinition.AllDeclarationsAndNonNullTypeDecls(moduleDef.TopLevelDecls)) {
+  //           if (imp is ModuleDecl) {
+  //             var result = GetFullTypeString((imp as ModuleDecl).Signature.ModuleDef, type);
+  //             if (result != "") {
+  //               return result;
+  //             }
+  //           }
+  //         }
+  //       }
+  //       // couldn't find the type definition here, so we should search the parent
+  //       if (moduleDef.EnclosingModule != moduleDef) {
+  //         return GetFullTypeString(moduleDef.EnclosingModule, type);
+  //       } else {
+  //         return type.ToString();
+  //       }
+  //     } else if (type is CollectionType) {
+  //       var ct = type as CollectionType;
+  //       var result = ct.CollectionTypeName + "<";
+  //       var sep = "";
+  //       foreach (var typeArg in ct.TypeArgs) {
+  //         result += sep + GetFullTypeString(moduleDef, typeArg);
+  //         sep = ",";
+  //       }
+  //       result += ">";
+  //       return result;
+  //     } else {
+  //       return type.ToString();
+  //     }
+  //   }
 
     public static Tuple<string, string> GetFunctionParamListSpec(Function func, string namePrefix = "") {
       var funcName = func.FullDafnyName;
@@ -2485,7 +2544,7 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
       int lemmaForExprValidityStartPosition = 0;
       int basePredicatePosition = 0;
       int basePredicateStartPosition = 0;
-      var workingDir = $"{DafnyOptions.O.EvaluatorWorkingDirectory}/{funcName}_{cnt}";
+      var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{funcName}_{cnt}";
       if (tasksList == null)
       {
         string code = "";
@@ -2532,29 +2591,14 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
               code = code.Insert(moduleLoc-1,"/*"+"\n");
               code = code + "/*";
             }else{
-              //Comment out single 'proof' lemma
-              // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-              // if(lemmaLoc == -1 )
-              // {
-              //   lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-              // }
-              // code = code.Insert(lemmaLoc-1,"/*"+"\n");
-              // code = code.Insert(code.IndexOf("}\n\n",lemmaLoc)-1,"*/"+"\n");
+              
             }
           }
           if(isWeaker){
             fnIndex = code.IndexOf("predicate " + funcName);
             code = code.Insert(fnIndex-1,isWeakerLemma+"\n");
           }
-          // if((vacTest && includeProof)){
-          //   int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-          //   if (lemmaLoc == -1)
-          //   {
-          //     lemmaLoc = code.IndexOf(lemma.Name+"(");
-          //   }
-          //   int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-          //   code = code.Insert(lemmaLocEns-1,"ensures false;\n");
-          // }
+          
 
             if((vacTest)){
             string revisedVac = getVacuityLemmaRevised(func,Paths[0], null, null,false);
@@ -2564,30 +2608,20 @@ public async Task<bool> Evaluate(Program program, Program unresolvedProgram, str
               fnIndex = code.IndexOf("function " + funcName);
             }
             code = code.Insert(fnIndex-1,revisedVac+"\n");
-            // int lemmaLoc = code.IndexOf("lemma " +lemma.Name);
-            // int lemmaLocEns = code.IndexOf("{",lemmaLoc);
-            // code = code.Insert(lemmaLocEns-1,"ensures false;\n");
+
           }
           
-          // fnIndex = code.IndexOf("predicate " + funcName);
-          // code = code.Insert(fnIndex-1,isStrongerLemma+"\n");
 
 
-          // lemmaForExprValidityStartPosition = code.Count(f => f == '\n') + 1;
-          // code += lemmaForExprValidityString + "\n";
-          // lemmaForExprValidityPosition = code.Count(f => f == '\n');
-
-          // basePredicateStartPosition = code.Count(f => f == '\n') + 1;
-          // code += basePredicateString + "\n";
-          // basePredicatePosition = code.Count(f => f == '\n');
-
+          // Console.WriteLine(code.IndexOf("lemma isSame_"+funcName));
+          
           // Console.WriteLine(code.IndexOf("lemma isSame_"+funcName));
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles){
             if(isWeaker)
             {
-              File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_weaker_{cnt}.dfy", code);
+              File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_weaker_{cnt}.dfy", code);
             }else{
-              File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
+              File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
             }
           }
         }
@@ -2721,7 +2755,7 @@ public void MutationClassification(Program program, Program proofProg,Function f
     // code = code.Insert(fnIndex-1,basePredicateString+"\n");
     code = code.Insert(fnIndex-1,mutatedPredA+"\n" + mutatedPredB +"\n" + lemmaName + "\n");
     if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
-      File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_classify_{firstCnt}_{sndCnt}.dfy", code);
+      File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_classify_{firstCnt}_{sndCnt}.dfy", code);
   }
 
       string env = DafnyOptions.O.Environment.Remove(0, 22);
@@ -2812,7 +2846,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       int lemmaForExprValidityStartPosition = 0;
       int basePredicatePosition = 0;
       int basePredicateStartPosition = 0;
-      var workingDir = $"{DafnyOptions.O.EvaluatorWorkingDirectory}/{funcName}_{cnt}";
+      var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{funcName}_{cnt}";
       if (tasksList == null)
       {
         string code = "";
@@ -2915,7 +2949,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           }
           
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
-            File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
+            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
         }
         string env = DafnyOptions.O.Environment.Remove(0, 22);
         var argList = env.Split(' ');
@@ -2989,7 +3023,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       int lemmaForExprValidityStartPosition = 0;
       int basePredicatePosition = 0;
       int basePredicateStartPosition = 0;
-      var workingDir = $"{DafnyOptions.O.EvaluatorWorkingDirectory}/{lemmaName}_{cnt}";
+      var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{lemmaName}_{cnt}";
       var origFuncStr = "";
       var origFuncName = func.Name;
       if(!vacTest && DafnyOptions.O.LocalPredicateMutation)
@@ -3044,7 +3078,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           dafnyVerifier.WriteToRemoteFile(code, cnt, $"{remoteFilePath}/{constraintFuncChangingFilePath}");
           
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
-            File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}NotAtLeastAsWeak_{cnt}.dfy", code);
+            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}NotAtLeastAsWeak_{cnt}.dfy", code);
     }
         // end add mutation
        HashSet<string> includesSet = new HashSet<string>();
@@ -3158,9 +3192,9 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           }
 
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles && vacTest)
-            File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{lemmaName}_VAC_{cnt}.dfy", code);
+            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{lemmaName}_VAC_{cnt}.dfy", code);
           else if(DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
-            File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{lemmaName}_{cnt}.dfy", code);
+            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{lemmaName}_{cnt}.dfy", code);
         }
          string env = DafnyOptions.O.Environment.Remove(0, 22);
         var argList = env.Split(' ');
@@ -3248,7 +3282,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
       int lemmaForExprValidityPosition = -1;
       int lemmaForExprValidityStartPosition = -1;
 
-      var workingDir = $"{DafnyOptions.O.EvaluatorWorkingDirectory}/{funcName}_{cnt}";
+      var workingDir = $"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}/{funcName}_{cnt}";
       if (tasksList == null) {
         string code = "";
         using (var wr = new System.IO.StringWriter()) {
@@ -3266,7 +3300,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
           code += "" + "\n";
           lemmaForExprValidityPosition = code.Count(f => f == '\n');
           if (DafnyOptions.O.HoleEvaluatorCreateAuxFiles)
-            File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
+            File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_{cnt}.dfy", code);
         }
         string env = DafnyOptions.O.Environment.Remove(0, 22);
         var argList = env.Split(' ');
@@ -3401,7 +3435,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         var code = $"// Implies {Printer.ExprToString(A)} ==> {Printer.ExprToString(B)}\n" + Printer.ToStringWithoutNewline(wr) + "\n\n";
         code += lemmaForCheckingImpliesString + "\n";
         lemmaForCheckingImpliesPosition = code.Count(f => f == '\n');
-        File.WriteAllTextAsync($"{DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy", code);
+        File.WriteAllTextAsync($"{DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy", code);
       }
 
       string dafnyBinaryPath = System.Reflection.Assembly.GetEntryAssembly().Location;
@@ -3415,7 +3449,7 @@ public void PrintExprAndCreateProcessLemmaSeperateProof(Program program, Program
         }
       }
       dafnyImpliesExecutor.createProcessWithOutput(dafnyBinaryPath,
-        $"{args} {DafnyOptions.O.EvaluatorWorkingDirectory}{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
+        $"{args} {DafnyOptions.O.HoleEvaluatorWorkingDirectory}{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy /proc:Impl*checkIfExprAImpliesExprB*",
         availableExprAIndex, availableExprBIndex, -1, lemmaForCheckingImpliesPosition,
         $"{funcName}_implies_{availableExprAIndex}_{availableExprBIndex}.dfy");
     }

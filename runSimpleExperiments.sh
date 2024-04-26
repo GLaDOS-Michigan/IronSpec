@@ -17,7 +17,7 @@ echo -e "DONE Mutation Testing for Max Spec (Correct) - output found in ./experi
 
 ####
 
-echo -e "Starting ASX Testing for Sort"
+echo -e "Starting Automatic Sanity Checker(ASC) Testing for Sort"
 
 mkdir experimentOutput/sortASC
 
