@@ -66,6 +66,8 @@ Run `./setup/configureSSHKeys.sh [username] [list_of_node_ids]`
 * `username`: CloudLab username
 * `list_of_node_ids`: A list of the CloudLab node IDs separated by spaces. 
 
+> **_NOTE:_**  IronSpec establishes the "root" node as the first node listed in the `[list_of_node_ids]` - this node will be the one to that the rest of the setup is run from, and will act as the "root" node for all future experiments  (i.e. one may choose the node with the smallest id)
+
 For example, if the list of nodes is included, run: `clnode008, clnode010 and clnode015` - `./setup/configureSSHKeys.sh [username] 008 010 015`
 
 > **_NOTE:_**  To avoid cloning twice, it is recomended to just copy `./setup/configureSSHKeys.sh` to your local machine.
@@ -73,6 +75,7 @@ For example, if the list of nodes is included, run: `clnode008, clnode010 and cl
 ##### Setup CloudLab nodes
 
 Run `./setup/cloudlabConfigureIronSpec.sh [username] [list_of_node_ids]` **From the CloudLab node that will act as the "root" node for the experiment. (i.e the node with the smallest id)**
+
 
 (use `./setup/configureIronSpec.sh [username] [list_of_node_ids]` if the repo was not cloned this repo in `/proj/[cloudlabProjectName]/`)
 
